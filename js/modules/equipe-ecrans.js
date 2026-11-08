@@ -15,13 +15,10 @@ Object.assign(Equipe, (() => {
   const { STATUTS_HABILITATION, habilitationsQuiComptent, aRenouveler } = Equipe;
 
   const FILTRE_A_RENOUVELER = 'a-renouveler';
-  const ETATS = [
-    { valeur: 'actifs', libelle: 'Techniciens actifs' },
-    { valeur: 'inactifs', libelle: 'Techniciens inactifs' },
-    { valeur: 'tous', libelle: 'Tous les techniciens' },
-  ];
-  // Couleur d'un statut sans ton prévu par UI.badgeStatut (le texte dit toujours le statut).
-  const TONS = { 'pas encore valable': 'info' };
+  const ETATS = ['actifs', 'inactifs', 'tous'];
+  // Couleur de chaque statut d'une habilitation (code calculé par Equipe.etatHabilitation ; le texte dit toujours le
+  // statut).
+  const TONS = { 'pas encore valable': 'info', valide: 'ok', 'à renouveler': 'attention', 'échue': 'ko' };
   const CAPACITE_PAR_DEFAUT = '35';
   const STATUTS_OT_FERMES = ['Clôturé techniquement', 'Clôturé administrativement', 'Annulé'];
 
@@ -38,20 +35,35 @@ Object.assign(Equipe, (() => {
     return UI.html`<a class="equipe-lien" href="#/equipe/${encodeURIComponent(technicien.id)}">${nomAffiche(technicien)}</a>`;
   }
 
+  /** Libellé d'un filtre de la liste (actifs, inactifs, tous) ; lu à l'affichage. */
+  function libelleEtat(valeur) {
+    if (valeur === 'inactifs') return I18n.t('equipe.libelle_etat.techniciens_inactifs');
+    if (valeur === 'tous') return I18n.t('equipe.libelle_etat.tous_techniciens');
+    return I18n.t('equipe.libelle_etat.techniciens_actifs');
+  }
+
+  /** Statut d'une habilitation (code calculé par Equipe.etatHabilitation, jamais traduit) → libellé affiché. */
+  function libelleStatut(statut) {
+    if (statut === 'échue') return I18n.t('equipe.statut_habilitation.echue');
+    if (statut === 'à renouveler') return I18n.t('equipe.statut_habilitation.a_renouveler');
+    if (statut === 'pas encore valable') return I18n.t('equipe.statut_habilitation.pas_encore_valable');
+    return I18n.t('equipe.statut_habilitation.valide');
+  }
+
   function badgeEtat(etat) {
-    return UI.badgeStatut(etat.statut, TONS[etat.statut]);
+    return UI.badgeStatut(libelleStatut(etat.statut), TONS[etat.statut]);
   }
 
   /** « échéance le 02/12/2026 (dans 43 jours) », « échue depuis 142 jours », « sans échéance »… */
   function detailEtat(habilitation, etat) {
-    if (etat.statut === 'pas encore valable') return 'valable à partir du ' + UI.dateFr(habilitation.date_obtention);
-    if (etat.sansEcheance) return 'sans échéance';
-    if (etat.joursRestants === null) return 'échéance illisible (« ' + texte(habilitation.date_echeance) + ' ») : corrigez-la';
+    if (etat.statut === 'pas encore valable') return I18n.t('equipe.detail_etat.valable_partir', { date_obtention: UI.dateFr(habilitation.date_obtention) });
+    if (etat.sansEcheance) return I18n.t('equipe.detail_etat.sans_echeance');
+    if (etat.joursRestants === null) return I18n.t('equipe.detail_etat.echeance_illisible_corrigez', { date_echeance: texte(habilitation.date_echeance) });
     const jours = Math.abs(etat.joursRestants);
-    const duree = jours + ' jour' + (jours > 1 ? 's' : '');
-    if (etat.joursRestants < 0) return 'échue le ' + UI.dateFr(habilitation.date_echeance) + ' (depuis ' + duree + ')';
-    if (etat.joursRestants === 0) return 'échéance aujourd\'hui';
-    return 'échéance le ' + UI.dateFr(habilitation.date_echeance) + ' (dans ' + duree + ')';
+    const date = UI.dateFr(habilitation.date_echeance);
+    if (etat.joursRestants < 0) return I18n.t('equipe.detail_etat.echue_depuis', { date, n: jours });
+    if (etat.joursRestants === 0) return I18n.t('equipe.detail_etat.echeance_aujourd_hui');
+    return I18n.t('equipe.detail_etat.echeance_dans', { date, n: jours });
   }
 
   /** Statut d'une habilitation (badge + détail), repéré par son identifiant. */
@@ -62,9 +74,10 @@ Object.assign(Equipe, (() => {
 
   /** Puce « BR · échue » d'une liste : l'intitulé, et le statut en clair s'il n'est pas « valide ». */
   function puceHabilitation(habilitation, etat) {
-    const ton = TONS[etat.statut] || { valide: 'ok', 'à renouveler': 'attention', 'échue': 'ko' }[etat.statut] || 'neutre';
+    const ton = TONS[etat.statut] || 'neutre';
+    const statut = libelleStatut(etat.statut);
     return UI.html`<span class="badge ${ton} equipe-habilitation" data-habilitation="${habilitation.id}" data-statut="${etat.statut}"
-      title="${habilitation.intitule} : ${etat.statut}">${habilitation.intitule}${etat.statut === 'valide' ? '' : ' · ' + etat.statut}</span>`;
+      title="${habilitation.intitule} : ${statut}">${habilitation.intitule}${etat.statut === 'valide' ? '' : ' · ' + statut}</span>`;
   }
 
   function habilitationsAvecEtat(technicienId, jour) {
@@ -113,43 +126,43 @@ Object.assign(Equipe, (() => {
     const echues = alertes.filter((alerte) => alerte.etat.statut === 'échue').length;
     const capacite = actifs.reduce((somme, technicien) => somme + (Donnees.nombre(technicien.capacite_h_semaine) || 0), 0);
     return UI.html`<div class="instruments equipe-instruments">
-      <a href="#/equipe"><div class="lib">Techniciens actifs</div><div class="chiffre">${actifs.length}</div>
-        <div class="comp">${Donnees.lignes('techniciens').length - actifs.length} inactif(s)</div></a>
-      <a class="${alertes.length ? 'ambre' : 'vert'}" href="#/equipe?filtre=${FILTRE_A_RENOUVELER}"><div class="lib">Habilitations à renouveler</div>
-        <div class="chiffre">${alertes.length}</div><div class="comp">${echues ? 'dont ' + echues + ' échue(s)' : 'échéance dans les 60 jours'}</div></a>
-      <div class="cyan"><div class="lib">Capacité de l'équipe</div><div class="chiffre">${UI.nombreFr(capacite)} h</div>
-        <div class="comp">par semaine (techniciens actifs)</div></div>
+      <a href="#/equipe"><div class="lib">${I18n.t('equipe.libelle_etat.techniciens_actifs')}</div><div class="chiffre">${actifs.length}</div>
+        <div class="comp">${I18n.t('equipe.instruments.inactifs', { n: Donnees.lignes('techniciens').length - actifs.length })}</div></a>
+      <a class="${alertes.length ? 'ambre' : 'vert'}" href="#/equipe?filtre=${FILTRE_A_RENOUVELER}"><div class="lib">${I18n.t('equipe.instruments.habilitations_renouveler')}</div>
+        <div class="chiffre">${alertes.length}</div><div class="comp">${echues ? I18n.t('equipe.instruments.dont_echues', { n: echues }) : I18n.t('equipe.instruments.echeance_60_jours')}</div></a>
+      <div class="cyan"><div class="lib">${I18n.t('equipe.instruments.capacite_equipe')}</div><div class="chiffre">${I18n.t('equipe.instruments.capacite_h', { n: UI.nombreFr(capacite) })}</div>
+        <div class="comp">${I18n.t('equipe.instruments.semaine_techniciens_actifs')}</div></div>
     </div>`;
   }
 
   function entete(responsable, sousTitre) {
     return UI.html`<div class="entete-page">
-      <div><h1>Équipe</h1><p>${sousTitre}</p></div>
-      <div class="actions">${responsable && App.mode === 'serveur' ? UI.html`<a class="btn btn-secondaire" id="equipe-acces" href="#/equipe/acces">${UI.icone('cle')}Accès</a>` : ''}
-        ${responsable ? UI.html`<a class="btn btn-primaire" id="equipe-nouveau" href="#/equipe/nouveau">${UI.icone('ajouter')}Ajouter un technicien</a>` : ''}</div>
+      <div><h1>${I18n.t('equipe.entete.equipe')}</h1><p>${sousTitre}</p></div>
+      <div class="actions">${responsable && App.mode === 'serveur' ? UI.html`<a class="btn btn-secondaire" id="equipe-acces" href="#/equipe/acces">${UI.icone('cle')}${I18n.t('equipe.entete.acces')}</a>` : ''}
+        ${responsable ? UI.html`<a class="btn btn-primaire" id="equipe-nouveau" href="#/equipe/nouveau">${UI.icone('ajouter')}${I18n.t('equipe.entete.ajouter_technicien')}</a>` : ''}</div>
     </div>`;
   }
 
   function colonnesListe(responsable, jour) {
     return [
-      { cle: 'nom', libelle: 'Technicien', valeurTri: (t) => texte(t.nom) + ' ' + texte(t.prenom),
-        rendu: (t) => UI.html`${lienTechnicien(t)}${estActif(t) ? '' : UI.html` <span class="badge neutre barre">Inactif</span>`}` },
-      { cle: 'metier', libelle: 'Métier' },
-      { cle: 'capacite_h_semaine', libelle: 'Capacité', type: 'nombre', classe: 'sans-coupure',
-        rendu: (t) => (texte(t.capacite_h_semaine) ? UI.nombreFr(t.capacite_h_semaine) + ' h / sem.' : '') },
+      { cle: 'nom', libelle: I18n.t('commun.champ.technicien'), valeurTri: (t) => texte(t.nom) + ' ' + texte(t.prenom),
+        rendu: (t) => UI.html`${lienTechnicien(t)}${estActif(t) ? '' : UI.html` <span class="badge neutre barre">${I18n.t('equipe.colonnes_liste.inactif')}</span>`}` },
+      { cle: 'metier', libelle: I18n.t('equipe.colonnes_liste.metier') },
+      { cle: 'capacite_h_semaine', libelle: I18n.t('equipe.colonnes_liste.capacite'), type: 'nombre', classe: 'sans-coupure',
+        rendu: (t) => (texte(t.capacite_h_semaine) ? I18n.t('equipe.colonnes.capacite_h_sem', { n: UI.nombreFr(t.capacite_h_semaine) }) : '') },
       // Colonne du responsable seul : pour le technicien, la valeur n'est même pas lue.
-      responsable && { cle: 'taux_horaire', libelle: 'Taux horaire', type: 'nombre', classe: 'sans-coupure',
-        rendu: (t) => (texte(t.taux_horaire) ? UI.euro(t.taux_horaire) + ' / h' : '') },
-      { cle: 'habilitations', libelle: 'Habilitations', triable: false, classe: 'equipe-col-habilitations',
+      responsable && { cle: 'taux_horaire', libelle: I18n.t('equipe.colonnes_liste.taux_horaire'), type: 'nombre', classe: 'sans-coupure',
+        rendu: (t) => (texte(t.taux_horaire) ? I18n.t('equipe.colonnes_liste.taux_par_heure', { taux: UI.euro(t.taux_horaire) }) : '') },
+      { cle: 'habilitations', libelle: I18n.t('equipe.colonnes_liste.habilitations'), triable: false, classe: 'equipe-col-habilitations',
         rendu: (t) => UI.html`<span class="equipe-puces">${habilitationsAvecEtat(t.id, jour).map((h) => puceHabilitation(h.habilitation, h.etat))}</span>` },
     ].filter(Boolean);
   }
 
   function carteTechnicien(technicien, jour) {
     return UI.html`<a class="equipe-lien" href="#/equipe/${encodeURIComponent(technicien.id)}">
-      <div class="carte-tete"><b>${nomAffiche(technicien)}</b>${estActif(technicien) ? '' : UI.html`<span class="badge neutre barre">Inactif</span>`}</div>
+      <div class="carte-tete"><b>${nomAffiche(technicien)}</b>${estActif(technicien) ? '' : UI.html`<span class="badge neutre barre">${I18n.t('equipe.colonnes_liste.inactif')}</span>`}</div>
       <div class="carte-meta">${technicien.metier ? UI.html`<span>${technicien.metier}</span>` : ''}
-        ${texte(technicien.capacite_h_semaine) ? UI.html`<span>${UI.nombreFr(technicien.capacite_h_semaine)} h / semaine</span>` : ''}</div>
+        ${texte(technicien.capacite_h_semaine) ? UI.html`<span>${I18n.t('equipe.carte_technicien.capacite_h_semaine', { n: UI.nombreFr(technicien.capacite_h_semaine) })}</span>` : ''}</div>
       <div class="equipe-puces">${habilitationsAvecEtat(technicien.id, jour).map((h) => puceHabilitation(h.habilitation, h.etat))}</div></a>`;
   }
 
@@ -159,23 +172,23 @@ Object.assign(Equipe, (() => {
     const jour = Donnees.aujourdhui();
     const responsable = App.estResponsable();
     const filtres = { recherche: requete.get('recherche') || '',
-      etat: ETATS.some((etat) => etat.valeur === requete.get('etat')) ? requete.get('etat') : 'actifs' };
+      etat: ETATS.includes(requete.get('etat')) ? requete.get('etat') : 'actifs' };
     UI.remplir(conteneur, UI.html`<div class="equipe">
-      ${entete(responsable, 'Techniciens, capacité et habilitations : une habilitation échue ou à moins de 60 jours de son échéance est signalée.')}
-      ${responsable ? '' : UI.html`<p class="note equipe-consultation">Consultation : seul le responsable modifie l'équipe.</p>`}
+      ${entete(responsable, I18n.t('equipe.liste.techniciens_capacite_habilitations_habilitation'))}
+      ${responsable ? '' : UI.html`<p class="note equipe-consultation">${I18n.t('equipe.liste.consultation_seul_responsable_modifie')}</p>`}
       ${instrumentsHtml(jour)}
-      <form class="filtres equipe-filtres" id="equipe-filtres" data-hors-saisie role="search" aria-label="Filtrer les techniciens">
-        <label class="visuellement-cache" for="equipe-recherche">Rechercher un technicien</label>
-        <input type="search" id="equipe-recherche" name="recherche" value="${filtres.recherche}" placeholder="Nom, métier, habilitation" autocomplete="off">
-        <label class="visuellement-cache" for="equipe-etat">Techniciens affichés</label>
-        <select id="equipe-etat" name="etat">${ETATS.map((etat) => UI.html`<option value="${etat.valeur}"${etat.valeur === filtres.etat ? UI.brut(' selected') : ''}>${etat.libelle}</option>`)}</select>
+      <form class="filtres equipe-filtres" id="equipe-filtres" data-hors-saisie role="search" aria-label="${I18n.t('equipe.liste.filtrer_techniciens')}">
+        <label class="visuellement-cache" for="equipe-recherche">${I18n.t('equipe.liste.rechercher_technicien')}</label>
+        <input type="search" id="equipe-recherche" name="recherche" value="${filtres.recherche}" placeholder="${I18n.t('equipe.liste.nom_metier_habilitation')}" autocomplete="off">
+        <label class="visuellement-cache" for="equipe-etat">${I18n.t('equipe.liste.techniciens_affiches')}</label>
+        <select id="equipe-etat" name="etat">${ETATS.map((etat) => UI.html`<option value="${etat}"${etat === filtres.etat ? UI.brut(' selected') : ''}>${libelleEtat(etat)}</option>`)}</select>
       </form>
       <p class="note equipe-compteur" role="status"></p>
       <div class="carte equipe-liste"></div></div>`);
     const zone = UI.$('.equipe-liste', conteneur);
     const formulaire = UI.$('#equipe-filtres', conteneur);
     const techniciens = Donnees.lignes('techniciens').slice()
-      .sort((a, b) => (texte(a.nom) + ' ' + texte(a.prenom)).localeCompare(texte(b.nom) + ' ' + texte(b.prenom), 'fr'));
+      .sort((a, b) => UI.comparerTextes(texte(a.nom) + ' ' + texte(a.prenom), texte(b.nom) + ' ' + texte(b.prenom)));
 
     function garder(technicien) {
       if (filtres.etat === 'actifs' && !estActif(technicien)) return false;
@@ -189,12 +202,12 @@ Object.assign(Equipe, (() => {
       const lignes = techniciens.filter(garder);
       if (UI.estTelephone()) {
         UI.remplir(zone, lignes.length ? UI.html`<ul class="liste-cartes">${lignes.map((t) => UI.html`<li>${carteTechnicien(t, jour)}</li>`)}</ul>`
-          : UI.html`<p class="muted">Aucun technicien ne correspond à ces filtres.</p>`);
+          : UI.html`<p class="muted">${I18n.t('equipe.liste.aucun_technicien_correspond_filtres')}</p>`);
       } else {
-        UI.remplir(zone, UI.tableau({ colonnes: colonnesListe(responsable, jour), lignes, libelle: 'Techniciens',
-          vide: 'Aucun technicien ne correspond à ces filtres.' }));
+        UI.remplir(zone, UI.tableau({ colonnes: colonnesListe(responsable, jour), lignes, libelle: I18n.t('equipe.liste.techniciens'),
+          vide: I18n.t('equipe.liste.aucun_technicien_correspond_filtres') }));
       }
-      UI.$('.equipe-compteur', conteneur).textContent = lignes.length + ' technicien(s) sur ' + techniciens.length;
+      UI.$('.equipe-compteur', conteneur).textContent = I18n.t('equipe.liste.compteur', { n: lignes.length, total: techniciens.length });
     }
     function lireFiltres() {
       Object.assign(filtres, UI.lireFormulaire(formulaire));
@@ -218,13 +231,12 @@ Object.assign(Equipe, (() => {
       <div class="equipe-tete">${lienTechnicien(a.technicien)} <b class="equipe-intitule">${a.habilitation.intitule}</b></div>
       ${statutHtml(a.habilitation, a.etat)}</li>`;
     UI.remplir(conteneur, UI.html`<div class="equipe">
-      ${entete(responsable, 'Habilitations échues ou dont l\'échéance tombe dans les 60 jours, techniciens actifs (les plus urgentes d\'abord).')}
+      ${entete(responsable, I18n.t('equipe.arenouveler.habilitations_echues_dont_echeance'))}
       <div class="alertes"><div class="alerte" role="status">${UI.icone('equipe')}<div class="alerte-texte">
-        <b>${alertes.length} habilitation(s) à renouveler.</b> Une habilitation renouvelée garde son historique : ouvrez la fiche du technicien,
-        puis « Renouveler ». — <a href="#/equipe">voir toute l'équipe</a></div></div></div>
+        ${I18n.html('equipe.arenouveler.alerte', { n: alertes.length })}</div></div></div>
       <article class="carte equipe-a-renouveler">
         ${alertes.length ? UI.html`<ul class="equipe-habilitations">${alertes.map(ligne)}</ul>`
-          : UI.vide('Aucune habilitation à renouveler', 'Les habilitations des techniciens actifs sont valables au-delà de 60 jours.', 'equipe')}
+          : UI.vide(I18n.t('equipe.arenouveler.aucune_habilitation_renouveler'), I18n.t('equipe.arenouveler.habilitations_techniciens_actifs_sont'), 'equipe')}
       </article></div>`);
   }
 
@@ -238,19 +250,19 @@ Object.assign(Equipe, (() => {
     const ajouter = (bloc, large) => { if (large) bloc.classList.add('large'); formulaire.appendChild(bloc); return bloc; };
     ajouter(UI.champ(definitionChamp('techniciens', 'nom'), valeur('nom'), { attributs: { maxlength: '60' } }));
     ajouter(UI.champ(definitionChamp('techniciens', 'prenom'), valeur('prenom'), { attributs: { maxlength: '60' } }));
-    ajouter(UI.champ(definitionChamp('techniciens', 'metier'), valeur('metier'), { placeholder: 'Ex. Électricien, mécanicien' }));
+    ajouter(UI.champ(definitionChamp('techniciens', 'metier'), valeur('metier'), { placeholder: I18n.t('equipe.formulaire_technicien.ex_electricien_mecanicien') }));
     ajouter(UI.champ(definitionChamp('techniciens', 'capacite_h_semaine'), technicien ? technicien.capacite_h_semaine : CAPACITE_PAR_DEFAUT,
-      { aide: 'Heures disponibles pour la maintenance chaque semaine (0 à ' + CAPACITE_MAX_H + ') : sert au planning.' }));
-    ajouter(UI.champ(definitionChamp('techniciens', 'taux_horaire', { libelle: 'Taux horaire (€ HT / h)' }), valeur('taux_horaire'),
-      { aide: 'Coût d\'une heure de ce technicien : sert au coût des OT (RG7). Jamais montré aux techniciens.' }));
+      { aide: I18n.t('equipe.formulaire_technicien.heures_disponibles_maintenance_chaque', { maximum: CAPACITE_MAX_H }) }));
+    ajouter(UI.champ(definitionChamp('techniciens', 'taux_horaire', { libelle: I18n.t('equipe.formulaire_technicien.taux_horaire_ht_h', { devise: UI.symboleDevise() }) }), valeur('taux_horaire'),
+      { aide: I18n.t('equipe.formulaire_technicien.cout_heure_technicien_sert') }));
     if (technicien) {
       ajouter(UI.champ(definitionChamp('techniciens', 'actif'), technicien.actif,
-        { aide: 'Décoché : le technicien n\'est plus proposé (OT, planning, profil) ; son historique est conservé.' }), true);
+        { aide: I18n.t('equipe.formulaire_technicien.decoche_technicien_plus_propose') }), true);
     }
-    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>champ obligatoire</p>`)).classList.add('large');
+    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>${I18n.t('commun.message.champ_obligatoire')}</p>`)).classList.add('large');
     formulaire.appendChild(UI.element(UI.html`<div class="actions">
-      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}Enregistrer</button>
-      ${technicien ? '' : UI.html`<a class="btn btn-fantome" href="#/equipe">Annuler</a>`}</div>`));
+      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}${I18n.t('commun.bouton.enregistrer')}</button>
+      ${technicien ? '' : UI.html`<a class="btn btn-fantome" href="#/equipe">${I18n.t('commun.bouton.annuler')}</a>`}</div>`));
     formulaire.addEventListener('submit', (evenement) => { evenement.preventDefault(); enregistrerTechnicien(formulaire, technicien); });
     return formulaire;
   }
@@ -258,10 +270,10 @@ Object.assign(Equipe, (() => {
   /** Désactivation : confirmation qui dit les OT encore ouverts affectés à ce technicien. */
   function confirmerDesactivation(technicien) {
     const ouverts = ordresOuverts(technicien.id).length;
-    return UI.confirmer('Désactiver ' + nomAffiche(technicien) + ' ? Il ne sera plus proposé pour les OT, le planning ni le choix du profil ; '
-      + 'son historique et ses habilitations sont conservés.'
-      + (ouverts ? ' Attention : ' + ouverts + ' OT ouvert(s) lui sont encore affectés : réaffectez-les.' : ''),
-    { titre: 'Désactiver le technicien', oui: 'Désactiver', danger: true });
+    const nom = nomAffiche(technicien);
+    return UI.confirmer(ouverts ? I18n.t('equipe.desactivation.question_ot_ouverts', { nom, n: ouverts })
+      : I18n.t('equipe.desactivation.question', { nom }),
+    { titre: I18n.t('equipe.confirmer_desactivation.desactiver_technicien'), oui: I18n.t('commun.bouton.desactiver'), danger: true });
   }
 
   async function enregistrerTechnicien(formulaire, technicien) {
@@ -279,12 +291,12 @@ Object.assign(Equipe, (() => {
     try {
       if (technicien) {
         const changes = await Equipe.modifierTechnicien(technicien.id, valeurs);
-        await apresEcriture(changes.length ? 'Technicien enregistré.' : 'Aucune modification à enregistrer.');
+        await apresEcriture(changes.length ? I18n.t('equipe.enregistrer_technicien.technicien_enregistre') : I18n.t('commun.message.aucune_modification'));
         return;
       }
       const id = await Equipe.creerTechnicien(valeurs);
       App.marquerSaisie(false);
-      UI.toast('Technicien créé.', 'succes');
+      UI.toast(I18n.t('equipe.enregistrer_technicien.technicien_cree'), 'succes');
       App.naviguer('#/equipe/' + encodeURIComponent(id));
     } catch (erreur) {
       App.signalerErreur(erreur, 'enregistrement du technicien');
@@ -295,10 +307,10 @@ Object.assign(Equipe, (() => {
   }
 
   function afficherNouveau(conteneur) {
-    App.definirTitre('Nouveau technicien');
+    App.definirTitre(I18n.t('equipe.nouveau.nouveau_technicien'));
     UI.remplir(conteneur, UI.html`<div class="equipe">
-      <div class="entete-page"><div><div class="fil"><a href="#/equipe">Équipe</a> <span aria-hidden="true">›</span> <span>Nouveau technicien</span></div>
-        <h1>Nouveau technicien</h1><p>Ses habilitations s'ajoutent ensuite sur sa fiche.</p></div></div>
+      <div class="entete-page"><div><div class="fil">${I18n.html('equipe.nouveau.equipe_nouveau_technicien')}</div>
+        <h1>${I18n.t('equipe.nouveau.nouveau_technicien')}</h1><p>${I18n.t('equipe.nouveau.habilitations_ajoutent_ensuite_fiche')}</p></div></div>
       <article class="carte equipe-zone-formulaire"></article></div>`);
     UI.$('.equipe-zone-formulaire', conteneur).appendChild(formulaireTechnicien(null));
   }
@@ -312,7 +324,7 @@ Object.assign(Equipe, (() => {
     const connus = new Set();
     Donnees.lignes('habilitations').forEach((h) => { if (texte(h.intitule)) connus.add(texte(h.intitule)); });
     Donnees.lignes('equipements').forEach((e) => texte(e.habilitation_requise).split(',').map(texte).filter(Boolean).forEach((i) => connus.add(i)));
-    return Array.from(connus).sort((a, b) => a.localeCompare(b, 'fr'));
+    return Array.from(connus).sort((a, b) => UI.comparerTextes(a, b));
   }
 
   function champsHabilitation(habilitation, avecIntitule) {
@@ -320,65 +332,67 @@ Object.assign(Equipe, (() => {
     if (avecIntitule) {
       const idListe = UI.identifiantUnique('equipe-intitules');
       const bloc = UI.champ(definitionChamp('habilitations', 'intitule', { obligatoire: true }), habilitation ? habilitation.intitule : '',
-        { placeholder: 'Ex. BR, H0V, CACES R489', attributs: { list: idListe, autocomplete: 'off' } });
+        { placeholder: I18n.t('equipe.champs_habilitation.ex_br_h_0'), attributs: { list: idListe, autocomplete: 'off' } });
       bloc.appendChild(UI.element(UI.html`<datalist id="${idListe}">${intitulesConnus().map((i) => UI.html`<option value="${i}"></option>`)}</datalist>`));
       champs.push(bloc);
     }
     champs.push(UI.champ(definitionChamp('habilitations', 'date_obtention', { obligatoire: true }),
       habilitation ? habilitation.date_obtention : Donnees.aujourdhui()));
     champs.push(UI.champ(definitionChamp('habilitations', 'date_echeance'), habilitation ? habilitation.date_echeance : '',
-      { aide: 'Vide : habilitation sans échéance.' }));
+      { aide: I18n.t('equipe.champs_habilitation.vide_habilitation_sans_echeance') }));
     return champs;
   }
 
   async function ouvrirAjout(technicien) {
     const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
-      titre: 'Ajouter une habilitation', libelleValider: 'Ajouter',
-      introduction: UI.html`<p>Habilitation de <b>${nomAffiche(technicien)}</b>. Pour une habilitation qu'il a déjà, utilisez « Renouveler ».</p>`,
+      titre: I18n.t('equipe.ouvrir_ajout.ajouter_habilitation'), libelleValider: I18n.t('commun.bouton.ajouter'),
+      introduction: UI.html`<p>${I18n.html('equipe.ouvrir_ajout.habilitation_habilitation_deja_utilisez', { nomAffiche: nomAffiche(technicien) })}</p>`,
       champs: champsHabilitation(null, true),
       verifier: verifierHabilitation,
       action: (valeurs) => Equipe.ajouterHabilitation(technicien.id, valeurs),
     });
-    if (fait) await apresEcriture('Habilitation ajoutée.');
+    if (fait) await apresEcriture(I18n.t('equipe.ouvrir_ajout.habilitation_ajoutee'));
   }
 
   async function ouvrirRenouvellement(habilitation) {
+    const echeance = dateIso(habilitation.date_echeance) ? UI.dateFr(habilitation.date_echeance) : I18n.t('equipe.ouvrir_renouvellement.aucune');
     const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
-      titre: 'Renouveler l\'habilitation', libelleValider: 'Renouveler',
-      introduction: UI.html`<p><b>${habilitation.intitule}</b> — échéance actuelle : ${dateIso(habilitation.date_echeance) ? UI.dateFr(habilitation.date_echeance) : 'aucune'}.
-        Une nouvelle ligne est ajoutée ; l'ancienne reste dans l'historique.</p>`,
+      titre: I18n.t('equipe.ouvrir_renouvellement.renouveler_habilitation'), libelleValider: I18n.t('equipe.ouvrir_renouvellement.renouveler'),
+      introduction: UI.html`<p>${I18n.html('equipe.ouvrir_renouvellement.echeance_actuelle_nouvelle_ligne', { intitule: habilitation.intitule, echeance })}</p>`,
       champs: champsHabilitation(null, false),
       verifier: (valeurs) => verifierHabilitation(Object.assign({ intitule: habilitation.intitule }, valeurs)),
       action: (valeurs) => Equipe.renouvelerHabilitation(habilitation.id, valeurs),
     });
-    if (fait) await apresEcriture('Habilitation renouvelée.');
+    if (fait) await apresEcriture(I18n.t('equipe.ouvrir_renouvellement.habilitation_renouvelee'));
   }
 
   async function ouvrirCorrection(habilitation) {
     const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
-      titre: 'Corriger l\'habilitation', libelleValider: 'Enregistrer',
-      introduction: UI.html`<p>Pour une erreur de saisie seulement : un renouvellement garde l'ancienne ligne (« Renouveler »).</p>`,
+      titre: I18n.t('equipe.ouvrir_correction.corriger_habilitation'), libelleValider: I18n.t('commun.bouton.enregistrer'),
+      introduction: UI.html`<p>${I18n.t('equipe.ouvrir_correction.erreur_saisie_seulement_renouvellement')}</p>`,
       champs: champsHabilitation(habilitation, true),
       verifier: verifierHabilitation,
       action: (valeurs) => Equipe.modifierHabilitation(habilitation.id, valeurs),
     });
-    if (fait) await apresEcriture('Habilitation corrigée.');
+    if (fait) await apresEcriture(I18n.t('equipe.ouvrir_correction.habilitation_corrigee'));
   }
 
   function carteHabilitations(technicien, responsable, jour) {
     const liste = habilitationsAvecEtat(technicien.id, jour)
       .sort((a, b) => STATUTS_HABILITATION.indexOf(a.etat.statut) - STATUTS_HABILITATION.indexOf(b.etat.statut)
-        || texte(a.habilitation.intitule).localeCompare(texte(b.habilitation.intitule), 'fr'));
+        || UI.comparerTextes(texte(a.habilitation.intitule), texte(b.habilitation.intitule)));
     return UI.html`<article class="carte equipe-carte-habilitations">
-      <div class="entete-carte"><h2>Habilitations <span class="badge">${liste.length}</span></h2>
-        ${responsable ? UI.html`<button type="button" class="btn btn-secondaire" id="equipe-ajouter-habilitation">${UI.icone('ajouter')}Ajouter une habilitation</button>` : ''}</div>
+      <div class="entete-carte"><h2>${I18n.html('equipe.carte_habilitations.habilitations_nb_liste', { nbListe: liste.length })}</h2>
+        ${responsable ? UI.html`<button type="button" class="btn btn-secondaire" id="equipe-ajouter-habilitation">${UI.icone('ajouter')}${I18n.t('equipe.ouvrir_ajout.ajouter_habilitation')}</button>` : ''}</div>
       ${liste.length ? UI.html`<ul class="equipe-habilitations">${liste.map(({ habilitation, etat }) => UI.html`<li>
         <div class="equipe-tete"><b class="equipe-intitule">${habilitation.intitule}</b>${statutHtml(habilitation, etat)}</div>
-        <div class="equipe-dates">Obtenue le ${UI.dateFr(habilitation.date_obtention)}${dateIso(habilitation.date_echeance) ? ' · échéance le ' + UI.dateFr(habilitation.date_echeance) : ' · sans échéance'}</div>
+        <div class="equipe-dates">${dateIso(habilitation.date_echeance)
+    ? I18n.t('equipe.habilitations.obtenue_echeance', { obtention: UI.dateFr(habilitation.date_obtention), echeance: UI.dateFr(habilitation.date_echeance) })
+    : I18n.t('equipe.habilitations.obtenue_sans_echeance', { obtention: UI.dateFr(habilitation.date_obtention) })}</div>
         ${responsable ? UI.html`<div class="actions equipe-actions">
-          <button type="button" class="btn btn-secondaire" data-action="renouveler" data-habilitation="${habilitation.id}">${UI.icone('actualiser')}Renouveler</button>
-          <button type="button" class="btn btn-fantome" data-action="corriger" data-habilitation="${habilitation.id}">Corriger</button></div>` : ''}
-      </li>`)}</ul>` : UI.html`<p class="muted">Aucune habilitation enregistrée pour ce technicien.</p>`}
+          <button type="button" class="btn btn-secondaire" data-action="renouveler" data-habilitation="${habilitation.id}">${UI.icone('actualiser')}${I18n.t('equipe.ouvrir_renouvellement.renouveler')}</button>
+          <button type="button" class="btn btn-fantome" data-action="corriger" data-habilitation="${habilitation.id}">${I18n.t('equipe.carte_habilitations.corriger')}</button></div>` : ''}
+      </li>`)}</ul>` : UI.html`<p class="muted">${I18n.t('equipe.carte_habilitations.aucune_habilitation_enregistree_technicien')}</p>`}
     </article>`;
   }
 
@@ -386,31 +400,33 @@ Object.assign(Equipe, (() => {
   function carteHistorique(technicien) {
     const comptent = new Set(habilitationsQuiComptent(technicien.id).map((h) => h.id));
     const lignes = Donnees.lignes('habilitations').filter((h) => h.technicien_id === technicien.id)
-      .sort((a, b) => texte(a.intitule).localeCompare(texte(b.intitule), 'fr', { sensitivity: 'base' })
+      .sort((a, b) => UI.comparerTextes(texte(a.intitule), texte(b.intitule), { sensitivity: 'base' })
         || texte(b.date_obtention).localeCompare(texte(a.date_obtention)) || texte(b.id).localeCompare(texte(a.id), 'fr', { numeric: true }));
-    return UI.html`<article class="carte equipe-historique"><h2>Historique des habilitations <span class="badge">${lignes.length}</span></h2>
+    return UI.html`<article class="carte equipe-historique"><h2>${I18n.html('equipe.carte_historique.historique_habilitations', { nbLignes: lignes.length })}</h2>
       ${lignes.length ? UI.html`<ul class="equipe-lignes">${lignes.map((h) => UI.html`<li>
-        <b>${h.intitule}</b> <span>obtenue le ${UI.dateFr(h.date_obtention)} — ${dateIso(h.date_echeance) ? 'échéance le ' + UI.dateFr(h.date_echeance) : 'sans échéance'}</span>
-        ${comptent.has(h.id) ? UI.html`<span class="badge info">en cours</span>` : UI.html`<span class="badge neutre">remplacée</span>`}
-        <span class="muted">${h.id}</span></li>`)}</ul>` : UI.html`<p class="muted">Aucune ligne d'habilitation.</p>`}
+        <b>${h.intitule}</b> <span>${dateIso(h.date_echeance)
+    ? I18n.t('equipe.historique.obtenue_echeance', { obtention: UI.dateFr(h.date_obtention), echeance: UI.dateFr(h.date_echeance) })
+    : I18n.t('equipe.historique.obtenue_sans_echeance', { obtention: UI.dateFr(h.date_obtention) })}</span>
+        ${comptent.has(h.id) ? UI.html`<span class="badge info">${I18n.t('equipe.carte_historique.cours')}</span>` : UI.html`<span class="badge neutre">${I18n.t('equipe.carte_historique.remplacee')}</span>`}
+        <span class="muted">${h.id}</span></li>`)}</ul>` : UI.html`<p class="muted">${I18n.t('equipe.carte_historique.aucune_ligne_habilitation')}</p>`}
     </article>`;
   }
 
   function carteDescription(technicien) {
     const ouverts = ordresOuverts(technicien.id).length;
-    return UI.html`<article class="carte"><h2>Technicien</h2><dl class="valeurs">
-      <dt>Nom</dt><dd>${technicien.nom}</dd><dt>Prénom</dt><dd>${technicien.prenom}</dd>
-      <dt>Métier</dt><dd>${technicien.metier}</dd>
-      <dt>Capacité</dt><dd>${texte(technicien.capacite_h_semaine) ? UI.nombreFr(technicien.capacite_h_semaine) + ' h par semaine' : ''}</dd>
-      <dt>OT ouverts affectés</dt><dd><a href="#/ot?technicien=${encodeURIComponent(technicien.id)}">${ouverts}</a></dd>
-      <dt>Actif</dt><dd>${estActif(technicien) ? 'Oui' : 'Non — technicien désactivé'}</dd></dl></article>`;
+    return UI.html`<article class="carte"><h2>${I18n.t('equipe.carte_technicien.titre')}</h2><dl class="valeurs">
+      <dt>${I18n.t('equipe.carte_description.nom')}</dt><dd>${technicien.nom}</dd><dt>${I18n.t('commun.champ.prenom')}</dt><dd>${technicien.prenom}</dd>
+      <dt>${I18n.t('equipe.colonnes_liste.metier')}</dt><dd>${technicien.metier}</dd>
+      <dt>${I18n.t('equipe.colonnes_liste.capacite')}</dt><dd>${texte(technicien.capacite_h_semaine) ? I18n.t('equipe.description.capacite_h_par_semaine', { n: UI.nombreFr(technicien.capacite_h_semaine) }) : ''}</dd>
+      <dt>${I18n.t('equipe.carte_description.ot_ouverts_affectes')}</dt><dd><a href="#/ot?technicien=${encodeURIComponent(technicien.id)}">${ouverts}</a></dd>
+      <dt>${I18n.t('equipe.carte_description.actif')}</dt><dd>${estActif(technicien) ? I18n.t('equipe.carte_description.oui') : I18n.t('equipe.carte_description.non_technicien_desactive')}</dd></dl></article>`;
   }
 
   function afficherIntrouvable(conteneur, id) {
-    App.definirTitre('Technicien introuvable');
+    App.definirTitre(I18n.t('equipe.introuvable.technicien_introuvable'));
     UI.remplir(conteneur, UI.html`<div class="equipe"><div class="entete-page"><div>
-      <div class="fil"><a href="#/equipe">Équipe</a></div><h1>Technicien introuvable</h1></div></div>
-      ${UI.vide('Aucun technicien ne porte l\'identifiant « ' + id + ' »', 'Il a peut-être été saisi sur un autre poste : actualisez.', 'equipe')}</div>`);
+      <div class="fil"><a href="#/equipe">${I18n.t('equipe.entete.equipe')}</a></div><h1>${I18n.t('equipe.introuvable.technicien_introuvable')}</h1></div></div>
+      ${UI.vide(I18n.t('equipe.introuvable.aucun_technicien_porte_identifiant', { id }), I18n.t('commun.message.saisi_sur_autre_poste'), 'equipe')}</div>`);
   }
 
   function afficherFiche(conteneur, parametres) {
@@ -422,13 +438,13 @@ Object.assign(Equipe, (() => {
     UI.remplir(conteneur, UI.html`
       <div class="equipe equipe-fiche" data-technicien="${technicien.id}">
         <div class="entete-page"><div>
-          <div class="fil"><a href="#/equipe">Équipe</a> <span aria-hidden="true">›</span> <span>${technicien.id}</span></div>
+          <div class="fil">${I18n.html('equipe.fiche.equipe_technicien_id', { technicienId: technicien.id })}</div>
           <h1>${nomAffiche(technicien)}</h1>
           <p class="equipe-badges">${technicien.metier ? UI.html`<span>${technicien.metier}</span>` : ''}
-            ${estActif(technicien) ? '' : UI.html`<span class="badge neutre barre">Inactif</span>`}</p>
+            ${estActif(technicien) ? '' : UI.html`<span class="badge neutre barre">${I18n.t('equipe.colonnes_liste.inactif')}</span>`}</p>
         </div></div>
         ${estActif(technicien) ? '' : UI.html`<div class="alertes"><div class="alerte attention" role="status">${UI.icone('alerte')}
-          <div class="alerte-texte"><b>Ce technicien est désactivé.</b> Il n'est plus proposé ; son historique reste consultable.</div></div></div>`}
+          <div class="alerte-texte">${I18n.html('equipe.fiche.technicien_desactive_plus_propose')}</div></div></div>`}
         <div class="grille equipe-grille">
           <div class="c7">${carteHabilitations(technicien, responsable, jour)}</div>
           <div class="c5 equipe-zone-technicien"></div>
@@ -437,13 +453,13 @@ Object.assign(Equipe, (() => {
       </div>`);
     const zone = UI.$('.equipe-zone-technicien', conteneur);
     if (!responsable) { UI.remplir(zone, carteDescription(technicien)); return; }
-    const carte = UI.element(UI.html`<article class="carte"><h2>Technicien</h2></article>`);
+    const carte = UI.element(UI.html`<article class="carte"><h2>${I18n.t('equipe.carte_technicien.titre')}</h2></article>`);
     carte.appendChild(formulaireTechnicien(technicien));
     zone.appendChild(carte);
     UI.$('#equipe-ajouter-habilitation', conteneur).addEventListener('click', () => ouvrirAjout(technicien));
     UI.$$('button[data-action]', conteneur).forEach((bouton) => bouton.addEventListener('click', () => {
       const habilitation = Donnees.trouver('habilitations', bouton.dataset.habilitation);
-      if (!habilitation) { UI.toast('Cette habilitation n\'existe plus : actualisez.', 'attention'); return; }
+      if (!habilitation) { UI.toast(I18n.t('equipe.fiche.habilitation_existe_plus_actualisez'), 'attention'); return; }
       if (bouton.dataset.action === 'renouveler') ouvrirRenouvellement(habilitation); else ouvrirCorrection(habilitation);
     }));
   }
@@ -455,8 +471,9 @@ Object.assign(Equipe, (() => {
   document.addEventListener('DOMContentLoaded', () => {
     const intervenants = ['technicien', 'responsable'];
     App.ecran({
-      id: 'equipe', route: /^#\/equipe$/, titre: 'Équipe',
-      menu: { libelle: 'Équipe', icone: 'equipe', ordre: 85, groupe: 'Administration' },
+      id: 'equipe', route: /^#\/equipe$/,
+      get titre() { return I18n.t('equipe.entete.equipe'); },
+      menu: { get libelle() { return I18n.t('equipe.menu.libelle'); }, icone: 'equipe', ordre: 85, get groupe() { return I18n.t('equipe.groupe.administration'); } },
       profils: intervenants,
       tables: ['techniciens', 'habilitations'],
       afficher: afficherListe,
@@ -464,18 +481,21 @@ Object.assign(Equipe, (() => {
     // Les routes les plus précises d'abord : « nouveau » et « acces » (equipe-acces.js, enregistré après ce
     // fichier) ne doivent pas être pris pour un identifiant.
     App.ecran({
-      id: 'equipe-nouveau', route: /^#\/equipe\/nouveau$/, titre: 'Nouveau technicien', parent: 'equipe',
+      id: 'equipe-nouveau', route: /^#\/equipe\/nouveau$/, parent: 'equipe',
+      get titre() { return I18n.t('equipe.nouveau.nouveau_technicien'); },
       profils: ['responsable'],
       tables: [],
       afficher: afficherNouveau,
     });
     App.ecran({
-      id: 'equipe-fiche', route: /^#\/equipe\/(?!nouveau$|acces$)(?<id>[^/?]+)$/, titre: 'Technicien', parent: 'equipe',
+      id: 'equipe-fiche', route: /^#\/equipe\/(?!nouveau$|acces$)(?<id>[^/?]+)$/, parent: 'equipe',
+      get titre() { return I18n.t('equipe.ecran_fiche.titre'); },
       profils: intervenants,
       tables: ['techniciens', 'habilitations', 'ordres_travail'],
       afficher: afficherFiche,
     });
   });
 
-  return {};
+  // libelleStatut : libellé d'un état calculé d'habilitation, aussi pour le wiki (fiche d'un technicien).
+  return { libelleStatut };
 })());

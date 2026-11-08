@@ -1,6 +1,11 @@
+# Tous les fichiers texte : LF dans la copie de travail, quel que soit core.autocrlf (T230). Une copie fraîche sous
+# Windows donne exactement les octets du dépôt, fichiers générés et comparés à l'octet compris
+# (js/modules/acces-textes.js, FICHE_TECHNIQUE_CSV.md, …). Les règles plus bas l'emportent pour leurs fichiers.
+* text=auto eol=lf
 # Les CSV sont stockés octet pour octet (BOM UTF-8 + fins de ligne CRLF, voir docs/ARCHITECTURE.md) :
 # git ne doit jamais convertir leurs fins de ligne.
 *.csv -text
+*.tsv -text
 # Lanceur Windows : CRLF obligatoire pour cmd.exe ; lanceur Mac/Linux : LF obligatoire pour sh.
 *.bat text eol=crlf
 *.sh  text eol=lf
@@ -8,6 +13,12 @@
 *.woff2 binary
 *.png   binary
 *.jpg   binary
+*.gif   binary
+*.pdf   binary
+*.zip   binary
+*.xlsx  binary
+*.xls   binary
+*.ods   binary
 # Bibliothèques tierces : copiées à l'octet près depuis les paquets vérifiés (empreintes dans tests/test_depot.py)
 js/lib/** -text
 # Fichiers produits par outils/generer_demo.py, comparés à l'octet près par tests/test_demo.py :
@@ -16,3 +27,5 @@ js/demo-donnees.js -text
 tests/fixtures/*.json -text
 # Fichiers d'essai de l'import (lot 5) : écrits par outils/generer_fixtures_import.py, comparés à l'octet.
 tests/fixtures/import/** -text
+# Jeux de fichiers des formats de donnees (T182) : ecrits par outils/generer_fixtures_formats.py, compares a l octet.
+tests/fixtures/formats/** -text

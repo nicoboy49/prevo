@@ -31,8 +31,6 @@ Object.assign(Wiki, (() => {
   const DELAI_RECHERCHE_MS = 300;                       // la recherche part après 300 ms sans frappe
   const RESULTATS_MONTRES = 5;                          // par portée, avant « Voir les n autres résultats »
   const RESULTATS_MONTRES_DEMANDE = 3;                  // saisie d'une DI (téléphone) : formulaire plus court
-  const TITRE_RECHERCHE_DEMANDE = 'Déjà vu sur cette machine ?';
-  const NOUVEL_ONGLET = 's\'ouvre dans un nouvel onglet';
 
   // ===========================================================================================
   // 1. Petits outils
@@ -49,7 +47,8 @@ Object.assign(Wiki, (() => {
 
   /** Attributs d'un lien qui s'ouvre dans un nouvel onglet (titre : `libelle` et la mention). */
   function attributsOnglet(nouvelOnglet, libelle) {
-    return nouvelOnglet ? UI.html` target="_blank" rel="noopener" title="${libelle} (${NOUVEL_ONGLET})"` : '';
+    const titre = UI.echapper(I18n.t('wiki.lien.titre_nouvel_onglet', { libelle }));      // échappé comme UI.html le ferait
+    return nouvelOnglet ? UI.brut(` target="_blank" rel="noopener" title="${titre}"`) : '';
   }
 
   function lienOt(otId, liens, nouvelOnglet) {
@@ -82,10 +81,10 @@ Object.assign(Wiki, (() => {
   function resultatHtml(resultat, portee, reglages, cache) {
     const estOt = resultat.type === 'ot';
     const tete = estOt ? lienOt(resultat.otId, reglages.liens, reglages.nouvelOnglet)
-      : UI.html`<a class="wiki-lien-page" href="#/wiki/${encodeURIComponent(resultat.lien)}"${attributsOnglet(reglages.nouvelOnglet, resultat.titre)}>${resultat.titre}</a><span class="badge info">Page du wiki</span>`;
+      : UI.html`<a class="wiki-lien-page" href="#/wiki/${encodeURIComponent(resultat.lien)}"${attributsOnglet(reglages.nouvelOnglet, resultat.titre)}>${resultat.titre}</a><span class="badge info">${I18n.t('wiki.resultat.page_wiki')}</span>`;
     const repere = portee !== 'equipement' && resultat.repere ? UI.html`<span class="badge neutre">${resultat.repere}</span>` : '';
-    const codes = [resultat.cause ? UI.html`<span>Cause : ${resultat.cause}</span>` : '',
-      resultat.remede ? UI.html`<span>Remède : ${resultat.remede}</span>` : ''];
+    const codes = [resultat.cause ? UI.html`<span>${I18n.t('wiki.resultat.cause_cause', { cause: resultat.cause })}</span>` : '',
+      resultat.remede ? UI.html`<span>${I18n.t('wiki.resultat.remede_remede', { remede: resultat.remede })}</span>` : ''];
     return UI.html`<li class="wiki-trouve" data-type="${resultat.type}" data-id="${estOt ? resultat.otId : resultat.pageId}"${cache ? UI.brut(' hidden') : ''}>
       <div class="wiki-ligne-tete">${tete}${repere}${resultat.date ? UI.html`<span class="wiki-date">${UI.dateFr(resultat.date)}</span>` : ''}</div>
       ${estOt ? UI.html`<div class="carte-titre">${resultat.titre}</div>` : ''}
@@ -98,7 +97,7 @@ Object.assign(Wiki, (() => {
   function blocPortee(portee, reglages) {
     const montres = reglages.montres;
     const reste = portee.resultats.length - montres;
-    const texteBouton = reste > 1 ? 'Voir les ' + reste + ' autres résultats' : 'Voir l\'autre résultat';
+    const texteBouton = I18n.t('wiki.bloc_portee.voir_autres_resultats', { n: reste });
     const bloc = UI.element(UI.html`<div class="wiki-portee" data-portee="${portee.portee}">
       <h3>${portee.libelle} <span class="badge">${portee.resultats.length}</span></h3>
       <ul class="wiki-lignes">${portee.resultats.map((resultat, rang) => resultatHtml(resultat, portee.portee, reglages, rang >= montres))}</ul>
@@ -110,7 +109,7 @@ Object.assign(Wiki, (() => {
         const ouvrir = bouton.getAttribute('aria-expanded') !== 'true';
         UI.$$('.wiki-trouve', bloc).forEach((ligne, rang) => { ligne.hidden = !ouvrir && rang >= montres; });
         bouton.setAttribute('aria-expanded', String(ouvrir));
-        bouton.textContent = ouvrir ? 'Montrer moins de résultats' : texteBouton;
+        bouton.textContent = ouvrir ? I18n.t('wiki.bloc_portee.montrer_moins_resultats') : texteBouton;
       });
     }
     return bloc;
@@ -132,8 +131,8 @@ Object.assign(Wiki, (() => {
     }
     const blocs = blocsRecherche(resultat, reglages);
     if (!blocs.length) {
-      UI.remplir(zone, UI.html`<p class="wiki-rien"><b>Rien trouvé pour « ${resultat.requete} ».</b></p>
-        <p class="aide">Essayez un autre mot : fuite, bruit, chauffe, ne démarre pas…</p>`);
+      UI.remplir(zone, UI.html`<p class="wiki-rien"><b>${I18n.t('wiki.resultats.rien_trouve', { requete: resultat.requete })}</b></p>
+        <p class="aide">${I18n.t('wiki.resultats.essayez_autre_mot_fuite')}</p>`);
       return;
     }
     UI.remplir(zone, blocs);
@@ -155,18 +154,18 @@ Object.assign(Wiki, (() => {
   function creerChamp(options) {
     const reglages = options || {};
     const equipementId = texte(reglages.equipementId);
-    const titre = texte(reglages.titre) || 'Chercher dans l\'historique';
+    const titre = texte(reglages.titre) || I18n.t('wiki.creer_champ.chercher_historique');
     const montres = Number.isInteger(reglages.montres) && reglages.montres > 0 ? reglages.montres : RESULTATS_MONTRES;
     const affichage = { montres, nouvelOnglet: Boolean(reglages.nouvelOnglet) };
     const id = UI.identifiantUnique('wiki-recherche');
     const aide = equipementId
-      ? 'Dans les interventions clôturées et les pages du wiki : cet équipement d\'abord, puis ceux de même marque et modèle, puis le reste du parc.'
-      : 'Dans les interventions clôturées et les pages du wiki, sur tout le parc.';
+      ? I18n.t('wiki.creer_champ.aide_equipement')
+      : I18n.t('wiki.creer_champ.aide_parc');
     const element = UI.element(UI.html`
       <section class="carte wiki-recherche" data-hors-saisie role="search" aria-label="${titre}" data-equipement="${equipementId}">
         <label class="wiki-recherche-titre" for="${id}">${UI.icone('recherche')}<span>${titre}</span></label>
         <input type="search" id="${id}" class="wiki-recherche-champ" data-hors-saisie maxlength="200" autocomplete="off"
-          enterkeyhint="search" placeholder="Ex. fuite, bruit, ne démarre pas" value="${sansRepere(reglages.texteInitial, equipementId)}">
+          enterkeyhint="search" placeholder="${I18n.t('wiki.creer_champ.ex_fuite_bruit_demarre')}" value="${sansRepere(reglages.texteInitial, equipementId)}">
         <p class="aide wiki-recherche-aide">${aide}</p>
         <div class="wiki-resultats" aria-live="polite"></div>
       </section>`);
@@ -180,7 +179,7 @@ Object.assign(Wiki, (() => {
       try {
         afficherResultats(zone, Wiki.rechercher(champ.value, { equipementId }), affichage);
       } catch (erreur) {
-        UI.remplir(zone, UI.html`<p class="erreur">Recherche impossible : ${(erreur && erreur.message) || ''}</p>`);
+        UI.remplir(zone, UI.html`<p class="erreur">${I18n.t('wiki.creer_champ.recherche_impossible', { message: (erreur && erreur.message) || '' })}</p>`);
         console.warn('Prévo (wiki) : recherche impossible (' + (erreur && erreur.message) + ').', erreur);
       }
     }
@@ -234,7 +233,7 @@ Object.assign(Wiki, (() => {
     if (actuel && actuel.dataset.equipement === id) return actuel;
     if (actuel) actuel.remove();
     if (!id) return null;
-    const recherche = creerChamp({ equipementId: id, texteInitial: champSymptome.value, titre: TITRE_RECHERCHE_DEMANDE,
+    const recherche = creerChamp({ equipementId: id, texteInitial: champSymptome.value, titre: I18n.t('wiki.poser_recherche_demande.deja_vu_machine'),
       montres: RESULTATS_MONTRES_DEMANDE, nouvelOnglet: true });
     recherche.element.classList.replace('carte', 'wiki-recherche-demande');
     recherche.repris = recherche.champ.value;
@@ -267,15 +266,15 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   function afficherIntrouvable(conteneur, id) {
-    App.definirTitre('Page introuvable');
+    App.definirTitre(I18n.t('wiki.introuvable.page_introuvable'));
     UI.remplir(conteneur, UI.html`<div class="wiki wiki-page wiki-introuvable">
       <div class="entete-page"><div>
-        <div class="fil"><a href="#/wiki">Wiki</a></div>
-        <h1>Page introuvable</h1>
+        <div class="fil"><a href="#/wiki">${I18n.t('wiki.introuvable.wiki')}</a></div>
+        <h1>${I18n.t('wiki.introuvable.page_introuvable')}</h1>
       </div></div>
-      ${UI.vide('Aucune page du wiki ne porte l\'identifiant « ' + id + ' »',
-        'Elle a peut-être été archivée ou saisie sur un autre poste. Les listes du wiki montrent les pages connues.', 'wiki')}
-      <p><a class="btn btn-secondaire" href="#/wiki">Retour au wiki</a></p>
+      ${UI.vide(I18n.t('wiki.introuvable.aucune_page_wiki_porte', { id }),
+        I18n.t('wiki.introuvable.peut_etre_ete_archivee'), 'wiki')}
+      <p><a class="btn btn-secondaire" href="#/wiki">${I18n.t('wiki.introuvable.retour_wiki')}</a></p>
     </div>`);
   }
 
@@ -300,8 +299,8 @@ Object.assign(Wiki, (() => {
     App.ecran({
       id: 'wiki',
       route: /^#\/wiki$/,
-      titre: 'Wiki',
-      menu: { libelle: 'Wiki', icone: 'wiki', ordre: 42 },
+      get titre() { return I18n.t('wiki.ecran.titre'); },
+      menu: { get libelle() { return I18n.t('wiki.menu.libelle'); }, icone: 'wiki', ordre: 42 },
       profils: PROFILS,
       tables: TABLES,
       afficher: afficherAccueil,
@@ -309,7 +308,7 @@ Object.assign(Wiki, (() => {
     App.ecran({
       id: 'wiki-liste',
       route: new RegExp('^#\\/wiki\\/(?<liste>' + MOTIF_LISTES + ')$'),
-      titre: 'Wiki',
+      get titre() { return I18n.t('wiki.ecran.titre'); },
       parent: 'wiki',
       profils: PROFILS,
       tables: TABLES,
@@ -318,7 +317,7 @@ Object.assign(Wiki, (() => {
     App.ecran({
       id: 'wiki-page',
       route: new RegExp('^#\\/wiki\\/(?!(?:' + MOTIF_LISTES + ')$)(?<id>[^/?]+)$'),
-      titre: 'Page du wiki',
+      get titre() { return I18n.t('wiki.ecran.titre_page'); },
       parent: 'wiki',
       profils: PROFILS,
       tables: TABLES,

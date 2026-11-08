@@ -1,90 +1,98 @@
-name: "Signaler un problème"
-description: "Quelque chose ne fonctionne pas comme prévu dans Prévo."
+name: "Report a problem / Signaler un problème"
+description: "Something does not work as expected in Prévo. / Quelque chose ne fonctionne pas comme prévu dans Prévo."
 title: "[Problème] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        **N'envoyez aucune donnée réelle de votre entreprise.**
+        **This issue is PUBLIC. Do not send any real company data, and do not attach any company file: files are sent privately.**
+
+        **Never paste** a password, a temporary password, a token, a cookie, an AI key, or the content of the `donnees/acces/` folder (accounts, sessions, devices, workshop certificate) or of `prevo.config.json`.
+
+        Connection problem? Describe what the screen says. The connection log (`journal-acces.csv`) contains names and addresses: never attach it here; if it is needed, it will be asked for privately.
+
+        ---
+
+        **Ce ticket est PUBLIC. N'envoyez aucune donnée réelle de votre entreprise et ne joignez aucun fichier de l'entreprise : les fichiers s'envoient en privé.**
 
         **Ne collez jamais** un mot de passe, un mot de passe provisoire, un jeton, un cookie, une clé d'IA, ni le contenu du dossier `donnees/acces/` (comptes, sessions, appareils, certificat de l'atelier) ou de `prevo.config.json`.
 
-        Problème de connexion ? Joignez les lignes utiles du journal des connexions (`journal-acces.csv` : Équipe › Accès › Journal des connexions, « Exporter (CSV) »). Vous pouvez en retirer les adresses et les noms si vous préférez.
+        Problème de connexion ? Décrivez ce que dit l'écran. Le journal des connexions (`journal-acces.csv`) contient des noms et des adresses : ne le joignez jamais ici ; s'il faut le voir, il vous sera demandé en privé.
   - type: textarea
     id: action
     attributes:
-      label: "Qu'avez-vous fait ?"
-      description: "Les étapes, dans l'ordre : écran, boutons cliqués, valeurs saisies (des exemples, pas vos vraies données)."
-      placeholder: "1. Connecté comme technicien, écran Ordres de travail\n2. Clic sur un OT, puis « Clôturer »\n3. …"
+      label: "What did you do? / Qu'avez-vous fait ?"
+      description: "The steps, in order: screen, buttons clicked, values entered (examples, not your real data). / Les étapes, dans l'ordre : écran, boutons cliqués, valeurs saisies (des exemples, pas vos vraies données)."
+      placeholder: "1. Logged in as technician, Work orders screen / Connecté comme technicien, écran Ordres de travail\n2. Click on a work order, then \"Close\" / Clic sur un OT, puis « Clôturer »\n3. …"
     validations:
       required: true
   - type: textarea
     id: attendu
     attributes:
-      label: "Qu'attendiez-vous ?"
+      label: "What did you expect? / Qu'attendiez-vous ?"
     validations:
       required: true
   - type: textarea
     id: constate
     attributes:
-      label: "Que s'est-il passé ?"
-      description: "Le message affiché, mot pour mot s'il y en a un."
+      label: "What happened? / Que s'est-il passé ?"
+      description: "The message shown, word for word if there is one. / Le message affiché, mot pour mot s'il y en a un."
     validations:
       required: true
   - type: dropdown
     id: mode
     attributes:
-      label: "Mode utilisé"
+      label: "Mode used / Mode utilisé"
       options:
-        - "Serveur (Prévo installé : Lancer_GMAO.bat ou lancer.sh)"
-        - "Dossier (un seul poste, Chrome ou Edge)"
-        - "Démo (données de démo, sur ce PC ou en ligne)"
+        - "Server (Prévo installed: Lancer_GMAO.bat or lancer.sh) / Serveur (Prévo installé : Lancer_GMAO.bat ou lancer.sh)"
+        - "Folder (a single PC, Chrome or Edge) / Dossier (un seul poste, Chrome ou Edge)"
+        - "Demo (demo data, on this PC or online) / Démo (données de démo, sur ce PC ou en ligne)"
     validations:
       required: true
   - type: dropdown
     id: portee
     attributes:
-      label: "Portée"
-      description: "D'où Prévo est ouvert (réglé par l'assistant d'installation ; visible dans Paramètres › Accès et installation)."
+      label: "Reach / Portée"
+      description: "Where Prévo is opened from (set by the installation assistant; visible in Settings › Access and installation). / D'où Prévo est ouvert (réglé par l'assistant d'installation ; visible dans Paramètres › Accès et installation)."
       options:
-        - "Ce PC seulement"
-        - "Le Wi-Fi de l'atelier"
-        - "Hors de l'atelier (Tailscale ou VPN)"
-        - "Réseau de l'entreprise, derrière un mandataire (Intranet)"
-        - "Je ne sais pas, ou sans objet (mode dossier, démo)"
+        - "This PC only / Ce PC seulement"
+        - "The workshop Wi-Fi / Le Wi-Fi de l'atelier"
+        - "Outside the workshop (Tailscale or VPN) / Hors de l'atelier (Tailscale ou VPN)"
+        - "Company network, behind a proxy (Intranet) / Réseau de l'entreprise, derrière un mandataire (Intranet)"
+        - "I do not know, or not applicable (folder mode, demo) / Je ne sais pas, ou sans objet (mode dossier, démo)"
     validations:
       required: true
   - type: input
     id: appareil
     attributes:
-      label: "Appareil et navigateur"
-      placeholder: "Exemple : PC Windows 11 avec Edge, téléphone Android avec Chrome, iPhone avec Safari"
+      label: "Device and browser / Appareil et navigateur"
+      placeholder: "Example / Exemple : Windows 11 PC with Edge, Android phone with Chrome, iPhone with Safari"
     validations:
       required: true
   - type: dropdown
     id: role
     attributes:
-      label: "Rôle"
+      label: "Role / Rôle"
       options:
-        - "Demandeur, téléphone enrôlé par invitation (sans mot de passe)"
-        - "Demandeur, avec un compte"
-        - "Technicien"
-        - "Responsable"
-        - "Sans compte (profil choisi à l'écran)"
+        - "Requester, phone enrolled by invitation (no password) / Demandeur, téléphone enrôlé par invitation (sans mot de passe)"
+        - "Requester, with an account / Demandeur, avec un compte"
+        - "Technician / Technicien"
+        - "Manager / Responsable"
+        - "No account (profile chosen on screen) / Sans compte (profil choisi à l'écran)"
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: "Version de Prévo (facultatif)"
-      description: "Écran « À propos »."
+      label: "Prévo version (optional) / Version de Prévo (facultatif)"
+      description: "\"About\" screen. / Écran « À propos »."
     validations:
       required: false
   - type: textarea
     id: capture
     attributes:
-      label: "Capture d'écran (facultatif)"
-      description: "Glissez l'image dans ce champ. Masquez d'abord toute donnée réelle, tout mot de passe et tout QR d'invitation."
+      label: "Screenshot (optional) / Capture d'écran (facultatif)"
+      description: "Drag the image into this field. First hide any real data, any password and any invitation QR code. / Glissez l'image dans ce champ. Masquez d'abord toute donnée réelle, tout mot de passe et tout QR d'invitation."
     validations:
       required: false

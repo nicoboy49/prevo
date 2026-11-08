@@ -1,0 +1,6 @@
+{
+  "base": "f3-v1.2.0",
+  "description": "equipements.csv enregistré en Windows-1252, sans BOM, dates date_mes en JJ/MM/AAAA, comme après un enregistrement par Excel.",
+  "supprimer": [],
+  "vider": []
+}

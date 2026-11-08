@@ -19,7 +19,7 @@ Object.assign(Magasin, (() => {
 
   /** Badge du type de mouvement (texte toujours affiché ; la couleur aide seulement). */
   function badgeMouvement(type) {
-    return UI.badgeStatut(type, TONS_MOUVEMENT[type] || 'neutre');
+    return UI.badgeValeur('mouvements_stock', 'type', type, TONS_MOUVEMENT[type] || 'neutre');
   }
 
   function articleDe(mouvement) {
@@ -52,14 +52,14 @@ Object.assign(Magasin, (() => {
 
   function colonnesMouvements() {
     return [
-      { cle: 'date', libelle: 'Date', classe: 'sans-coupure', rendu: (m) => UI.dateHeureFr(m.date) },
-      { cle: 'article_id', libelle: 'Article', valeurTri: (m) => texte((articleDe(m) || {}).reference),
+      { cle: 'date', libelle: I18n.t('commun.champ.date'), classe: 'sans-coupure', rendu: (m) => UI.dateHeureFr(m.date) },
+      { cle: 'article_id', libelle: I18n.t('commun.champ.article'), valeurTri: (m) => texte((articleDe(m) || {}).reference),
         rendu: (m) => (articleDe(m) ? UI.html`${lienArticle(articleDe(m))} <span class="muted">${articleDe(m).designation}</span>` : m.article_id) },
-      { cle: 'type', libelle: 'Type', rendu: (m) => badgeMouvement(m.type) },
-      { cle: 'quantite', libelle: 'Quantité', type: 'nombre', rendu: (m) => UI.nombreFr(m.quantite) },
-      { cle: 'ot_id', libelle: 'OT', classe: 'sans-coupure', rendu: (m) => lienOt(m.ot_id) },
-      { cle: 'utilisateur', libelle: 'Par' },
-      { cle: 'commentaire', libelle: 'Commentaire', classe: 'magasin-col-commentaire' },
+      { cle: 'type', libelle: I18n.t('magasin.colonnes_mouvements.type'), rendu: (m) => badgeMouvement(m.type) },
+      { cle: 'quantite', libelle: I18n.t('commun.champ.quantite'), type: 'nombre', rendu: (m) => UI.nombreFr(m.quantite) },
+      { cle: 'ot_id', libelle: I18n.t('magasin.colonnes_mouvements.ot'), classe: 'sans-coupure', rendu: (m) => lienOt(m.ot_id) },
+      { cle: 'utilisateur', libelle: I18n.t('magasin.colonnes_mouvements.par') },
+      { cle: 'commentaire', libelle: I18n.t('commun.champ.commentaire'), classe: 'magasin-col-commentaire' },
     ];
   }
 
@@ -68,7 +68,7 @@ Object.assign(Magasin, (() => {
     return UI.html`<div class="carte-ligne">
       <div class="carte-tete"><b>${article ? article.reference : m.article_id}</b>${badgeMouvement(m.type)}</div>
       <div class="carte-titre">${article ? article.designation : ''}</div>
-      <div class="carte-meta"><span>${UI.dateHeureFr(m.date)}</span><span>Quantité : ${UI.nombreFr(m.quantite)}</span>
+      <div class="carte-meta">${I18n.html('magasin.carte_mouvement.date_quantite_quantite', { date: UI.dateHeureFr(m.date), quantite: UI.nombreFr(m.quantite) })}
         ${m.ot_id ? UI.html`<span>${lienOt(m.ot_id)}</span>` : ''}${m.utilisateur ? UI.html`<span>${m.utilisateur}</span>` : ''}</div>
       ${m.commentaire ? UI.html`<div class="carte-meta">${m.commentaire}</div>` : ''}</div>`;
   }
@@ -76,18 +76,18 @@ Object.assign(Magasin, (() => {
   function afficherOngletMouvements(panneau, requete) {
     const filtres = filtresMouvements(requete);
     const tous = Donnees.lignes('mouvements_stock');
-    const optionsArticles = [{ valeur: '', libelle: 'Tous les articles' }].concat(Donnees.lignes('articles').slice()
+    const optionsArticles = [{ valeur: '', libelle: I18n.t('magasin.onglet_mouvements.tous_articles') }].concat(Donnees.lignes('articles').slice()
       .sort((a, b) => texte(a.reference).localeCompare(texte(b.reference), 'fr', { numeric: true }))
       .map((article) => ({ valeur: article.id, libelle: libelleArticle(article) })));
     UI.remplir(panneau, UI.html`
-      <form class="filtres magasin-filtres" id="magasin-filtres-mouvements" data-hors-saisie role="search" aria-label="Filtrer les mouvements">
-        <label class="visuellement-cache" for="magasin-filtre-type">Type de mouvement</label>
-        <select id="magasin-filtre-type" name="type">${optionsHtml([{ valeur: '', libelle: 'Tous les types' }]
-          .concat(TYPES_MOUVEMENT.map((type) => ({ valeur: type, libelle: type }))), filtres.type)}</select>
-        <label class="visuellement-cache" for="magasin-filtre-article">Article</label>
+      <form class="filtres magasin-filtres" id="magasin-filtres-mouvements" data-hors-saisie role="search" aria-label="${I18n.t('magasin.onglet_mouvements.filtrer_mouvements')}">
+        <label class="visuellement-cache" for="magasin-filtre-type">${I18n.t('magasin.onglet_mouvements.type_mouvement')}</label>
+        <select id="magasin-filtre-type" name="type">${optionsHtml([{ valeur: '', libelle: I18n.t('magasin.onglet_mouvements.tous_types') }]
+          .concat(TYPES_MOUVEMENT.map((type) => ({ valeur: type, libelle: Schema.libelleValeur('mouvements_stock', 'type', type) }))), filtres.type)}</select>
+        <label class="visuellement-cache" for="magasin-filtre-article">${I18n.t('commun.champ.article')}</label>
         <select id="magasin-filtre-article" name="article">${optionsHtml(optionsArticles, filtres.article)}</select>
-        <label class="visuellement-cache" for="magasin-filtre-ot">N° d'ordre de travail</label>
-        <input type="search" id="magasin-filtre-ot" name="ot" value="${filtres.ot}" placeholder="N° d'OT (ex. OT-2026-0175)" autocomplete="off">
+        <label class="visuellement-cache" for="magasin-filtre-ot">${I18n.t('magasin.onglet_mouvements.ordre_travail')}</label>
+        <input type="search" id="magasin-filtre-ot" name="ot" value="${filtres.ot}" placeholder="${I18n.t('magasin.onglet_mouvements.ot_ex_ot_2026')}" autocomplete="off">
       </form>
       <p class="note magasin-compteur" role="status"></p>
       <div class="carte magasin-liste"></div>`);
@@ -98,11 +98,10 @@ Object.assign(Magasin, (() => {
         .sort((a, b) => texte(b.date).localeCompare(texte(a.date)) || texte(b.id).localeCompare(texte(a.id)));
       const lignes = retenus.slice(0, LIMITE_MOUVEMENTS);
       UI.remplir(zone, listeAdaptative({
-        colonnes: colonnesMouvements(), lignes, carte: carteMouvement, libelle: 'Mouvements de stock',
-        vide: 'Aucun mouvement ne correspond à ces filtres.',
+        colonnes: colonnesMouvements(), lignes, carte: carteMouvement, libelle: I18n.t('magasin.onglet_mouvements.mouvements_stock'),
+        vide: I18n.t('magasin.onglet_mouvements.aucun_mouvement_correspond_filtres'),
       }));
-      compteur.textContent = retenus.length + ' mouvement(s) sur ' + tous.length
-        + (retenus.length > LIMITE_MOUVEMENTS ? ' — les ' + LIMITE_MOUVEMENTS + ' plus récents sont affichés : affinez les filtres' : '');
+      compteur.textContent = I18n.t('magasin.onglet_mouvements.n_mouvement_nb_tous', { n: retenus.length, nbTous: tous.length }) + (retenus.length > LIMITE_MOUVEMENTS ? ' ' + I18n.t('magasin.onglet_mouvements.plus_recents_sont_affiches', { limite: LIMITE_MOUVEMENTS }) : '');
     }
     const formulaire = UI.$('#magasin-filtres-mouvements', panneau);
     const lireFiltres = () => { memoire.filtresMouvements = UI.lireFormulaire(formulaire); rafraichir(); };
@@ -120,7 +119,7 @@ Object.assign(Magasin, (() => {
   function ecartHtml(stock, saisie) {
     if (texte(saisie) === '') return '';
     const compte = Donnees.nombre(saisie);
-    if (compte === null || compte < 0) return UI.html`<span class="badge ko">illisible</span>`;
+    if (compte === null || compte < 0) return UI.html`<span class="badge ko">${I18n.t('magasin.ecart.illisible')}</span>`;
     const ecart = Math.round((compte - stock) * 1e6) / 1e6;
     if (ecart === 0) return UI.html`<span class="badge ok magasin-ecart">0</span>`;
     return UI.html`<span class="badge ${ecart > 0 ? 'info' : 'attention'} magasin-ecart">${ecart > 0 ? '+' : '−'}${nombreTexte(Math.abs(ecart))}</span>`;
@@ -131,19 +130,19 @@ Object.assign(Magasin, (() => {
     const saisie = memoire.saisiesInventaire.get(article.id) || '';
     const idChamp = 'magasin-inventaire-' + article.id;
     return UI.html`<tr>
-      <td data-libelle="Référence">${lienArticle(article)}</td>
-      <td data-libelle="Désignation">${article.designation}</td>
-      <td data-libelle="Emplacement">${article.emplacement}</td>
-      <td data-libelle="Stock calculé" class="num">${quantiteUnite(stock, article.unite)}</td>
-      <td data-libelle="Stock compté" class="num"><label class="visuellement-cache" for="${idChamp}">Stock compté de ${article.reference}</label>
+      <td data-libelle="${I18n.t('commun.champ.reference')}">${lienArticle(article)}</td>
+      <td data-libelle="${I18n.t('commun.champ.designation')}">${article.designation}</td>
+      <td data-libelle="${I18n.t('magasin.inventaire.emplacement')}">${article.emplacement}</td>
+      <td data-libelle="${I18n.t('magasin.inventaire.stock_calcule')}" class="num">${quantiteUnite(stock, article.unite)}</td>
+      <td data-libelle="${I18n.t('magasin.inventaire.stock_compte')}" class="num"><label class="visuellement-cache" for="${idChamp}">${I18n.t('magasin.ligne_inventaire.stock_compte', { reference: article.reference })}</label>
         <input type="text" inputmode="decimal" autocomplete="off" id="${idChamp}" data-inventaire="${article.id}" data-stock="${String(stock)}" value="${saisie}"></td>
-      <td data-libelle="Écart" class="num" data-ecart="${article.id}">${ecartHtml(stock, saisie)}</td>
+      <td data-libelle="${I18n.t('magasin.inventaire.ecart')}" class="num" data-ecart="${article.id}">${ecartHtml(stock, saisie)}</td>
     </tr>`;
   }
 
   function resumeInventaire() {
     const saisies = Array.from(memoire.saisiesInventaire.values()).filter((valeur) => texte(valeur) !== '');
-    return saisies.length ? saisies.length + ' article(s) compté(s), à valider.' : 'Aucun stock compté pour l\'instant.';
+    return saisies.length ? I18n.t('magasin.resume_inventaire.article_compte_valider', { n: saisies.length }) : I18n.t('magasin.resume_inventaire.aucun_stock_compte_instant');
   }
 
   async function validerInventaire(panneau) {
@@ -156,16 +155,15 @@ Object.assign(Magasin, (() => {
       if (quantite === null || quantite < 0) illisibles.push(article ? article.reference : articleId);
       else comptages.push({ articleId, quantite });
     });
-    if (illisibles.length) { UI.toast('Stock compté illisible pour : ' + illisibles.join(', ') + '.', 'erreur'); return; }
-    if (!comptages.length) { UI.toast('Saisissez le stock compté d\'au moins un article.', 'attention'); return; }
+    if (illisibles.length) { UI.toast(I18n.t('magasin.valider_inventaire.stock_compte_illisible', { join: illisibles.join(', ') }), 'erreur'); return; }
+    if (!comptages.length) { UI.toast(I18n.t('magasin.valider_inventaire.saisissez_stock_compte_moins'), 'attention'); return; }
     const ecarts = comptages.filter((c) => c.quantite !== Donnees.stockArticle(c.articleId)).length;
-    const accord = await UI.confirmer('Enregistrer le stock compté de ' + comptages.length + ' article(s), dont ' + ecarts
-      + ' avec un écart ? Le stock compté remplace le stock calculé.', { titre: 'Valider l\'inventaire', oui: 'Enregistrer' });
+    const accord = await UI.confirmer(I18n.t('magasin.valider_inventaire.enregistrer_stock_compte_article', { n: comptages.length, ecarts }), { titre: I18n.t('magasin.valider_inventaire.valider_inventaire'), oui: I18n.t('commun.bouton.enregistrer') });
     if (!accord) return;
     try {
       await Magasin.inventorier(comptages, UI.$('#magasin-inventaire-commentaire', panneau).value);
       memoire.saisiesInventaire.clear();
-      await apresEcriture('Inventaire enregistré : ' + comptages.length + ' article(s).');
+      await apresEcriture(I18n.t('magasin.valider_inventaire.inventaire_enregistre_article', { n: comptages.length }));
     } catch (erreur) {
       App.signalerErreur(erreur, 'inventaire');
     }
@@ -173,7 +171,7 @@ Object.assign(Magasin, (() => {
 
   function afficherOngletInventaire(panneau) {
     if (!App.estResponsable()) {
-      UI.remplir(panneau, UI.vide('Inventaire réservé au responsable', 'Le technicien consulte le stock dans l\'onglet Articles.', 'magasin'));
+      UI.remplir(panneau, UI.vide(I18n.t('magasin.onglet_inventaire.inventaire_reserve_responsable'), I18n.t('magasin.onglet_inventaire.technicien_consulte_stock_onglet'), 'magasin'));
       return;
     }
     const filtres = Object.assign({ recherche: '', categorie: '' }, memoire.filtresInventaire || {});
@@ -182,26 +180,25 @@ Object.assign(Magasin, (() => {
       || texte(a.reference).localeCompare(texte(b.reference), 'fr', { numeric: true }));
     const categories = new Map(articles.map((article) => [categorieArticle(article).code, categorieArticle(article).libelle]));
     UI.remplir(panneau, UI.html`
-      <div class="encadre info">Comptez les pièces et saisissez le <b>stock compté</b> : l'écart avec le stock calculé s'affiche.
-        Les lignes laissées vides ne changent rien. À la validation, le stock compté remplace le stock calculé (mouvement « inventaire »).</div>
-      <form class="filtres magasin-filtres" id="magasin-filtres-inventaire" data-hors-saisie role="search" aria-label="Filtrer les articles à compter">
-        <label class="visuellement-cache" for="magasin-inventaire-recherche">Rechercher un article</label>
-        <input type="search" id="magasin-inventaire-recherche" name="recherche" value="${filtres.recherche}" placeholder="Référence, désignation, emplacement" autocomplete="off">
-        <label class="visuellement-cache" for="magasin-inventaire-categorie">Catégorie</label>
-        <select id="magasin-inventaire-categorie" name="categorie">${optionsHtml([{ valeur: '', libelle: 'Toutes catégories' }]
+      <div class="encadre info">${I18n.html('magasin.onglet_inventaire.comptez_pieces_saisissez_stock')}</div>
+      <form class="filtres magasin-filtres" id="magasin-filtres-inventaire" data-hors-saisie role="search" aria-label="${I18n.t('magasin.onglet_inventaire.filtrer_articles_compter')}">
+        <label class="visuellement-cache" for="magasin-inventaire-recherche">${I18n.t('magasin.onglet_inventaire.rechercher_article')}</label>
+        <input type="search" id="magasin-inventaire-recherche" name="recherche" value="${filtres.recherche}" placeholder="${I18n.t('magasin.onglet_inventaire.reference_designation_emplacement')}" autocomplete="off">
+        <label class="visuellement-cache" for="magasin-inventaire-categorie">${I18n.t('magasin.onglet_inventaire.categorie')}</label>
+        <select id="magasin-inventaire-categorie" name="categorie">${optionsHtml([{ valeur: '', libelle: I18n.t('magasin.onglet_inventaire.toutes_categories') }]
           .concat(Array.from(categories.entries()).map(([valeur, libelle]) => ({ valeur, libelle }))
-            .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'))), filtres.categorie)}</select>
+            .sort((a, b) => UI.comparerTextes(a.libelle, b.libelle))), filtres.categorie)}</select>
       </form>
       <div class="carte magasin-inventaire"><div class="table-defile"><table class="table magasin-table-inventaire">
-        <caption class="visuellement-cache">Inventaire : stock compté par article</caption>
-        <thead><tr><th scope="col">Référence</th><th scope="col">Désignation</th><th scope="col">Emplacement</th>
-          <th scope="col" class="num">Stock calculé</th><th scope="col" class="num">Stock compté</th><th scope="col" class="num">Écart</th></tr></thead>
+        <caption class="visuellement-cache">${I18n.t('magasin.onglet_inventaire.inventaire_stock_compte_article')}</caption>
+        <thead><tr><th scope="col">${I18n.t('commun.champ.reference')}</th><th scope="col">${I18n.t('commun.champ.designation')}</th><th scope="col">${I18n.t('magasin.onglet_inventaire.emplacement')}</th>
+          <th scope="col" class="num">${I18n.t('magasin.onglet_inventaire.stock_calcule')}</th><th scope="col" class="num">${I18n.t('magasin.onglet_inventaire.stock_compte')}</th><th scope="col" class="num">${I18n.t('magasin.onglet_inventaire.ecart')}</th></tr></thead>
         <tbody></tbody></table></div></div>
       <div class="carte magasin-inventaire-validation">
         <div class="form-ligne">
-          <div class="champ"><label class="libelle" for="magasin-inventaire-commentaire">Commentaire (facultatif)</label>
-            <input type="text" id="magasin-inventaire-commentaire" maxlength="200" placeholder="Ex. inventaire tournant, rayon A"></div>
-          <button type="button" class="btn btn-primaire" id="magasin-valider-inventaire">${UI.icone('valider')}Valider l'inventaire</button>
+          <div class="champ"><label class="libelle" for="magasin-inventaire-commentaire">${I18n.t('magasin.onglet_inventaire.commentaire_facultatif')}</label>
+            <input type="text" id="magasin-inventaire-commentaire" maxlength="200" placeholder="${I18n.t('magasin.onglet_inventaire.ex_inventaire_tournant_rayon')}"></div>
+          <button type="button" class="btn btn-primaire" id="magasin-valider-inventaire">${UI.icone('valider')}${I18n.t('magasin.valider_inventaire.valider_inventaire')}</button>
         </div>
         <p class="note" id="magasin-inventaire-resume" role="status"></p>
       </div>`);
@@ -212,7 +209,7 @@ Object.assign(Magasin, (() => {
       const retenus = articles.filter((article) => (!memoire.filtresInventaire.categorie || categorieArticle(article).code === memoire.filtresInventaire.categorie)
         && (!recherche || normaliser([article.reference, article.designation, article.emplacement].join(' ')).includes(recherche)));
       UI.remplir(corps, retenus.length ? UI.html`${retenus.map(ligneInventaire)}`
-        : UI.html`<tr><td colspan="6" class="vide-table">Aucun article ne correspond à ces filtres.</td></tr>`);
+        : UI.html`<tr><td colspan="6" class="vide-table">${I18n.t('magasin.onglet_inventaire.aucun_article_correspond_filtres')}</td></tr>`);
       resume.textContent = resumeInventaire();
     }
     corps.addEventListener('input', (evenement) => {
@@ -237,16 +234,16 @@ Object.assign(Magasin, (() => {
 
   async function ouvrirEntree(article) {
     const champs = [
-      UI.champ({ nom: 'quantite', type: 'decimal', libelle: 'Quantité entrée' + (article.unite ? ' (' + article.unite + ')' : '') }, '', { obligatoire: true }),
-      UI.champ({ nom: 'commentaire', type: 'texte', libelle: 'Commentaire' }, '', { placeholder: 'Ex. pièce récupérée sur un équipement réformé' }),
+      UI.champ({ nom: 'quantite', type: 'decimal', libelle: article.unite ? I18n.t('magasin.ouvrir_entree.quantite_entree', { unite: article.unite }) : I18n.t('magasin.ouvrir_entree.quantite_entree_2') }, '', { obligatoire: true }),
+      UI.champ({ nom: 'commentaire', type: 'texte', libelle: I18n.t('commun.champ.commentaire') }, '', { placeholder: I18n.t('magasin.ouvrir_entree.ex_piece_recuperee_equipement') }),
     ];
     const id = await fenetreSaisie({
-      titre: 'Entrée en stock', champs, libelleValider: 'Enregistrer l\'entrée',
-      introduction: UI.html`<p><b>${libelleArticle(article)}</b> — stock actuel : ${quantiteUnite(Donnees.stockArticle(article.id), article.unite)}.</p>
-        <p class="note">Pour une livraison de fournisseur, réceptionnez plutôt l'achat (onglet Achats).</p>`,
+      titre: I18n.t('magasin.ouvrir_entree.entree_stock'), champs, libelleValider: I18n.t('magasin.ouvrir_entree.enregistrer_entree'),
+      introduction: UI.html`<p>${I18n.html('magasin.ouvrir_entree.stock_actuel', { libelleArticle: libelleArticle(article), quantiteUnite: quantiteUnite(Donnees.stockArticle(article.id), article.unite) })}</p>
+        <p class="note">${I18n.t('magasin.ouvrir_entree.livraison_fournisseur_receptionnez_plutot')}</p>`,
       action: (valeurs) => Magasin.entrer(article.id, valeurs.quantite, valeurs.commentaire),
     });
-    if (id) await apresEcriture('Entrée en stock enregistrée.');
+    if (id) await apresEcriture(I18n.t('magasin.ouvrir_entree.entree_stock_enregistree'));
   }
 
   // Outils prêtés aux autres fichiers du module (usage interne).

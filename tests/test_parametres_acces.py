@@ -324,7 +324,7 @@ class TestRefaireChaqueReglage(CasAcces):
         attendu = {"portee": "dehors", "ecoute": "127.0.0.1", "comptes": True, "mandataire": True, "certificat_auto": False,
                    "port_http": 8080, "port_https": 8444, "noms": [NOM_INTRANET, NOM_TAILSCALE], "demarrage": "aucun",
                    "veille_desactivee": False, "copie_sauvegardes": str(nas), "demandeurs_avec_compte": True,
-                   "session_heures": 24, "session_longue_jours": 30, "invitation_heures": 48, "quota_documents_mo": 2048,
+                   "session_heures": 24, "session_longue_jours": 30, "invitation_heures": 48, "quota_documents_mo": 4096,
                    "ia_fournisseur": "openai", "ia_url": "http://127.0.0.1:1234/v1", "ia_en_ligne": True}
         for cle, valeur in attendu.items():
             with self.subTest(cle=cle):

@@ -40,3 +40,10 @@ body:
       label: "Ce qui vous aiderait"
     validations:
       required: true
+  - type: textarea
+    id: contexte
+    attributes:
+      label: "Version de Prévo, langue, navigateur (rempli par Prévo)"
+      description: "Rempli par le lien « Suggérer une amélioration » de Prévo ; vous pouvez le modifier ou l'effacer."
+    validations:
+      required: false

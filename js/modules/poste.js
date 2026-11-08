@@ -1,7 +1,8 @@
 'use strict';
 // Poste — écran « Ce poste » (#/poste, tous les profils ; ARCHITECTURE.md §17.7) : identité du poste
-// et profil, assistant IA, dictée, affichage (thème sombre ou clair). Les réglages propres au poste
-// restent dans son navigateur (localStorage : prevo.ia, prevo.dictee, prevo.theme) ; le réglage
+// et profil, assistant IA, dictée, affichage (thème sombre ou clair, langue de l'écran ; T298 : avec une session de
+// compte, la langue se retient « pour mon compte » ou « pour ce poste »). Les réglages propres au poste
+// restent dans son navigateur (localStorage : prevo.ia, prevo.dictee, prevo.theme, prevo.langue) ; le réglage
 // partagé « fournisseurs d'IA en ligne autorisés » est dans Paramètres (responsable ; en mode serveur, il
 // est décidé sur le PC serveur, comme le fournisseur, son adresse et sa clé).
 //
@@ -24,22 +25,28 @@
 
 const Poste = (() => {
 
-  const THEMES = Object.freeze({ sombre: 'Sombre', clair: 'Clair' });
+  // Libellés lus à l'affichage (accesseurs) ; les noms (sombre, clair) sont les valeurs mémorisées.
+  const THEMES = Object.freeze({
+    get sombre() { return I18n.t('poste.themes.sombre'); },
+    get clair() { return I18n.t('poste.themes.clair'); },
+  });
   const THEME_DEFAUT = 'sombre';
   const CLE_THEME = 'prevo.theme';
   const DELAI_MIN_S = 1;
   const DELAI_MAX_S = 300;            // délai du poste au plus, comme dans ia.js (le relais garde le sien : 120 s)
-  // Explication affichée sous la mention de portée (Ia.portee → Ia.mention).
-  const EXPLICATIONS_PORTEE = {
-    poste: 'Le fournisseur tourne sur ce PC : les textes ne quittent pas l\'ordinateur.',
-    'pc-atelier': 'Le serveur Prévo transmet la demande au fournisseur installé sur le PC atelier : '
-      + 'les textes ne quittent pas ce PC.',
-    atelier: 'Le fournisseur est sur un autre PC du réseau de l\'atelier : les textes ne sortent pas de l\'atelier.',
-  };
-  // Audit I5 : sans serveur, la clé vit dans le navigateur (origine « fichier local »).
-  const MENTION_CLE_DOSSIER = 'En mode dossier, la clé reste dans ce navigateur ; le mode serveur la garde sur le PC serveur.';
-  const ADRESSE_SERVEUR_INVALIDE = 'L\'adresse du fournisseur réglée sur le PC serveur est absente ou invalide '
-    + '(« ia_url ») : l\'assistant IA ne peut pas être activé.';
+  /** Explication affichée sous la mention de portée (Ia.portee → Ia.mention) ; rien pour une autre portée. */
+  function explicationPortee(portee) {
+    if (portee === 'poste') return I18n.t('poste.explication_portee.fournisseur_tourne_pc_textes');
+    if (portee === 'pc-atelier') {
+      return I18n.t('poste.explication_portee.serveur_prevo_transmet_demande');
+    }
+    if (portee === 'atelier') return I18n.t('poste.explication_portee.fournisseur_autre_pc_reseau');
+    return undefined;
+  }
+
+  function adresseServeurInvalide() {
+    return I18n.t('poste.adresse_serveur_invalide.adresse_fournisseur_reglee_pc');
+  }
 
   function modeServeur() {
     return App.mode === 'serveur';
@@ -116,15 +123,14 @@ const Poste = (() => {
   function carteIdentite() {
     const stockage = (App.adaptateur && App.adaptateur.libelle) || App.mode || '';
     return UI.html`<article class="carte" id="carte-identite" data-hors-saisie>
-      <div class="entete-carte"><h2>Identité</h2></div>
+      <div class="entete-carte"><h2>${I18n.t('poste.carte_identite.identite')}</h2></div>
       <dl class="valeurs">
-        <dt>Nom du poste</dt><dd id="poste-nom">${App.poste}</dd>
-        <dt>Profil</dt><dd id="poste-profil">${App.libelleProfil()}</dd>
-        <dt>Stockage</dt><dd id="poste-stockage">${stockage}</dd>
+        <dt>${I18n.t('poste.carte_identite.nom_poste')}</dt><dd id="poste-nom">${App.poste}</dd>
+        <dt>${I18n.t('poste.carte_identite.profil')}</dt><dd id="poste-profil">${App.libelleProfil()}</dd>
+        <dt>${I18n.t('poste.carte_identite.stockage')}</dt><dd id="poste-stockage">${stockage}</dd>
       </dl>
-      <p class="note">Le nom du poste est inscrit au journal avec chaque modification. Le profil adapte les écrans :
-        ce n'est pas une sécurité.</p>
-      <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-changer-profil">${UI.icone('utilisateur')}Changer de profil ou de nom de poste…</button></div>
+      <p class="note">${I18n.t('poste.carte_identite.nom_poste_inscrit_journal')}</p>
+      <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-changer-profil">${UI.icone('utilisateur')}${I18n.t('poste.carte_identite.changer_profil_nom_poste')}</button></div>
     </article>`;
   }
 
@@ -134,12 +140,12 @@ const Poste = (() => {
 
   // État de l'IA sur ce poste (badge en tête de la carte).
   function etatIa() {
-    if (!Ia.reglages().actif) return { ton: 'neutre', texte: 'Désactivé sur ce poste' };
-    if (!Ia.active()) return { ton: 'attention', texte: 'Activé, mais inutilisable (adresse ou autorisation)' };
+    if (!Ia.reglages().actif) return { ton: 'neutre', texte: I18n.t('poste.etat_ia.desactive_poste') };
+    if (!Ia.active()) return { ton: 'attention', texte: I18n.t('poste.etat_ia.active_mais_inutilisable_adresse') };
     const etat = Ia.etat();
-    if (etat === 'ok') return { ton: 'ok', texte: 'Activé — le fournisseur répond' };
-    if (etat === 'injoignable') return { ton: 'ko', texte: 'Activé — le fournisseur ne répond pas' };
-    return { ton: 'info', texte: 'Activé — connexion pas encore vérifiée' };
+    if (etat === 'ok') return { ton: 'ok', texte: I18n.t('poste.etat_ia.active_fournisseur_repond') };
+    if (etat === 'injoignable') return { ton: 'ko', texte: I18n.t('poste.etat_ia.active_fournisseur_repond_pas') };
+    return { ton: 'info', texte: I18n.t('poste.etat_ia.active_connexion_pas_encore') };
   }
 
   function remplirEtat(zone) {
@@ -194,21 +200,22 @@ const Poste = (() => {
     zone.classList.remove('distant', 'invalide');
     if (!Ia.urlValide(valeurs.url)) {
       zone.classList.add('invalide');
-      UI.remplir(zone, UI.html`<p class="poste-ia-ou">Où vont les textes : <b id="poste-ia-mention">adresse invalide</b></p>
-        <p class="aide">${modeServeur() ? ADRESSE_SERVEUR_INVALIDE
-          : 'Adresse attendue : http://… ou https://… (sans identifiant, paramètres ni #).'}</p>`);
+      UI.remplir(zone, UI.html`<p class="poste-ia-ou">${I18n.html('poste.portee.ou_vont_textes_adresse')}</p>
+        <p class="aide">${modeServeur() ? adresseServeurInvalide()
+          : I18n.t('poste.portee.adresse_attendue_http_https')}</p>`);
       return;
     }
     const portee = Ia.portee(valeurs.url);
-    let explication = EXPLICATIONS_PORTEE[portee];
+    let explication = explicationPortee(portee);
     if (portee === 'distant') {
       zone.classList.add('distant');
-      const lien = App.estResponsable() && !modeServeur() ? UI.html` <a href="#/parametres">Ouvrir les Paramètres</a>` : '';
+      const lien = App.estResponsable() && !modeServeur() ? UI.html` <a href="#/parametres">${I18n.t('poste.portee.ouvrir_parametres')}</a>` : '';
       explication = Ia.distantAutorise()
-        ? UI.html`Fournisseur en ligne, <b>autorisé ${modeServeur() ? 'sur le PC serveur' : 'par le responsable'}</b> : les textes envoyés quittent l'atelier.`
+        ? (modeServeur() ? UI.html`${I18n.html('poste.portee.fournisseur_ligne_autorise_pc')}`
+          : UI.html`${I18n.html('poste.portee.fournisseur_ligne_autorise_responsable')}`)
         : UI.html`${new Ia.IaRefusee().message}${lien}`;
     }
-    UI.remplir(zone, UI.html`<p class="poste-ia-ou">Où vont les textes : <b id="poste-ia-mention">${Ia.mention(portee, valeurs.url)}</b></p>
+    UI.remplir(zone, UI.html`<p class="poste-ia-ou">${I18n.html('poste.portee.ou_vont_textes', { mention: Ia.mention(portee, valeurs.url) })}</p>
       <p class="aide">${explication}</p>`);
   }
 
@@ -218,7 +225,7 @@ const Poste = (() => {
     const liste = UI.$('#poste-ia-liste-modeles', formulaire);
     const actuel = UI.$('#poste-ia-modele', formulaire).value.trim();
     liste.textContent = '';
-    liste.appendChild(new Option('— Choisir un modèle trouvé —', ''));
+    liste.appendChild(new Option(I18n.t('poste.modeles.choisir_modele_trouve'), ''));
     modeles.forEach((modele) => liste.appendChild(new Option(modele, modele)));
     liste.value = modeles.includes(actuel) ? actuel : '';
     zone.hidden = modeles.length === 0;
@@ -232,7 +239,7 @@ const Poste = (() => {
   /** « Tester la connexion » : réglages saisis (rien n'est enregistré), liste des modèles trouvés. */
   async function testerConnexion(formulaire) {
     const essai = reglagesDuFormulaire(lireIa(formulaire));
-    UI.remplir(UI.$('#poste-ia-resultat', formulaire), UI.chargement('Test de la connexion…'));
+    UI.remplir(UI.$('#poste-ia-resultat', formulaire), UI.chargement(I18n.t('poste.tester_connexion.test_connexion')));
     // Réglages du poste inchangés : le test met aussi l'état à jour (« le fournisseur répond »).
     const resultat = memesQueLePoste(essai) ? await Ia.tester() : await Ia.tester(essai);
     if (!formulaire.isConnected) return;
@@ -245,21 +252,21 @@ const Poste = (() => {
   function verifierIa(formulaire, valeurs) {
     const erreurs = [];
     if (modeServeur() && !Ia.urlValide(valeurs.url)) {
-      afficherResultat(formulaire, 'important', ADRESSE_SERVEUR_INVALIDE);
+      afficherResultat(formulaire, 'important', adresseServeurInvalide());
       return false;
     }
-    if (!Ia.urlValide(valeurs.url)) erreurs.push(['url', 'Adresse invalide : http://… ou https://… attendu (ex. ' + Ia.DEFAUTS.url + ').']);
-    if (!valeurs.modele) erreurs.push(['modele', 'Indiquez le modèle (ex. ' + Ia.DEFAUTS.modele + ').']);
+    if (!Ia.urlValide(valeurs.url)) erreurs.push(['url', I18n.t('poste.verifier_ia.adresse_invalide_http_https', { url: Ia.DEFAUTS.url })]);
+    if (!valeurs.modele) erreurs.push(['modele', I18n.t('poste.verifier_ia.indiquez_modele_ex', { modele: Ia.DEFAUTS.modele })]);
     const delai = Number(valeurs.delaiS);
     if (!/^\d+$/.test(valeurs.delaiS) || delai < DELAI_MIN_S || delai > DELAI_MAX_S) {
-      erreurs.push(['delaiS', 'Saisissez un nombre entier de ' + DELAI_MIN_S + ' à ' + DELAI_MAX_S + '.']);
+      erreurs.push(['delaiS', I18n.t('poste.verifier_ia.saisissez_nombre_entier', { minimum: DELAI_MIN_S, maximum: DELAI_MAX_S })]);
     }
     ['url', 'modele', 'delaiS'].forEach((nom) => UI.erreurChamp(formulaire, nom, ''));
     erreurs.forEach(([nom, message]) => UI.erreurChamp(formulaire, nom, message));
     if (!erreurs.length) return true;
     const premier = UI.$('[aria-invalid="true"]', formulaire);
     if (premier) premier.focus();
-    UI.toast(erreurs.length + (erreurs.length > 1 ? ' champs' : ' champ') + ' à corriger.', 'erreur');
+    UI.toast(I18n.t('poste.verifier_ia.champs_corriger', { n: erreurs.length }), 'erreur');
     return false;
   }
 
@@ -272,15 +279,14 @@ const Poste = (() => {
   /** Fenêtre d'avertissement (§17.7) ; vrai si l'utilisateur confirme l'activation. */
   async function confirmerEnLigne(url) {
     const choix = await UI.fenetre({
-      titre: 'Fournisseur d\'IA en ligne',
+      titre: I18n.t('poste.confirmer_en_ligne.fournisseur_ia_ligne'),
       contenu: UI.element(UI.html`<div class="form-colonne poste-avertissement-distant">
-        <p><b>Les textes envoyés — descriptions, comptes rendus, désignations — partent chez ${hote(url)} ; ils peuvent contenir des noms.</b></p>
-        <p>Prévo n'envoie jamais les noms des techniciens ni des demandeurs, ni les coûts ; mais un texte saisi peut en contenir.
-          Relisez ce que vous demandez à l'IA.</p>
+        <p><b>${I18n.t('poste.confirmer_en_ligne.textes_envoyes_descriptions_comptes', { hote: hote(url) })}</b></p>
+        <p>${I18n.t('poste.confirmer_en_ligne.prevo_envoie_jamais_noms')}</p>
       </div>`),
       boutons: [
-        { libelle: 'Annuler', valeur: false, classe: 'btn-fantome' },
-        { libelle: 'Activer quand même', valeur: true, classe: 'btn-primaire', defaut: true },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: false, classe: 'btn-fantome' },
+        { libelle: I18n.t('poste.confirmer_en_ligne.activer_quand_meme'), valeur: true, classe: 'btn-primaire', defaut: true },
       ],
     });
     return choix === true;
@@ -302,7 +308,7 @@ const Poste = (() => {
       // D67 : refus d'abord (sans avertissement) si le responsable n'a pas autorisé les fournisseurs en ligne.
       if (!Ia.distantAutorise()) { refuser(formulaire, new Ia.IaRefusee()); return; }
       if (avertissementUtile(anciens, nouveaux) && !await confirmerEnLigne(nouveaux.url)) {
-        afficherResultat(formulaire, 'info', 'Activation annulée : rien n\'a été enregistré.');
+        afficherResultat(formulaire, 'info', I18n.t('poste.enregistrer_ia.activation_annulee_rien_ete'));
         return;
       }
     }
@@ -316,51 +322,49 @@ const Poste = (() => {
     App.marquerSaisie(false);
     const cleNonReprise = Boolean(anciens.cle) && !enregistres.cle && enregistres.fournisseur === 'openai' && !valeurs.effacerCle;
     if (cleNonReprise) {
-      UI.toast('Réglages enregistrés. La clé enregistrée n\'est pas envoyée à une autre adresse : saisissez la clé de ce fournisseur.', 'attention');
+      UI.toast(I18n.t('poste.enregistrer_ia.reglages_enregistres_cle_enregistree'), 'attention');
     } else {
-      UI.toast('Réglages de l\'assistant IA enregistrés sur ce poste.', 'succes');
+      UI.toast(I18n.t('poste.enregistrer_ia.reglages_assistant_ia_enregistres'), 'succes');
     }
     const carte = remplacerCarteIa();
     const nouveauFormulaire = UI.$('#form-ia', carte);
     if (!enregistres.actif) {
-      afficherResultat(nouveauFormulaire, 'info', 'Réglages enregistrés : l\'assistant IA est désactivé sur ce poste.');
+      afficherResultat(nouveauFormulaire, 'info', I18n.t('poste.enregistrer_ia.reglages_enregistres_assistant_ia'));
       return;
     }
-    UI.remplir(UI.$('#poste-ia-resultat', carte), UI.chargement('Réglages enregistrés. Test de la connexion…'));
+    UI.remplir(UI.$('#poste-ia-resultat', carte), UI.chargement(I18n.t('poste.enregistrer_ia.reglages_enregistres_test_connexion')));
     const resultat = await Ia.tester();
     if (!carte.isConnected) return;
     afficherModeles(nouveauFormulaire, resultat.modeles);
-    afficherResultat(nouveauFormulaire, resultat.ok ? 'succes' : 'attention', 'Réglages enregistrés. ' + resultat.message);
+    afficherResultat(nouveauFormulaire, resultat.ok ? 'succes' : 'attention', I18n.t('poste.enregistrer_ia.reglages_enregistres', { resultatMessage: resultat.message }));
   }
 
   function aideAdresse() {
-    return 'Ollama : ' + Ia.DEFAUTS.url + '. API compatible OpenAI : adresse de base, souvent terminée par /v1 '
-      + '(LM Studio : http://localhost:1234/v1).';
+    return I18n.t('poste.aide_adresse.ollama_api_compatible_open_ai', { url: Ia.DEFAUTS.url });
   }
 
   // Champs de la carte, construits par UI.champ (libellé, aide, erreur sous le champ). Mode serveur : ni
   // fournisseur, ni adresse, ni clé à saisir (zoneServeur les montre).
   function champsIa(r) {
     const sansCorrection = { autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' };
-    const actif = UI.champ({ nom: 'actif', type: 'booleen', libelle: 'Activer l\'assistant IA sur ce poste' },
+    const actif = UI.champ({ nom: 'actif', type: 'booleen', libelle: I18n.t('poste.champs_ia.activer_assistant_ia_poste') },
       r.actif ? '1' : '0', { id: 'poste-ia-actif' });
-    const delai = UI.champ({ nom: 'delaiS', type: 'entier', libelle: 'Délai de réponse (secondes)' }, String(r.delaiS), {
-      id: 'poste-ia-delai', aide: 'De ' + DELAI_MIN_S + ' à ' + DELAI_MAX_S + ' s. Sans carte graphique, une réponse peut prendre plus d\'une minute.'
-        + (modeServeur() ? ' Le relais du PC serveur attend 120 s au plus.' : '') });
-    const modele = UI.champ({ nom: 'modele', type: 'texte', libelle: 'Modèle' }, r.modele, {
+    const delai = UI.champ({ nom: 'delaiS', type: 'entier', libelle: I18n.t('poste.champs_ia.delai_reponse_secondes') }, String(r.delaiS), {
+      id: 'poste-ia-delai', aide: I18n.t('poste.champs_ia.sans_carte_graphique_reponse', { minimum: DELAI_MIN_S, n: DELAI_MAX_S }) + (modeServeur() ? ' ' + I18n.t('poste.champs_ia.relais_pc_serveur_attend') : '') });
+    const modele = UI.champ({ nom: 'modele', type: 'texte', libelle: I18n.t('poste.champs_ia.modele') }, r.modele, {
       id: 'poste-ia-modele', placeholder: Ia.DEFAUTS.modele, attributs: sansCorrection,
-      aide: 'Conseillé avec Ollama : ' + Ia.DEFAUTS.modele + '. « Tester la connexion » liste les modèles disponibles.' });
+      aide: I18n.t('poste.champs_ia.conseille_ollama_tester_connexion', { modele: Ia.DEFAUTS.modele }) });
     const trouves = UI.element(UI.html`<div class="champ" id="poste-ia-zone-modeles" hidden>
-      <label class="libelle" for="poste-ia-liste-modeles">Modèles trouvés chez le fournisseur</label>
+      <label class="libelle" for="poste-ia-liste-modeles">${I18n.t('poste.champs_ia.modeles_trouves_chez_fournisseur')}</label>
       <select id="poste-ia-liste-modeles"></select>
-      <p class="aide">Choisir un modèle le recopie dans le champ « Modèle ».</p>
+      <p class="aide">${I18n.t('poste.champs_ia.choisir_modele_recopie_champ')}</p>
     </div>`);
     if (modeServeur()) return { actif, delai, modele, trouves, zoneServeur: zoneServeur() };
-    const fournisseur = UI.champ({ nom: 'fournisseur', type: 'ref', libelle: 'Fournisseur' }, r.fournisseur, {
-      id: 'poste-ia-fournisseur', aide: 'Ollama : modèle installé sur un PC. API compatible OpenAI : LM Studio, Mistral, Groq…',
+    const fournisseur = UI.champ({ nom: 'fournisseur', type: 'ref', libelle: I18n.t('poste.champs_ia.fournisseur') }, r.fournisseur, {
+      id: 'poste-ia-fournisseur', aide: I18n.t('poste.champs_ia.ollama_modele_installe_pc'),
       liste: Object.keys(Ia.FOURNISSEURS).map((cle) => ({ valeur: cle, libelle: Ia.FOURNISSEURS[cle] })) });
     UI.$('option[value=""]', fournisseur).remove();          // toujours un fournisseur choisi
-    const adresse = UI.champ({ nom: 'url', type: 'texte', libelle: 'Adresse du fournisseur' }, r.url, {
+    const adresse = UI.champ({ nom: 'url', type: 'texte', libelle: I18n.t('poste.champs_ia.adresse_fournisseur') }, r.url, {
       id: 'poste-ia-url', placeholder: Ia.DEFAUTS.url, aide: aideAdresse(),
       attributs: Object.assign({ inputmode: 'url' }, sansCorrection) });
     return { actif, fournisseur, delai, adresse, modele, trouves, zoneCle: zoneCle(r) };
@@ -377,31 +381,30 @@ const Poste = (() => {
   function remplirServeur(zone, lu) {
     const serveur = Ia.reglagesServeur();
     if (!serveur) {
-      UI.remplir(zone, UI.html`<p class="aide">${lu ? 'Réglages de l\'IA du PC serveur illisibles : rouvrez « Ce poste » pour réessayer.'
-        : 'Lecture des réglages du PC serveur (fournisseur, adresse, clé)…'}</p>`);
+      UI.remplir(zone, UI.html`<p class="aide">${lu ? I18n.t('poste.remplir_serveur.reglages_ia_pc_serveur')
+        : I18n.t('poste.remplir_serveur.lecture_reglages_pc_serveur')}</p>`);
       return;
     }
     UI.remplir(zone, UI.html`<dl class="valeurs">
-        <dt>Fournisseur</dt><dd id="poste-ia-serveur-fournisseur">${Ia.FOURNISSEURS[serveur.fournisseur]}</dd>
-        <dt>Adresse</dt><dd id="poste-ia-serveur-url">${serveur.url || 'adresse invalide'}</dd>
-        <dt>Clé d'accès</dt><dd id="poste-ia-serveur-cle">${serveur.cleReglee ? 'réglée sur le serveur' : 'aucune clé'}</dd>
+        <dt>${I18n.t('poste.champs_ia.fournisseur')}</dt><dd id="poste-ia-serveur-fournisseur">${Ia.FOURNISSEURS[serveur.fournisseur]}</dd>
+        <dt>${I18n.t('poste.remplir_serveur.adresse')}</dt><dd id="poste-ia-serveur-url">${serveur.url || I18n.t('poste.remplir_serveur.adresse_invalide')}</dd>
+        <dt>${I18n.t('poste.remplir_serveur.cle_acces')}</dt><dd id="poste-ia-serveur-cle">${serveur.cleReglee ? I18n.t('poste.remplir_serveur.reglee_serveur') : I18n.t('poste.remplir_serveur.aucune_cle')}</dd>
       </dl>
-      <p class="aide">Fournisseur, adresse et clé : le tout est réglé sur le PC serveur (Paramètres › Accès et
-        installation), pour tous les postes ; la clé ne quitte jamais le PC serveur. Ce poste choisit l'activation,
-        le modèle et le délai.</p>`);
+      <p class="aide">${I18n.t('poste.remplir_serveur.fournisseur_adresse_cle_tout')}</p>`);
   }
 
   // Clé de l'API compatible OpenAI (modes dossier et démo) : champ mot de passe toujours vide (jamais réaffichée).
   function zoneCle(r) {
     const zone = UI.element(UI.html`<div class="poste-ia-zone-cle large" id="poste-ia-zone-cle"></div>`);
-    const cle = UI.champ({ nom: 'cle', type: 'texte', libelle: 'Clé d\'accès (API compatible OpenAI)' }, '', {
-      id: 'poste-ia-cle', placeholder: r.cle ? 'Clé enregistrée : laisser vide pour la garder' : 'Clé fournie par le service',
-      aide: 'Jamais écrite dans les fichiers ni le journal, jamais réaffichée. ' + MENTION_CLE_DOSSIER,
+    const cle = UI.champ({ nom: 'cle', type: 'texte', libelle: I18n.t('poste.zone_cle.cle_acces_api_compatible') }, '', {
+      id: 'poste-ia-cle', placeholder: r.cle ? I18n.t('poste.zone_cle.cle_enregistree_laisser_vide') : I18n.t('poste.zone_cle.cle_fournie_service'),
+      // Audit I5 : sans serveur, la clé vit dans le navigateur (origine « fichier local »).
+      aide: I18n.t('poste.zone_cle.jamais_ecrite_fichiers_ni'),
       attributs: { autocomplete: 'new-password', autocapitalize: 'off', spellcheck: 'false' } });
     UI.$('input', cle).type = 'password';
     zone.appendChild(cle);
     if (r.cle) {
-      zone.appendChild(UI.champ({ nom: 'effacer_cle', type: 'booleen', libelle: 'Effacer la clé enregistrée' }, '0',
+      zone.appendChild(UI.champ({ nom: 'effacer_cle', type: 'booleen', libelle: I18n.t('poste.zone_cle.effacer_cle_enregistree') }, '0',
         { id: 'poste-ia-effacer-cle' }));
     }
     zone.hidden = r.fournisseur !== 'openai';
@@ -431,9 +434,8 @@ const Poste = (() => {
   function carteIa() {
     const r = Ia.reglages();
     const carte = UI.element(UI.html`<article class="carte poste-carte-ia" id="carte-ia">
-      <div class="entete-carte"><h2>Assistant IA</h2><span class="badge" id="poste-ia-etat"></span></div>
-      <p class="note poste-intro">L'IA propose, vous validez : rien n'est écrit sans votre clic. Sans IA, Prévo
-        fonctionne pareil et n'appelle aucun service.</p>
+      <div class="entete-carte"><h2>${I18n.t('poste.carte_ia.assistant_ia')}</h2><span class="badge" id="poste-ia-etat"></span></div>
+      <p class="note poste-intro">${I18n.t('poste.carte_ia.ia_propose_validez_rien')}</p>
       <form id="form-ia" class="form-grille poste-ia" novalidate></form>
     </article>`);
     const formulaire = UI.$('#form-ia', carte);
@@ -444,9 +446,9 @@ const Poste = (() => {
       .forEach((bloc) => formulaire.appendChild(bloc));
     formulaire.appendChild(UI.element(UI.html`<div class="poste-ia-portee large" id="poste-ia-portee" aria-live="polite"></div>`));
     formulaire.appendChild(UI.element(UI.html`<div class="actions">
-      <button type="button" class="btn btn-secondaire" id="btn-tester-ia">${UI.icone('actualiser')}Tester la connexion</button>
+      <button type="button" class="btn btn-secondaire" id="btn-tester-ia">${UI.icone('actualiser')}${I18n.t('poste.carte_ia.tester_connexion')}</button>
       <span class="espace"></span>
-      <button type="submit" class="btn btn-primaire" id="btn-enregistrer-ia">${UI.icone('valider')}Enregistrer</button>
+      <button type="submit" class="btn btn-primaire" id="btn-enregistrer-ia">${UI.icone('valider')}${I18n.t('commun.bouton.enregistrer')}</button>
     </div>`));
     formulaire.appendChild(UI.element(UI.html`<div class="poste-ia-resultat large" id="poste-ia-resultat" aria-live="polite"></div>`));
     remplirEtat(UI.$('#poste-ia-etat', carte));
@@ -469,13 +471,12 @@ const Poste = (() => {
 
   function carteDictee() {
     return UI.html`<article class="carte" id="carte-dictee" data-hors-saisie>
-      <div class="entete-carte"><h2>Dictée vocale</h2></div>
-      <p class="note poste-intro">Un bouton micro à côté des champs de description et de compte rendu ; le texte
-        dicté s'ajoute à la fin du champ.</p>
-      <label class="case"><input type="checkbox" id="poste-dictee-active"><span>Proposer la dictée sur ce poste</span></label>
-      <p class="poste-etat-detecte">État détecté : <b id="poste-dictee-etat">…</b></p>
+      <div class="entete-carte"><h2>${I18n.t('poste.carte_dictee.dictee_vocale')}</h2></div>
+      <p class="note poste-intro">${I18n.t('poste.carte_dictee.bouton_micro_cote_champs')}</p>
+      <label class="case"><input type="checkbox" id="poste-dictee-active"><span>${I18n.t('poste.carte_dictee.proposer_dictee_poste')}</span></label>
+      <p class="poste-etat-detecte">${I18n.html('poste.carte_dictee.etat_detecte')}</p>
       <div class="actions" id="poste-dictee-actions" hidden>
-        <button type="button" class="btn btn-fantome" id="btn-verifier-dictee">${UI.icone('micro')}Où la voix est-elle transcrite ?</button>
+        <button type="button" class="btn btn-fantome" id="btn-verifier-dictee">${UI.icone('micro')}${I18n.t('poste.carte_dictee.ou_voix_transcrite')}</button>
       </div>
     </article>`;
   }
@@ -483,10 +484,9 @@ const Poste = (() => {
   // Raison pour laquelle le navigateur ne propose pas la dictée ici.
   function raisonSansDictee() {
     if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
-      return 'non proposée : ce navigateur ne reconnaît pas la voix (Chrome ou Edge sur ordinateur le font).';
+      return I18n.t('poste.raison_sans_dictee.non_proposee_navigateur_reconnait');
     }
-    return 'non proposée : la page n\'est pas sécurisée (adresse en http:// sur le réseau) ; '
-      + 'sur un téléphone, utilisez le micro du clavier.';
+    return I18n.t('poste.raison_sans_dictee.non_proposee_page_pas');
   }
 
   // État détecté à l'affichage : la reconnaissance est-elle proposée ici ? Le lieu de la transcription
@@ -496,7 +496,7 @@ const Poste = (() => {
   function afficherEtatDictee(conteneur) {
     const zone = UI.$('#poste-dictee-etat', conteneur);
     const proposee = Dictee.prisEnCharge();
-    zone.textContent = proposee ? 'proposée par ce navigateur' : raisonSansDictee();
+    zone.textContent = proposee ? I18n.t('poste.etat_dictee.proposee_navigateur') : raisonSansDictee();
     UI.$('#poste-dictee-actions', conteneur).hidden = !proposee;
   }
 
@@ -504,8 +504,8 @@ const Poste = (() => {
     const zone = UI.$('#poste-dictee-etat', conteneur);
     const locale = await Dictee.transcriptionLocale();
     if (!zone.isConnected) return;
-    zone.textContent = locale ? 'proposée par ce navigateur — transcription sur ce PC'
-      : 'proposée par ce navigateur — la voix est envoyée à Google ou Microsoft pour être transcrite';
+    zone.textContent = locale ? I18n.t('poste.verifier_transcription.proposee_navigateur_transcription_pc')
+      : I18n.t('poste.verifier_transcription.proposee_navigateur_voix_envoyee');
   }
 
   function brancherDictee(conteneur) {
@@ -515,7 +515,7 @@ const Poste = (() => {
       const active = caseActive.checked;
       Dictee.enregistrerReglages({ active });
       if (active) Dictee.equiper(document.body); else Dictee.retirerBoutons();
-      UI.toast(active ? 'Dictée activée sur ce poste.' : 'Dictée désactivée sur ce poste.', 'succes');
+      UI.toast(active ? I18n.t('poste.brancher_dictee.dictee_activee_poste') : I18n.t('poste.brancher_dictee.dictee_desactivee_poste'), 'succes');
     });
     afficherEtatDictee(conteneur);
     const verifier = UI.$('#btn-verifier-dictee', conteneur);
@@ -523,22 +523,79 @@ const Poste = (() => {
   }
 
   // ===========================================================================================
-  // 6. Carte « Affichage » : thème sombre ou clair, appliqué tout de suite
+  // 6. Carte « Affichage » : thème sombre ou clair, appliqué tout de suite ; langue de l'écran (UI.selecteurLangue :
+  //    le choix est retenu par ce navigateur, puis la page est rechargée). T298 : session d'un compte (pas un appareil
+  //    enrôlé), deux choix : « pour mon compte » (enregistrée dans le compte, App.changerLangueDuCompte : elle suit la
+  //    personne sur tous les postes) ou « pour ce poste » (ce navigateur, comme sans comptes ; la langue du compte est
+  //    alors retirée, sinon elle passerait devant). Coché d'abord : « pour mon compte » si le compte a sa langue.
+  //    Changer de choix retient la langue affichée, sans rechargement. Sans comptes, rien ne change.
   // ===========================================================================================
+
+  function avecLangueDuCompte() {
+    const session = App.session;
+    return Boolean(App.comptesExiges() && session && !session.appareil);
+  }
+
+  /** Retient `code` « pour mon compte » (portee 'compte') ou « pour ce poste » ; vrai si c'est fait. */
+  async function retenirLangue(code, portee) {
+    try {
+      if (portee === 'compte') {
+        await App.changerLangueDuCompte(code);
+        return true;
+      }
+      if (App.session.langue) await App.changerLangueDuCompte('');
+    } catch (erreur) {
+      App.signalerErreur(erreur, 'langue du compte');
+      return false;
+    }
+    return UI.retenirLangueDuPoste(code);
+  }
+
+  function brancherPorteeLangue(langue) {
+    const choix = UI.element(UI.html`<fieldset class="poste-themes poste-langue-portee">
+      <legend class="libelle">${I18n.t('poste.langue_compte.retenir')}</legend>
+      <label class="case"><input type="radio" name="poste-langue-portee" value="compte" id="poste-langue-compte"><span>${I18n.t('poste.langue_compte.pour_mon_compte')}</span></label>
+      <label class="case"><input type="radio" name="poste-langue-portee" value="poste" id="poste-langue-poste"><span>${I18n.t('poste.langue_compte.pour_ce_poste')}</span></label>
+    </fieldset>`);
+    langue.replaceChild(choix, langue.querySelector('.aide'));
+    const actuelle = () => (App.session && App.session.langue ? 'compte' : 'poste');
+    UI.$$('input', choix).forEach((bouton) => {
+      bouton.checked = bouton.value === actuelle();
+      bouton.addEventListener('change', async () => {
+        if (!bouton.checked) return;
+        if (await retenirLangue(I18n.langue, bouton.value)) {
+          UI.toast(I18n.t(bouton.value === 'compte' ? 'poste.langue_compte.retenue_compte' : 'poste.langue_compte.retenue_poste'), 'succes');
+        }
+        UI.$$('input', choix).forEach((autre) => { autre.checked = autre.value === actuelle(); });
+      });
+    });
+    return () => UI.$('input:checked', choix).value;
+  }
 
   function carteAffichage() {
     return UI.html`<article class="carte" id="carte-affichage" data-hors-saisie>
-      <div class="entete-carte"><h2>Affichage</h2></div>
+      <div class="entete-carte"><h2>${I18n.t('poste.carte_affichage.affichage')}</h2></div>
       <fieldset class="poste-themes">
-        <legend class="libelle">Thème de l'écran</legend>
-        <label class="case"><input type="radio" name="theme" value="sombre" id="poste-theme-sombre"><span>${THEMES.sombre} (par défaut)</span></label>
-        <label class="case"><input type="radio" name="theme" value="clair" id="poste-theme-clair"><span>${THEMES.clair} : pièce lumineuse, plein jour</span></label>
+        <legend class="libelle">${I18n.t('poste.carte_affichage.theme_ecran')}</legend>
+        <label class="case"><input type="radio" name="theme" value="sombre" id="poste-theme-sombre"><span>${I18n.t('poste.carte_affichage.sombre_defaut', { sombre: THEMES.sombre })}</span></label>
+        <label class="case"><input type="radio" name="theme" value="clair" id="poste-theme-clair"><span>${I18n.t('poste.carte_affichage.piece_lumineuse_plein_jour', { clair: THEMES.clair })}</span></label>
       </fieldset>
-      <p class="note">Réglage de ce navigateur seulement. L'impression reste en noir sur blanc.</p>
+      <p class="note">${I18n.t('poste.carte_affichage.reglage_navigateur_seulement_impression')}</p>
+      <div class="champ poste-langue" id="poste-langue">
+        <label class="libelle" for="poste-langue-liste">${I18n.t('poste.carte_affichage.langue_ecran')}</label>
+        <p class="aide">${I18n.t('poste.carte_affichage.choix_garde_navigateur_poste')}</p>
+      </div>
     </article>`;
   }
 
   function brancherAffichage(conteneur) {
+    const langue = UI.$('#poste-langue', conteneur);
+    const reglages = { id: 'poste-langue-liste' };
+    if (avecLangueDuCompte()) {
+      const portee = brancherPorteeLangue(langue);
+      reglages.retenir = (code) => retenirLangue(code, portee());
+    }
+    langue.insertBefore(UI.selecteurLangue(reglages), langue.querySelector('.poste-langue-portee, .aide'));
     const actuel = themeMemorise();
     UI.$$('input[name=theme]', conteneur).forEach((bouton) => {
       bouton.checked = bouton.value === actuel;
@@ -550,10 +607,10 @@ const Poste = (() => {
   function carteAide() {
     if (typeof AideEcrans === 'undefined') return '';
     return UI.html`<article class="carte" id="carte-aide" data-hors-saisie>
-      <div class="entete-carte"><h2>Aide à l'écran</h2></div>
-      <label class="case"><input type="checkbox" id="poste-aide-active"><span>Afficher l'explication à la première visite de chaque écran</span></label>
-      <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-revoir-aide">Revoir toutes les explications</button></div>
-      <p class="note" id="poste-aide-note">Le lien « Explications » du menu rouvre celle de l'écran affiché.</p>
+      <div class="entete-carte"><h2>${I18n.t('poste.carte_aide.aide_ecran')}</h2></div>
+      <label class="case"><input type="checkbox" id="poste-aide-active"><span>${I18n.t('poste.carte_aide.afficher_explication_premiere_visite')}</span></label>
+      <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-revoir-aide">${I18n.t('poste.carte_aide.revoir_toutes_explications')}</button></div>
+      <p class="note" id="poste-aide-note">${I18n.t('poste.carte_aide.lien_explications_menu_rouvre')}</p>
     </article>`;
   }
 
@@ -566,7 +623,7 @@ const Poste = (() => {
       AideEcrans.revoirTout();
       AideEcrans.activer(true);
       caseActive.checked = true;
-      UI.remplir(UI.$('#poste-aide-note', conteneur), 'Les explications reviendront à la prochaine visite de chaque écran.');
+      UI.remplir(UI.$('#poste-aide-note', conteneur), I18n.t('poste.brancher_aide.explications_reviendront_prochaine_visite'));
     });
   }
 
@@ -577,8 +634,8 @@ const Poste = (() => {
   function afficher(conteneur) {
     UI.remplir(conteneur, UI.html`
       <div class="entete-page"><div>
-        <h1>Ce poste</h1>
-        <p>Réglages de ce navigateur : ils ne changent rien sur les autres postes.</p>
+        <h1>${I18n.t('poste.ecran.poste')}</h1>
+        <p>${I18n.t('poste.ecran.reglages_navigateur_ils_changent')}</p>
       </div></div>
       <div class="grille poste">
         <div class="c7 poste-colonne" id="poste-colonne-principale">${carteIdentite()}</div>
@@ -614,8 +671,9 @@ const Poste = (() => {
   // App est chargé après les modules : l'écran est enregistré une fois la page lue.
   document.addEventListener('DOMContentLoaded', () => {
     App.ecran({
-      id: 'poste', route: /^#\/poste$/, titre: 'Ce poste',
-      menu: { libelle: 'Ce poste', icone: 'utilisateur', ordre: 92, groupe: 'Administration' },
+      id: 'poste', route: /^#\/poste$/,
+      get titre() { return I18n.t('poste.ecran.poste'); },
+      menu: { get libelle() { return I18n.t('poste.menu.libelle'); }, icone: 'utilisateur', ordre: 92, get groupe() { return I18n.t('poste.groupe.administration'); } },
       profils: ['demandeur', 'technicien', 'responsable'], tables: ['parametres'],
       afficher,
     });

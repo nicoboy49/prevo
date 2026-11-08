@@ -16,13 +16,11 @@ Object.assign(Suggestions, (() => {
 
   const ONGLETS = ['suggestions', 'decisions'];
   const ROUTE_ACCUEIL = '#/accueil';
-  const LIBELLES_PROFIL = { demandeur: 'Demandeur', technicien: 'Technicien', responsable: 'Responsable' };
   // Couleur du badge de chaque règle et de chaque criticité : le texte dit toujours le type.
   const TONS_REGLES = { S1: 'info', S2: 'attention', S3: 'violet', S4: 'ok' };
   const TONS_CRITICITE = { A: 'ko', B: 'attention', C: 'neutre' };
   const OT_MONTRES = 5;                                   // OT liés montrés sur une carte, puis « et n autres »
   const MOTIF_MAX = 300;
-  const PLUS_OUVERTE = 'Cette suggestion n\'est plus ouverte (déjà décidée, ou les faits ont changé)';
 
   // Suggestions marquées traitées depuis l'ouverture de Prévo (clé → ce qui a été fait) : après un
   // réaffichage, le rappel le dit, et une même suggestion n'est jamais marquée deux fois.
@@ -50,8 +48,8 @@ Object.assign(Suggestions, (() => {
 
   function badgeCriticite(criticite) {
     return criticite
-      ? UI.html`<span class="badge ${TONS_CRITICITE[criticite] || 'neutre'} sg-criticite">Criticité ${criticite}</span>`
-      : UI.html`<span class="badge neutre sg-criticite">Criticité non renseignée</span>`;
+      ? UI.html`<span class="badge ${TONS_CRITICITE[criticite] || 'neutre'} sg-criticite">${I18n.t('suggestions.badge_criticite.criticite_criticite', { criticite: Schema.libelleValeur('equipements', 'criticite', criticite) })}</span>`
+      : UI.html`<span class="badge neutre sg-criticite">${I18n.t('suggestions.badge_criticite.criticite_non_renseignee')}</span>`;
   }
 
   /** « PO-02 — Pompe de relevage » ; l'identifiant seul si l'équipement est introuvable. */
@@ -76,7 +74,7 @@ Object.assign(Suggestions, (() => {
     return UI.html`<p class="sg-liens ${classe}"><span class="sg-libelle">${libelle}</span>
       ${montres.map((id, rang) => UI.html`${rang ? ', ' : ''}<a href="${prefixe}${encodeURIComponent(id)}">${id}</a>${dateDe
         ? UI.html` <span class="sg-date">(${UI.dateFr(dateDe(rang))})</span>` : ''}`)}${reste
-      ? UI.html` <span>et ${reste} ${reste > 1 ? 'autres' : 'autre'}</span>` : ''}</p>`;
+      ? UI.html` <span>${I18n.t('suggestions.liens.n_autres', { n: reste })}</span>` : ''}</p>`;
   }
 
   /**
@@ -88,8 +86,8 @@ Object.assign(Suggestions, (() => {
     if (!s.dates.length) return '';
     const premier = s.dates[0];
     const dernier = s.dates[s.dates.length - 1];
-    return UI.html`<p class="sg-dates"><span class="sg-libelle">Dates :</span> ${premier === dernier
-      ? UI.html`le ${UI.dateFr(premier)}` : UI.html`du ${UI.dateFr(premier)} au ${UI.dateFr(dernier)}`}</p>`;
+    return UI.html`<p class="sg-dates"><span class="sg-libelle">${I18n.t('suggestions.dates.dates')}</span> ${premier === dernier
+      ? UI.html`${I18n.t('suggestions.dates.premier', { premier: UI.dateFr(premier) })}` : UI.html`${I18n.t('suggestions.dates.premier_dernier', { premier: UI.dateFr(premier), dernier: UI.dateFr(dernier) })}`}</p>`;
   }
 
   function dateDeLOt(s) {
@@ -101,17 +99,20 @@ Object.assign(Suggestions, (() => {
     const decision = s.decisionPrecedente;
     if (!decision) return '';
     const motif = texte(decision.texte).replace(/[\s.;]+$/, '');        // « … gammes. ; » → « … gammes ; »
-    return UI.html`<p class="sg-precedente">${decision.decision === 'ignorée' ? 'Ignorée' : 'Traitée'} le ${UI.dateFr(decision.dateHeure)} : ${motif} ; revenue sur de nouveaux faits</p>`;
+    const date = UI.dateFr(decision.dateHeure);
+    return UI.html`<p class="sg-precedente">${decision.decision === 'ignorée' ? I18n.t('suggestions.decision_precedente.ignoree_revenue_nouveaux_faits', { date, motif })
+      : I18n.t('suggestions.decision_precedente.traitee_revenue_nouveaux_faits', { date, motif })}</p>`;
   }
 
   function messageTraitee(cle) {
-    return 'Suggestion marquée traitée (inscrite au journal) : ' + traitees.get(cle) + '.';
+    const fait = traitees.get(cle);
+    return I18n.t('suggestions.message_traitee.suggestion_marquee_traitee_inscrite', { fait });
   }
 
   /** Rappel d'une suggestion en tête du formulaire ou de la fiche d'une gamme ; `s` null : clé seule. */
   function rappelElement(cle, s, message, ton) {
-    return UI.element(UI.html`<section class="encadre ${ton || 'info'} sg-rappel" data-cle="${cle}" aria-label="Suggestion ${cle}">
-      <p class="sg-rappel-tete">${s ? badgeType(s) : ''}<b>Suggestion ${cle}</b></p>
+    return UI.element(UI.html`<section class="encadre ${ton || 'info'} sg-rappel" data-cle="${cle}" aria-label="${I18n.t('suggestions.rappel_element.suggestion_cle', { cle })}">
+      <p class="sg-rappel-tete">${s ? badgeType(s) : ''}<b>${I18n.t('suggestions.rappel_element.suggestion_cle', { cle })}</b></p>
       ${s ? UI.html`<p class="sg-texte">${s.texte}</p>` : ''}
       <p class="sg-rappel-etat" role="status">${message}</p>
     </section>`);
@@ -132,10 +133,10 @@ Object.assign(Suggestions, (() => {
   /** S1 : « Créer la gamme » ; S2 à S4 : « Ouvrir la gamme <id> » par gamme citée ; toujours « Ignorer… ». */
   function actionsHtml(s) {
     const liens = s.regle === 'S1'
-      ? UI.html`<a class="btn btn-primaire" href="${adresseCreation(s)}">${UI.icone('ajouter')}Créer la gamme</a>`
-      : s.gammeIds.map((id) => UI.html`<a class="btn btn-secondaire" href="${adresseGamme(id, s.cle)}">${UI.icone('preventif')}Ouvrir la gamme ${id}</a>`);
+      ? UI.html`<a class="btn btn-primaire" href="${adresseCreation(s)}">${UI.icone('ajouter')}${I18n.t('suggestions.actions.creer_gamme')}</a>`
+      : s.gammeIds.map((id) => UI.html`<a class="btn btn-secondaire" href="${adresseGamme(id, s.cle)}">${UI.icone('preventif')}${I18n.t('suggestions.actions.ouvrir_gamme', { id })}</a>`);
     return UI.html`<div class="actions sg-actions">${liens}
-      <button type="button" class="btn btn-fantome" data-action="ignorer" aria-label="Ignorer la suggestion ${s.cle}">Ignorer…</button></div>`;
+      <button type="button" class="btn btn-fantome" data-action="ignorer" aria-label="${I18n.t('suggestions.actions.ignorer_suggestion', { cle: s.cle })}">${I18n.t('suggestions.actions.ignorer')}</button></div>`;
   }
 
   function carteHtml(s) {
@@ -145,8 +146,8 @@ Object.assign(Suggestions, (() => {
       <p class="sg-texte">${s.texte}</p>
       <p class="sg-question">${s.question}</p>
       ${datesHtml(s)}
-      ${liensHtml('sg-ots', 'OT liés :', s.ots, '#/ot/', OT_MONTRES, dateDeLOt(s))}
-      ${liensHtml('sg-dis', 'DI liées :', s.dis, '#/di/')}
+      ${liensHtml('sg-ots', I18n.t('suggestions.carte.ot_lies'), s.ots, '#/ot/', OT_MONTRES, dateDeLOt(s))}
+      ${liensHtml('sg-dis', I18n.t('suggestions.carte.di_liees'), s.dis, '#/di/')}
       ${decisionPrecedenteHtml(s)}
       ${actionsHtml(s)}
     </article>`;
@@ -165,10 +166,10 @@ Object.assign(Suggestions, (() => {
   function champMotif() {
     const id = UI.identifiantUnique('sg-motif');
     return UI.element(UI.html`<div class="champ" data-champ="motif">
-      <label class="libelle" for="${id}">Motif <span class="requis" aria-hidden="true">*</span></label>
+      <label class="libelle" for="${id}">${I18n.t('suggestions.champ_motif.motif')} <span class="requis" aria-hidden="true">*</span></label>
       <textarea id="${id}" name="motif" rows="3" maxlength="${MOTIF_MAX}" required aria-required="true" data-dictee
-        aria-describedby="${id}-aide ${id}-erreur" placeholder="Ex. périodicité imposée par le constructeur"></textarea>
-      <p class="aide" id="${id}-aide">Inscrit au journal. La suggestion reviendra si de nouveaux faits atteignent de nouveau le seuil.</p>
+        aria-describedby="${id}-aide ${id}-erreur" placeholder="${I18n.t('suggestions.champ_motif.ex_periodicite_imposee_constructeur')}"></textarea>
+      <p class="aide" id="${id}-aide">${I18n.t('suggestions.champ_motif.inscrit_journal_suggestion_reviendra')}</p>
       <p class="erreur-champ" id="${id}-erreur" role="alert" hidden></p></div>`);
   }
 
@@ -196,7 +197,7 @@ Object.assign(Suggestions, (() => {
 
     async function valider(dialogue) {
       if (enCours) return;
-      if (!zone.value.trim()) { montrerErreur('Indiquez pourquoi vous ignorez cette suggestion : le motif est inscrit au journal.'); return; }
+      if (!zone.value.trim()) { montrerErreur(I18n.t('suggestions.ignorer_depuis_carte.indiquez_pourquoi_ignorez_suggestion')); return; }
       enCours = true;
       const boutons = UI.$$('button', dialogue);
       boutons.forEach((bouton) => { bouton.disabled = true; });
@@ -215,9 +216,9 @@ Object.assign(Suggestions, (() => {
     }
 
     const choix = await UI.fenetre({
-      titre: 'Ignorer la suggestion ' + cle, contenu,
-      boutons: [{ libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: 'Ignorer la suggestion', valeur: 'ok', classe: 'btn-primaire', defaut: true }],
+      titre: I18n.t('suggestions.actions.ignorer_suggestion', { cle }), contenu,
+      boutons: [{ libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: I18n.t('suggestions.ignorer_depuis_carte.ignorer_suggestion'), valeur: 'ok', classe: 'btn-primaire', defaut: true }],
       surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
       avantFermeture(valeur, dialogue) {
         if (valeur !== 'ok' || fait) return true;
@@ -227,7 +228,7 @@ Object.assign(Suggestions, (() => {
     });
     if (choix !== 'ok' && ecriture) await ecriture.catch(() => {});   // fermée pendant l'écriture : son issue décide
     if (!fait) return;
-    UI.toast('Suggestion ignorée (inscrite au journal).', 'succes');
+    UI.toast(I18n.t('suggestions.ignorer_depuis_carte.suggestion_ignoree_inscrite_journal'), 'succes');
     await App.reafficher();
   }
 
@@ -237,47 +238,41 @@ Object.assign(Suggestions, (() => {
 
   /** Encadré « Comprendre » : définitions (§16.2), les quatre règles avec les seuils en vigueur. */
   function comprendreHtml(r) {
-    const depuisFormat2 = r.passageFormat2 ? ' (comptées depuis le passage au format 2, le ' + UI.dateFr(r.passageFormat2) + ')' : '';
+    const s4 = r.passageFormat2 ? UI.html`<li>${I18n.html('suggestions.comprendre.4_allonger_gamme_depuis_format_2', { n: r.visitesSansConstat, date: UI.dateFr(r.passageFormat2) })}</li>`
+      : UI.html`<li>${I18n.html('suggestions.comprendre.4_allonger_gamme_gamme', { n: r.visitesSansConstat })}</li>`;
     return UI.html`<details class="encadre sg-comprendre">
-      <summary>Comprendre les suggestions</summary>
-      <p><b>Prévo ne modifie jamais une gamme tout seul.</b> Une suggestion n'écrit rien : vous décidez.
-        « Créer la gamme » et « Ouvrir la gamme » mènent aux écrans du préventif ; la suggestion est marquée traitée quand
-        vous créez ou modifiez la gamme. « Ignorer… » demande un motif. Chaque décision est inscrite au journal (onglet « Décisions »).</p>
-      <p><b>Les quatre règles</b></p>
+      <summary>${I18n.t('suggestions.comprendre.comprendre_suggestions')}</summary>
+      <p>${I18n.html('suggestions.comprendre.prevo_modifie_jamais_gamme')}</p>
+      <p><b>${I18n.t('suggestions.comprendre.quatre_regles')}</b></p>
       <ul>
-        <li><b>S1 · Créer une gamme</b> : équipement suivi sans aucune gamme active, au moins ${r.seuilPannes} pannes de même cause sur la période.</li>
-        <li><b>S2 · Revoir le préventif</b> : équipement dont une gamme suivie a déjà eu une visite ; au moins ${r.seuilPannes} pannes
-          de même cause sur la période, après la première visite. À examiner : la gamme ne dit pas quelles pannes elle prévient.</li>
-        <li><b>S3 · Anomalies répétées</b> : gamme suivie avec une anomalie à au moins 2 des 4 dernières visites.</li>
-        <li><b>S4 · Allonger une gamme</b> : gamme suivie d'un équipement de criticité B ou C (jamais A) ; au moins
-          ${r.visitesSansConstat} visites de suite sans anomalie${depuisFormat2}, et aucune panne de l'équipement depuis la première
-          de ces visites. Les contrôles réglementaires ne sont jamais suggérés.</li>
+        <li>${I18n.html('suggestions.comprendre.1_creer_gamme_equipement', { n: r.seuilPannes })}</li>
+        <li>${I18n.html('suggestions.comprendre.2_revoir_preventif_equipement', { n: r.seuilPannes })}</li>
+        <li>${I18n.html('suggestions.comprendre.3_anomalies_repetees_gamme')}</li>
+        ${s4}
       </ul>
-      <p><b>Définitions</b></p>
+      <p><b>${I18n.t('suggestions.comprendre.definitions')}</b></p>
       <ul>
-        <li><b>Période</b> : les ${r.fenetreMois} derniers mois, du ${UI.dateFr(r.debutFenetre)} à aujourd'hui.</li>
-        <li><b>Panne de même cause</b> : OT correctif (immédiat ou différé) clôturé, avec le même code cause (toutes les causes, « Autre cause » comprise).</li>
-        <li><b>Équipement suivi</b> : actif et pas au rebut. <b>Gamme suivie</b> : active, par date ou au compteur (jamais au seuil), d'un équipement suivi.</li>
-        <li><b>Visite</b> : OT clôturé d'une gamme. <b>Anomalie</b> : case « anomalie constatée » cochée, ou demande d'intervention créée depuis la visite.</li>
-        <li><b>Date d'un OT</b> : fin des travaux, sinon clôture technique, sinon création.</li>
-        <li><b>Intervalle médian</b> : l'écart du milieu, en jours, entre deux pannes qui se suivent (la moitié des écarts sont plus courts).</li>
-        <li><b>Après une décision</b> (ignorée ou traitée), seuls les faits postérieurs comptent : la suggestion revient s'ils atteignent de nouveau le seuil.</li>
+        <li>${I18n.html('suggestions.comprendre.periode_derniers_mois_aujourd', { n: r.fenetreMois, debutFenetre: UI.dateFr(r.debutFenetre) })}</li>
+        <li>${I18n.html('suggestions.comprendre.panne_meme_cause_ot')}</li>
+        <li>${I18n.html('suggestions.comprendre.equipement_suivi_actif_pas')}</li>
+        <li>${I18n.html('suggestions.comprendre.visite_ot_cloture_gamme')}</li>
+        <li>${I18n.html('suggestions.comprendre.date_ot_fin_travaux')}</li>
+        <li>${I18n.html('suggestions.comprendre.intervalle_median_ecart_milieu')}</li>
+        <li>${I18n.html('suggestions.comprendre.apres_decision_ignoree_traitee')}</li>
       </ul>
-      <p>Ordre des cartes : S2, S3, S1 puis S4 ; puis criticité A, B, C ; puis nombre de faits. Les seuils se règlent dans Paramètres
-        (section « Suggestions de préventif »).</p>
+      <p>${I18n.t('suggestions.comprendre.ordre_cartes_2_3')}</p>
     </details>`;
   }
 
   function afficherSuggestions(panneau, calcul) {
     const nombre = calcul.ouvertes.length;
     UI.remplir(panneau, UI.html`<div class="suggestions">
-      <p class="note sg-intro">Pistes tirées de l'historique des pannes et des visites. Prévo ne modifie jamais une gamme tout seul : vous décidez.</p>
+      <p class="note sg-intro">${I18n.t('suggestions.suggestions.pistes_tirees_historique_pannes')}</p>
       ${comprendreHtml(calcul.reglages)}
-      <h2 class="sg-compteur">${nombre ? nombre + (nombre > 1 ? ' suggestions ouvertes' : ' suggestion ouverte') : 'Aucune suggestion ouverte'}</h2>
+      <h2 class="sg-compteur">${nombre ? I18n.t('suggestions.suggestions.suggestions_ouvertes', { n: nombre }) : I18n.t('suggestions.suggestions.aucune_suggestion_ouverte')}</h2>
     </div>`);
     UI.$('.suggestions', panneau).appendChild(nombre ? cartesElement(calcul.ouvertes)
-      : UI.element(UI.vide('Rien à revoir pour le moment', 'Une suggestion apparaît ici quand les pannes, les anomalies ou les visites '
-        + 'sans constat atteignent les seuils (voir « Comprendre »).', 'preventif')));
+      : UI.element(UI.vide(I18n.t('suggestions.suggestions.rien_revoir_moment'), I18n.t('suggestions.suggestions.suggestion_apparait_ici_quand'), 'preventif')));
   }
 
   /** Équipement (S1, S2) ou gamme (S3, S4) qui porte la décision, en lien s'il existe encore. */
@@ -291,8 +286,10 @@ Object.assign(Suggestions, (() => {
   }
 
   function decisionHtml(d) {
-    return UI.html`${UI.badgeStatut(d.decision, d.decision === 'traitée' ? 'ok' : 'neutre')}${d.revenue
-      ? UI.html` <span class="badge attention sg-revenue" title="De nouveaux faits ont de nouveau atteint le seuil : la suggestion est rouverte.">revenue</span>` : ''}`;
+    // Décision relue dans le journal (marqueur fixe « ignorée » ou « traitée », D156) : traduite à l'affichage.
+    const libelle = d.decision === 'traitée' ? I18n.t('suggestions.decision.traitee') : I18n.t('suggestions.decision.ignoree');
+    return UI.html`${UI.badgeStatut(d.decision, d.decision === 'traitée' ? 'ok' : 'neutre', libelle)}${d.revenue
+      ? UI.html` <span class="badge attention sg-revenue" title="${I18n.t('suggestions.decision.nouveaux_faits_ont_nouveau')}">${I18n.t('suggestions.decision.revenue')}</span>` : ''}`;
   }
 
   function cleHtml(d) {
@@ -301,11 +298,11 @@ Object.assign(Suggestions, (() => {
 
   function afficherDecisions(panneau, decisions) {
     if (!decisions.length) {
-      UI.remplir(panneau, UI.vide('Aucune décision', 'Les suggestions ignorées ou traitées apparaîtront ici, avec leur motif.', 'preventif'));
+      UI.remplir(panneau, UI.vide(I18n.t('suggestions.decisions.aucune_decision'), I18n.t('suggestions.decisions.suggestions_ignorees_traitees_apparaitront'), 'preventif'));
       return;
     }
     UI.remplir(panneau, UI.html`<div class="suggestions">
-      <p class="note">Décisions inscrites au journal, de la plus récente à la plus ancienne.</p>
+      <p class="note">${I18n.t('suggestions.decisions.decisions_inscrites_journal_plus')}</p>
       <div class="carte sg-decisions-tableau"></div>
       <ul class="liste-cartes sg-decisions-cartes">${decisions.map((d) => UI.html`<li><div class="carte-ligne sg-decision">
         <div class="carte-tete">${cleHtml(d)}${decisionHtml(d)}</div>
@@ -315,14 +312,14 @@ Object.assign(Suggestions, (() => {
     </div>`);
     UI.$('.sg-decisions-tableau', panneau).appendChild(UI.tableau({
       colonnes: [
-        { cle: 'dateHeure', libelle: 'Date', classe: 'sans-coupure', rendu: (d) => UI.dateHeureFr(d.dateHeure) },
-        { cle: 'cle', libelle: 'Suggestion', rendu: cleHtml },
-        { cle: 'idLigne', libelle: 'Équipement / gamme', rendu: cibleHtml },
-        { cle: 'decision', libelle: 'Décision', rendu: decisionHtml },
-        { cle: 'texte', libelle: 'Motif ou suite donnée', classe: 'sg-col-texte' },
-        { cle: 'profil', libelle: 'Profil' },
+        { cle: 'dateHeure', libelle: I18n.t('commun.champ.date'), classe: 'sans-coupure', rendu: (d) => UI.dateHeureFr(d.dateHeure) },
+        { cle: 'cle', libelle: I18n.t('suggestions.decisions.suggestion'), rendu: cleHtml },
+        { cle: 'idLigne', libelle: I18n.t('suggestions.decisions.equipement_gamme'), rendu: cibleHtml },
+        { cle: 'decision', libelle: I18n.t('suggestions.decisions.decision'), rendu: decisionHtml },
+        { cle: 'texte', libelle: I18n.t('suggestions.decisions.motif_suite_donnee'), classe: 'sg-col-texte' },
+        { cle: 'profil', libelle: I18n.t('suggestions.decisions.profil') },
       ],
-      lignes: decisions, libelle: 'Décisions sur les suggestions de préventif',
+      lignes: decisions, libelle: I18n.t('suggestions.decisions.decisions_suggestions_preventif'),
     }));
   }
 
@@ -334,8 +331,8 @@ Object.assign(Suggestions, (() => {
     if (!App.estResponsable()) return [];
     const calcul = Suggestions.calculer(jour());
     return [
-      { id: 'suggestions', libelle: 'Suggestions', compteur: calcul.ouvertes.length, afficher: (panneau) => afficherSuggestions(panneau, calcul) },
-      { id: 'decisions', libelle: 'Décisions', afficher: (panneau) => afficherDecisions(panneau, calcul.decisions) },
+      { id: 'suggestions', libelle: I18n.t('suggestions.onglets_preventif.suggestions'), compteur: calcul.ouvertes.length, afficher: (panneau) => afficherSuggestions(panneau, calcul) },
+      { id: 'decisions', libelle: I18n.t('suggestions.onglets_preventif.decisions'), afficher: (panneau) => afficherDecisions(panneau, calcul.decisions) },
     ];
   }
 
@@ -346,8 +343,9 @@ Object.assign(Suggestions, (() => {
   function ongletRefuse(requete) {
     if (App.estResponsable() || !ONGLETS.includes(requete.get('onglet'))) return false;
     const profil = App.profil;
-    UI.toast('L\'écran « Suggestions de préventif » n\'est pas disponible pour le profil '
-      + (LIBELLES_PROFIL[profil && profil.type] || '') + '.', 'attention');
+    const type = profil && profil.type;
+    const libelle = type === 'demandeur' ? I18n.t('suggestions.onglet_refuse.demandeur') : type === 'technicien' ? I18n.t('suggestions.onglet_refuse.technicien') : type === 'responsable' ? I18n.t('suggestions.onglet_refuse.responsable') : '';
+    UI.toast(I18n.t('suggestions.onglet_refuse.ecran_suggestions_preventif_pas', { libelle }), 'attention');
     try { history.replaceState(history.state, '', ROUTE_ACCUEIL); } catch (erreur) { /* adresse gardée telle quelle */ }
     App.naviguer(ROUTE_ACCUEIL);
     return true;
@@ -361,9 +359,9 @@ Object.assign(Suggestions, (() => {
     if (!liste.length) return null;
     const id = UI.identifiantUnique('sg-titre-encart');
     const section = UI.element(UI.html`<section class="carte sg-encart" aria-labelledby="${id}">
-      <div class="entete-carte"><h2 id="${id}">Suggestions de préventif <span class="badge">${liste.length}</span></h2>
-        <a class="sg-tout" href="#/preventif?onglet=suggestions">Toutes les suggestions</a></div>
-      <p class="note">Pistes tirées de l'historique : Prévo ne modifie jamais une gamme tout seul, vous décidez.</p>
+      <div class="entete-carte"><h2 id="${id}">${I18n.html('suggestions.encart.suggestions_preventif', { nbListe: liste.length })}</h2>
+        <a class="sg-tout" href="#/preventif?onglet=suggestions">${I18n.t('suggestions.encart.toutes_suggestions')}</a></div>
+      <p class="note">${I18n.t('suggestions.encart.pistes_tirees_historique_prevo')}</p>
     </section>`);
     section.appendChild(cartesElement(liste));
     return section;
@@ -395,9 +393,9 @@ Object.assign(Suggestions, (() => {
       .map((op) => [op.id, op.ordre, op.operation, op.valeur_attendue]));
   }
 
-  function rappelHorsSuivi(cle, complement) {
+  function rappelHorsSuivi(cle, plusOuverte) {
     return traitees.has(cle) ? rappelElement(cle, null, messageTraitee(cle), 'ok')
-      : rappelElement(cle, null, PLUS_OUVERTE + complement, 'attention');
+      : rappelElement(cle, null, plusOuverte, 'attention');
   }
 
   function actualiserRappel(cle) {
@@ -409,7 +407,8 @@ Object.assign(Suggestions, (() => {
   }
 
   /**
-   * Marque la suggestion suivie « traitée » au journal, une seule fois. Un échec est signalé par un
+   * Marque la suggestion suivie « traitée » au journal, une seule fois (ceQuiAEteFait : texte du journal, dans la langue de
+   * l'installation, D156). Un échec est signalé par un
    * message « attention » et ne défait rien de ce qui a été enregistré ; vrai si c'est marqué.
    */
   async function marquer(ceQuiAEteFait, messageReussite) {
@@ -420,8 +419,7 @@ Object.assign(Suggestions, (() => {
     } catch (erreur) {
       suivi.cle = cle;                                    // nouvel essai à la prochaine modification
       console.warn('Prévo : suggestion ' + cle + ' non marquée traitée (' + (erreur && erreur.message) + ').', erreur);
-      UI.toast('C\'est enregistré, mais la suggestion ' + cle + ' n\'a pas pu être marquée traitée : '
-        + ((erreur && erreur.message) || 'erreur inconnue'), 'attention');
+      UI.toast(I18n.t('suggestions.marquer.enregistre_mais_suggestion_pas', { cle, raisonErreur: App.raisonErreur(erreur) }), 'attention');
       return false;
     }
     traitees.set(cle, ceQuiAEteFait);
@@ -442,20 +440,20 @@ Object.assign(Suggestions, (() => {
     if (!cle || !App.estResponsable()) return { valeurs, rappel: null };
     const s = Suggestions.trouver(cle, jour());
     if (!s || s.regle !== 'S1' || s.equipementId !== valeurs.equipement_id) {
-      return { valeurs, rappel: rappelHorsSuivi(cle, ' ou ne concerne pas cet équipement : rien n\'est pré-rempli.') };
+      return { valeurs, rappel: rappelHorsSuivi(cle, I18n.t('suggestions.preparer_creation.suggestion_plus_ouverte_deja')) };
     }
     suivi = { cle, gammeId: '', equipementId: s.equipementId, signature: '' };
-    valeurs.libelle = 'Prévenir : ' + minusculeInitiale(s.causeLibelle);
-    return { valeurs, rappel: rappelElement(cle, s, 'Rien n\'est écrit tant que vous n\'avez pas cliqué « Créer la gamme » ; '
-      + 'la suggestion sera alors marquée traitée (inscrite au journal).') };
+    valeurs.libelle = I18n.donnees('suggestions.preparer_creation.prevenir_minuscule_initiale', {   // libellé pré-rempli (D156)
+      minusculeInitiale: minusculeInitiale(s.causeLibelle) });
+    return { valeurs, rappel: rappelElement(cle, s, I18n.t('suggestions.preparer_creation.rien_ecrit_tant_avez')) };
   }
 
   /** Après « Créer la gamme » : la S1 suivie est marquée traitée si la gamme est bien sur son équipement. */
   async function apresCreationGamme(gammeId) {
     const gamme = Donnees.trouver('gammes', gammeId);
     if (!suivi.cle || !gamme || gamme.equipement_id !== suivi.equipementId) return;
-    await marquer('gamme ' + gammeId + ' créée',
-      'Gamme ' + gammeId + ' créée, suggestion marquée traitée (inscrite au journal) : ajoutez maintenant sa check-list.');
+    await marquer(I18n.donnees('suggestions.apres_creation_gamme.gamme_creee', { gammeId }),
+      I18n.t('suggestions.apres_creation_gamme.gamme_creee_suggestion_marquee', { gammeId }));
   }
 
   /**
@@ -468,21 +466,21 @@ Object.assign(Suggestions, (() => {
     const cle = requete.get('suggestion') || '';
     if (!cle || !App.estResponsable()) return null;
     const s = traitees.has(cle) ? null : Suggestions.trouver(cle, jour());
-    if (!s || !s.gammeIds.includes(gammeId)) return rappelHorsSuivi(cle, ' ou ne concerne pas cette gamme : rien ne sera marqué.');
+    if (!s || !s.gammeIds.includes(gammeId)) return rappelHorsSuivi(cle, I18n.t('suggestions.suivi_fiche.suggestion_plus_ouverte_deja'));
     suivi.cle = cle;
-    return rappelElement(cle, s, 'Enregistrez la gamme ou modifiez sa check-list : la suggestion sera marquée traitée.');
+    return rappelElement(cle, s, I18n.t('suggestions.suivi_fiche.enregistrez_gamme_modifiez_check'));
   }
 
   /** Après un enregistrement de la gamme : marquée traitée s'il y a au moins un champ changé. */
   async function apresModificationGamme(gammeId, changes) {
     if (!suivi.cle || suivi.gammeId !== gammeId || !changes || !changes.length) return;
-    await marquer('gamme modifiée : ' + changes.join(', '), 'Gamme enregistrée, suggestion marquée traitée (inscrite au journal).');
+    await marquer(I18n.donnees('suggestions.apres_modification_gamme.gamme_modifiee', { changements: changes.join(', ') }), I18n.t('suggestions.apres_modification_gamme.gamme_enregistree_suggestion_marquee'));
   }
 
   /** Après une action sur la check-list : marquée traitée si la check-list a changé depuis l'arrivée. */
   async function apresCheckListe(gammeId) {
     if (!suivi.cle || suivi.gammeId !== gammeId || signatureCheckListe(gammeId) === suivi.signature) return;
-    await marquer('check-list modifiée');
+    await marquer(I18n.donnees('suggestions.apres_check_liste.check_list_modifiee'));
   }
 
   return {

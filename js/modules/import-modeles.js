@@ -12,14 +12,18 @@
 
 Object.assign(Import, (() => {
 
-  const FORMATS = Object.freeze({
-    date: 'date JJ/MM/AAAA (ou AAAA-MM-JJ)',
-    date_heure: 'date et heure JJ/MM/AAAA HH:MM',
-    decimal: 'nombre (virgule ou point)',
-    entier: 'nombre entier',
-    booleen: 'oui ou non',
-    choix: 'une des valeurs permises',
-  });
+  /** Format attendu d'une colonne selon le type du champ (lu à l'affichage) ; « texte » par défaut. */
+  function formatDe(type) {
+    switch (type) {
+      case 'date': return I18n.t('import.format.date');
+      case 'date_heure': return I18n.t('import.format.date_heure');
+      case 'decimal': return I18n.t('import.format.decimal');
+      case 'entier': return I18n.t('import.format.entier');
+      case 'booleen': return I18n.t('import.format.booleen');
+      case 'choix': return I18n.t('import.format.choix');
+      default: return I18n.t('import.format.texte');
+    }
+  }
   const TYPE_MIME = Object.freeze({
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     csv: 'text/csv;charset=utf-8',
@@ -27,7 +31,7 @@ Object.assign(Import, (() => {
 
   function definition(type) {
     const trouve = Import.TYPES && Object.prototype.hasOwnProperty.call(Import.TYPES, type) ? Import.TYPES[type] : null;
-    if (!trouve) throw new Import.ErreurImport('Type de données inconnu : « ' + type + ' ».');
+    if (!trouve) throw new Import.ErreurImport(I18n.t('import.erreur.type_inconnu', { type }));
     return trouve;
   }
 
@@ -47,17 +51,15 @@ Object.assign(Import, (() => {
   function aideModele(type) {
     const description = definition(type);
     const lignes = [
-      ['Modèle « ' + description.libelle + ' » — Prévo ' + texte(App.version)],
+      [I18n.t('import.aide_modele.titre', { type: description.libelle, version: texte(App.version) })],
       [description.aide],
-      ['Remplissez la feuille « Données » : gardez la ligne de titres, remplacez la ligne d\'exemple par vos '
-        + 'données, une fiche par ligne. Les colonnes peuvent être dans un autre ordre ; Prévo les reconnaît '
-        + 'par leur titre et vous montre tout avant d\'écrire.'],
+      [I18n.t('import.aide_modele.remplissez_feuille_donnees_gardez')],
       [],
-      ['Colonne', 'Obligatoire', 'Format', 'Valeurs permises', 'Exemple', 'Autres titres reconnus'],
+      [I18n.t('import.aide_modele.colonne'), I18n.t('import.aide_modele.obligatoire'), I18n.t('import.aide_modele.format'), I18n.t('import.aide_modele.valeurs_permises'), I18n.t('import.aide_modele.exemple'), I18n.t('import.aide_modele.autres_titres_reconnus')],
     ];
     description.champs.forEach((champ) => {
-      const valeurs = champ.type === 'booleen' ? 'oui ; non' : (champ.valeurs || []).join(' ; ');
-      lignes.push([champ.libelle, champ.obligatoire || champ.cleNaturelle ? 'oui' : 'non', FORMATS[champ.type] || 'texte',
+      const valeurs = champ.type === 'booleen' ? I18n.t('import.aide_modele.oui_non') : (champ.valeurs || []).join(' ; ');
+      lignes.push([champ.libelle, champ.obligatoire || champ.cleNaturelle ? I18n.t('import.aide_modele.oui') : I18n.t('import.aide_modele.non'), formatDe(champ.type),
         valeurs, texte(champ.exemple), (champ.synonymes || []).join(' ; ')]);
     });
     return lignes;
@@ -83,7 +85,7 @@ Object.assign(Import, (() => {
       const contenu = String.fromCharCode(0xFEFF) + lignes.map((ligne) => ligne.map(celluleCsv).join(';') + '\r\n').join('');
       return new Blob([contenu], { type: TYPE_MIME.csv });
     }
-    if (format !== 'xlsx') throw new Import.ErreurImport('Format de modèle inconnu : « ' + format + ' » (xlsx ou csv).');
+    if (format !== 'xlsx') throw new Import.ErreurImport(I18n.t('import.modele.format_modele_inconnu_xlsx', { format }));
     await App.chargerSheetJS();
     // Toutes les cellules en texte : « 007 » et les dates restent écrites comme dans l'exemple.
     const donnees = XLSX.utils.aoa_to_sheet(lignes.map((ligne) => ligne.map((cellule) => ({ t: 's', v: cellule }))));
@@ -92,8 +94,8 @@ Object.assign(Import, (() => {
     const feuilleAide = XLSX.utils.aoa_to_sheet(aide);
     feuilleAide['!cols'] = largeurs(aide.slice(4));
     const classeur = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(classeur, donnees, 'Données');
-    XLSX.utils.book_append_sheet(classeur, feuilleAide, 'Aide');
+    XLSX.utils.book_append_sheet(classeur, donnees, I18n.t('import.modele.donnees'));
+    XLSX.utils.book_append_sheet(classeur, feuilleAide, I18n.t('import.modele.aide'));
     const octets = XLSX.write(classeur, { bookType: 'xlsx', type: 'array', compression: true });
     return new Blob([octets], { type: TYPE_MIME.xlsx });
   }

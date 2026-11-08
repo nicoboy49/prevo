@@ -1,0 +1,539 @@
+{
+  "description": "Textes qui ne sont JAMAIS extraits vers js/i18n/fr.js, chacun avec sa classe et sa raison. Lu par outils/extraire_textes.py et outils/controler_textes.py (critère CS147 : aucun texte visible en dur hors de ces exceptions). Les motifs de fichiers et d'appels suivent fnmatch (* = n'importe quoi). Ajouter une exception = une entrée justifiée, relue comme du code.",
+  "classes": {
+    "D146": "Données : on traduit l'interface, jamais les données (jeu de démonstration compris).",
+    "D155": "Valeurs stockées des listes (statuts, types, priorités…) : codes français fixes, affichés par valeurs.<table>.<champ>.<valeur>.",
+    "D156": "Marqueurs écrits dans les données et relus par le code (actions du journal, « Pièce : », « Ancien n° : »…) : fixes, traduits à l'affichage.",
+    "D157": "Console et lanceurs : messages pour qui maintient l'appli, pas pour l'écran.",
+    "D159": "Consignes envoyées à l'assistant IA : gardées en français (avec « réponds en <langue> »).",
+    "identifiants": "Identifiants, noms de fichiers, en-têtes CSV, codes, sélecteurs : reconnus automatiquement par l'outil (classe « technique »), aucune entrée nécessaire.",
+    "synonymes": "Synonymes de titres de colonnes reconnus à l'import (D155) : ce sont des données d'entrée, pas des textes affichés."
+  },
+  "regles": [
+    {
+      "regle": "valeurs-schema",
+      "classe": "D155",
+      "raison": "Valeurs des listes lues dans js/schema.js (choix(nom, libellé, [valeurs]), CRITICITES, PRIORITES) : un littéral égal à l'une d'elles est une valeur stockée."
+    }
+  ],
+  "fichiers": [
+    {
+      "chemin": "js/modules/ia-prompts.js",
+      "classe": "D159",
+      "raison": "Consignes envoyées au modèle, jamais affichées (inventaire du Lot 0 : 240 chaînes). Les messages affichés de ce fichier (proposition refusée, check-list ou commentaire refusés) passent par I18n.t, repris à la main (T247)."
+    },
+    {
+      "chemin": "js/demo-donnees.js",
+      "classe": "D146",
+      "raison": "Jeu de données de démonstration (des données, pas l'interface)."
+    },
+    {
+      "chemin": "js/i18n/*",
+      "classe": "identifiants",
+      "raison": "Les dictionnaires eux-mêmes (fr.js, langues.js, aide/fr.js) : leurs valeurs sont les textes extraits."
+    },
+    {
+      "chemin": "js/i18n.js",
+      "classe": "D157",
+      "raison": "Le moteur de traduction lui-même (T238) : ses erreurs d'appel (code de langue, déclaration ou dictionnaire attendus) et ses avertissements de console sont pour qui maintient l'appli, et ne peuvent pas passer par lui (une clé absente y produit l'avertissement) ; « aide. » est un préfixe de clé."
+    },
+    {
+      "chemin": "js/lib/*",
+      "classe": "identifiants",
+      "raison": "Bibliothèques tierces, jamais modifiées."
+    }
+  ],
+  "appels": [
+    {
+      "appel": "console.*",
+      "classe": "D157",
+      "raison": "Messages de la console du navigateur (console.log, warn, error…)."
+    },
+    {
+      "appel": "*signalerErreur",
+      "argument": 1,
+      "classe": "D157",
+      "raison": "Contexte de App.signalerErreur(erreur, contexte) : écrit seulement dans la console (console.warn de js/app.js) ; l'écran ne montre que le message de l'erreur (T237)."
+    },
+    {
+      "appel": "pendant",
+      "argument": 1,
+      "fichiers": [
+        "js/modules/parametres.js",
+        "js/modules/parametres-acces.js",
+        "js/modules/parametres-codes.js",
+        "js/modules/parametres-sauvegardes.js",
+        "js/modules/parametres-solo.js",
+        "js/modules/parametres-zip.js",
+        "js/modules/poste.js",
+        "js/modules/equipe-acces.js"
+      ],
+      "classe": "D157",
+      "raison": "Contexte de pendant(bouton, contexte, action) des cartes de Paramètres, de Ce poste et d'Équipe › Accès : transmis tel quel à App.signalerErreur, qui ne l'écrit que dans la console (T245, T244)."
+    },
+    {
+      "appel": "V",
+      "argument": 4,
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "synonymes",
+      "raison": "Cinquième argument de V(…) : titres de colonnes reconnus à l'import (« a|b|c »)."
+    },
+    {
+      "appel": "V",
+      "argument": 3,
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "D146",
+      "raison": "Quatrième argument de V(…) : valeur d'exemple des modèles à remplir, valable sur la base de démo (une donnée, pas l'interface ; lot0-textes.md §3)."
+    },
+    {
+      "appel": "S",
+      "argument": 1,
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "D146",
+      "raison": "Second argument de S(table, { champ: exemple | [exemple, 'synonymes', options] }) : valeurs d'exemple des modèles à remplir (données de démo) et synonymes de titres reconnus à l'import (« a|b|c »)."
+    },
+    {
+      "appel": "Donnees.journaliser",
+      "argument": 2,
+      "classe": "D156",
+      "raison": "Action écrite dans le journal par Donnees.journaliser(table, id, action) et relue telle quelle."
+    },
+    {
+      "appel": "etape",
+      "argument": 2,
+      "fichiers": [
+        "js/formats.js"
+      ],
+      "classe": "D157",
+      "raison": "Description d'une étape du registre des formats (Formats.ETAPES, T238) : documentation pour qui maintient l'appli (colonnes et tables ajoutées, vérifiées par test_formats_js), jamais affichée."
+    },
+    {
+      "appel": "entreeJournal",
+      "argument": 3,
+      "fichiers": [
+        "js/donnees.js"
+      ],
+      "classe": "D156",
+      "raison": "Action écrite au journal par Donnees.modifier et le passage au format (« création », « modification : <champs> », T238) : relue par le code (indicateurs : /^création\b/)."
+    }
+  ],
+  "cles": [
+    {
+      "cle": "synonymes",
+      "classe": "synonymes",
+      "raison": "Synonymes de titres de colonnes (js/schema.js, import) reconnus à l'import."
+    },
+    {
+      "cle": "action",
+      "appel": "Donnees.*",
+      "classe": "D156",
+      "raison": "Action écrite dans le journal par Donnees.modifier(…, { action }) et relue telle quelle."
+    }
+  ],
+  "variables": [
+    {
+      "variable": "action",
+      "classe": "D156",
+      "raison": "Variable « action » passée en { action } à Donnees.modifier ou à Donnees.journaliser : texte du journal."
+    },
+    {
+      "variable": "SITE",
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "D146",
+      "raison": "Site de la base de démo repris dans les valeurs d'exemple des modèles à remplir (une donnée)."
+    },
+    {
+      "variable": "CHEMIN",
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "synonymes",
+      "raison": "Synonymes du titre de colonne « chemin » reconnus à l'import (« a|b|c »)."
+    },
+    {
+      "variable": "RUBRIQUES",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D156",
+      "raison": "Noms des rubriques des textes du wiki (« En bref », « Astuces »…) : écrits dans le texte des pages (« ## En bref ») et relus par le code (Wiki.RUBRIQUES), fixes (T241)."
+    },
+    {
+      "variable": "RUBRIQUES_REECRITES",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D156",
+      "raison": "Rubriques réécrites à chaque OT : mêmes marqueurs que Wiki.RUBRIQUES (T241)."
+    },
+    {
+      "variable": "VOCABULAIRE_SECURITE",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D159",
+      "raison": "Vocabulaire de la sécurité (D97) cherché dans les textes du wiki, jamais affiché ; recopié dans la consigne de l'IA : traduit au Lot 5 avec le contrôle « consignes de sécurité » (T241)."
+    },
+    {
+      "variable": "VOCABULAIRE_NOUVEAUTE",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D159",
+      "raison": "Vocabulaire de la nouveauté (D111) cherché dans les textes rédigés par l'IA, jamais affiché ; la rédaction du wiki par l'IA reste en français jusqu'au Lot 5 (T241)."
+    },
+    {
+      "variable": "LEXIQUE",
+      "fichiers": [
+        "js/modules/wiki-recherche.js"
+      ],
+      "classe": "synonymes",
+      "raison": "Lexique du dépannage de la recherche du wiki (§20.8) : équivalents reconnus dans la saisie, jamais affichés (T241)."
+    },
+    {
+      "variable": "MARQUE_FORMAT_2",
+      "fichiers": [
+        "js/modules/suggestions-regles.js"
+      ],
+      "classe": "D156",
+      "raison": "Ligne du journal « passage au format 2 du fichier » écrite par Formats.migrer et relue par la suggestion S4 (test_formats_js lit la constante) (T241)."
+    },
+    {
+      "variable": "TONS_STATUT",
+      "fichiers": [
+        "js/interface.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Tons des badges de statut (T238) : des classes CSS (« neutre barre »), sous des valeurs stockées (D155)."
+    },
+    {
+      "variable": "NOM_APPLICATION",
+      "fichiers": [
+        "js/formats.js",
+        "js/stockage-serveur.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de l'application dans le manifeste des sauvegardes et dans la réponse de /api/ping (T238) : un identifiant du protocole, comparé tel quel à celui de serveur.py."
+    },
+    {
+      "variable": "POLICE",
+      "fichiers": [
+        "js/modules/indicateurs-graphiques.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Famille de police des graphiques (« Sora, sans-serif »), une valeur de style et non un texte affiché (T243)."
+    },
+    {
+      "variable": "STYLE",
+      "fichiers": [
+        "js/modules/rapport-contenu.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Feuille de style CSS de la page du rapport figé : du code de mise en page, aucun texte affiché (T243)."
+    }
+  ],
+  "textes": [
+    {
+      "texte": "Bearer ",
+      "fichiers": [
+        "js/modules/ia.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Schéma d'authentification de l'en-tête HTTP Authorization (« Bearer <clé> ») envoyé au fournisseur d'IA, jamais affiché (T247)."
+    },
+    {
+      "texte": " securite",
+      "fichiers": [
+        "js/modules/demandes-signaler.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Classe CSS de la tuile « sécurité » du signalement d'une demande, jamais affichée (passée par erreur dans le dictionnaire au Lot 2, T239 ; T286)."
+    },
+    {
+      "texte": "Pièce : ",
+      "classe": "D156",
+      "raison": "Début du motif de mise en attente « Pièce : … », relu par le code (RG3)."
+    },
+    {
+      "texte": "Ancien n° : ",
+      "classe": "D156",
+      "raison": "Ligne « Ancien n° : <numéro> » d'un compte rendu importé, relue pour retrouver l'ancien numéro."
+    },
+    {
+      "texte": "Réception ",
+      "classe": "D156",
+      "fichiers": [
+        "js/modules/magasin-ecritures.js"
+      ],
+      "raison": "Commentaire « Réception ACH-… » du mouvement de stock, relu pour rattacher la réception à l'achat."
+    },
+    {
+      "texte": "les deux",
+      "fichiers": [
+        "js/modules/wiki-calculs.js",
+        "js/modules/wiki-journal.js",
+        "js/modules/wiki-page-ecrans.js",
+        "js/modules/wiki-journal-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "Code de décision d'une contradiction du wiki (« ancien », « nouveau », « les deux ») écrit dans wiki_journal et relu, et source « les deux » du montage d'un article (code, jamais affiché) (T241)."
+    },
+    {
+      "texte": "ignorée",
+      "fichiers": [
+        "js/modules/suggestions-regles.js",
+        "js/modules/suggestions-ecrans.js"
+      ],
+      "classe": "D156",
+      "raison": "Décision d'une suggestion écrite au journal (« suggestion S1-… ignorée : motif ») et relue par MOTIF_DECISION (T241)."
+    },
+    {
+      "texte": "traitée",
+      "fichiers": [
+        "js/modules/suggestions-regles.js",
+        "js/modules/suggestions-ecrans.js"
+      ],
+      "classe": "D156",
+      "raison": "Décision d'une suggestion écrite au journal (« suggestion S1-… traitée : motif ») et relue par MOTIF_DECISION (T241)."
+    },
+    {
+      "texte": "fermée",
+      "fichiers": [
+        "js/modules/wiki-journal.js",
+        "js/modules/wiki-journal-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "Statut d'une contradiction du wiki (« ouverte », « fermée ») écrit dans wiki_journal.contradictions et relu (T241)."
+    },
+    {
+      "texte": "en stock",
+      "fichiers": [
+        "js/modules/wiki-entites.js",
+        "js/modules/wiki-entites-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "État du stock calculé par le wiki (« en stock », « sous le seuil », « rupture ») : code compté, filtré et comparé, affiché par wiki.etat_stock.* (T241)."
+    },
+    {
+      "texte": "sous le seuil",
+      "fichiers": [
+        "js/modules/wiki-entites.js",
+        "js/modules/wiki-entites-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "État du stock calculé par le wiki (« en stock », « sous le seuil », « rupture ») : code compté, filtré et comparé, affiché par wiki.etat_stock.* (T241)."
+    },
+    {
+      "texte": "à renouveler",
+      "fichiers": [
+        "js/modules/wiki-entites.js",
+        "js/modules/equipe-regles.js",
+        "js/modules/equipe-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code compté par l'accueil du wiki, jamais affiché tel quel (T241) ; calculé par Equipe.etatHabilitation et comparé par l'écran Équipe, affiché par equipe.statut_habilitation.* (T244)."
+    },
+    {
+      "texte": "échue",
+      "fichiers": [
+        "js/modules/wiki-entites.js",
+        "js/modules/equipe-regles.js",
+        "js/modules/equipe-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code compté par l'accueil du wiki, jamais affiché tel quel (T241) ; calculé par Equipe.etatHabilitation et comparé par l'écran Équipe, affiché par equipe.statut_habilitation.* (T244)."
+    },
+    {
+      "texte": "pas encore valable",
+      "fichiers": [
+        "js/modules/equipe-regles.js",
+        "js/modules/equipe-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'une habilitation calculé par Equipe.etatHabilitation (obtention future) et comparé par l'écran Équipe : code, affiché par equipe.statut_habilitation.pas_encore_valable (T244)."
+    },
+    {
+      "texte": "passage au format {} du fichier",
+      "classe": "D156",
+      "fichiers": [
+        "js/formats.js"
+      ],
+      "raison": "Ligne de journal « passage au format N du fichier » (Formats, T238) : relue telle quelle par la suggestion S4 (MARQUE_FORMAT_2) et écrite de même par serveur.py."
+    },
+    {
+      "texte": "Prévo — GMAO",
+      "classe": "titre-initial",
+      "fichiers": [
+        "index.html"
+      ],
+      "raison": "Titre de l'onglet avant le chargement des scripts (balise <title> nue, relue par test_acces_mandataire) ; App.definirTitre le remplace par I18n.t('socle.definir_titre.prevo_gmao') à chaque écran dès le démarrage (T260)."
+    },
+    {
+      "texte": "en retard",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "observations à lever",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "à planifier",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "à jour",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "après-midi",
+      "fichiers": [
+        "js/modules/accueil-bento.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Code du moment de la journée renvoyé par momentDeLaJournee (« matin », « après-midi », « soir ») et comparé : jamais affiché tel quel (T243)."
+    },
+    {
+      "texte": "en retard",
+      "fichiers": [
+        "js/modules/accueil.js",
+        "js/modules/accueil-bento.js",
+        "js/modules/rapport-contenu.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'un contrôle réglementaire calculé par Controles.etat (« à jour », « en retard »…) : code comparé pour compter, jamais affiché tel quel (T243)."
+    },
+    {
+      "texte": "échue",
+      "fichiers": [
+        "js/modules/accueil.js",
+        "js/modules/accueil-bento.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code comparé pour compter, jamais affiché tel quel (T243)."
+    },
+    {
+      "texte": "création",
+      "fichiers": [
+        "js/modules/controles-ecrans.js"
+      ],
+      "classe": "D156",
+      "raison": "Marqueur du journal (Donnees.modifier, controles-ecritures.js) relu par l'historique d'un contrôle pour être traduit à l'affichage (T283)."
+    },
+    {
+      "texte": "création du contrôle réglementaire",
+      "fichiers": [
+        "js/modules/controles-ecrans.js"
+      ],
+      "classe": "D156",
+      "raison": "Marqueur du journal (Donnees.modifier, controles-ecritures.js) relu par l'historique d'un contrôle pour être traduit à l'affichage (T283)."
+    },
+    {
+      "texte": "modification du contrôle réglementaire",
+      "fichiers": [
+        "js/modules/controles-ecrans.js"
+      ],
+      "classe": "D156",
+      "raison": "Marqueur du journal (Donnees.modifier, controles-ecritures.js) relu par l'historique d'un contrôle pour être traduit à l'affichage (T283)."
+    },
+    {
+      "texte": "Chrome",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Edge",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Google Chrome",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Microsoft Edge",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Firefox",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Safari",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Android",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Linux",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Windows",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    }
+  ]
+}

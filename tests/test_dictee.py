@@ -133,6 +133,18 @@ class TestDictee(CasNavigateur):
         page.wait_for_function("window.__dictee.instances.length === 2 && window.__dictee.instances[1].demarree")
         self.assertEqual(page.locator("dialog[open]").count(), 0)
 
+    def test_langue_de_reconnaissance_est_celle_de_l_ecran(self):
+        """T303 (D161) : écran en anglais, la dictée écoute en en-GB (locale de la langue active, lue au moment d'écouter)."""
+        self.contexte.add_init_script("localStorage.setItem('prevo.langue', 'en');")
+        page = self.ouvrir()
+        self.assertEqual(page.evaluate("I18n.langue"), "en")
+        page.fill(CHAMP_DESCRIPTION, "Noise at start-up")
+        page.click(BOUTON_DESCRIPTION)
+        page.wait_for_selector("dialog[open] .dictee-avertissement")
+        page.click("dialog[open] .fenetre-actions .btn-primaire")
+        page.wait_for_function("window.__dictee.instances.length === 1 && window.__dictee.instances[0].demarree")
+        self.assertEqual(page.evaluate("window.__dictee.instances[0].lang"), "en-GB")
+
     def test_reconnaissance_sur_l_appareil_dit_reste_sur_ce_pc(self):
         page = self.ouvrir()
         page.evaluate("window.__dictee.local = true")

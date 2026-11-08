@@ -117,7 +117,8 @@ def lire_entier(valeur):
     return canon(t.split(".")[0]) if re.fullmatch(r"[+-]?\d+(\.0*)?", t) else None
 
 
-BOOLEENS = {"1": "1", "0": "0", "vrai": "1", "faux": "0", "oui": "1", "non": "0", "true": "1", "false": "0", "x": "1"}
+BOOLEENS = {"1": "1", "0": "0", "vrai": "1", "faux": "0", "oui": "1", "non": "0", "true": "1", "false": "0",
+            "yes": "1", "no": "0", "x": "1"}   # yes / no : T287 (même lecture quelle que soit la langue)
 EQUIVALENCES = {("statut", "a l arret"): "arrêt"}   # seules équivalences de table utilisées par ces grilles
 
 
@@ -978,6 +979,23 @@ class TestCorrespondance(CasImport):
         resultat = self.correspondance_js("equipements", ["CODE-MACHINE", "designation", "N DE SERIE", "etat"], [])
         self.assertEqual([(r["champ"], r["statut"]) for r in resultat],
                          [("repere", "sure"), ("designation", "sure"), ("num_serie", "sure"), ("statut", "sure")])
+
+    def test_titres_francais_et_langue_de_l_ecran(self):
+        # T284 (D155) : le libellé français reste reconnu « sûr » quand l'écran est dans une autre langue.
+        self.page.evaluate("""() => {
+          I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'en-GB', statut: 'automatique' });
+          I18n.ajouter('xx', { 'schema.equipements.designation': 'Machine wording', 'schema.equipements.repere': 'Asset tag' });
+          I18n.choisir('xx');
+        }""")
+        try:
+            self.assertEqual(self.page.evaluate("() => I18n.reference('schema.equipements.designation')"), "Désignation")
+            self.assertEqual(self.page.evaluate("() => I18n.t('schema.equipements.designation')"), "Machine wording")
+            francais = self.correspondance_js("equipements", ["Désignation", "Repère"], [])
+            self.assertEqual([(r["champ"], r["statut"]) for r in francais], [("designation", "sure"), ("repere", "sure")])
+            essai = self.correspondance_js("equipements", ["Machine wording", "Asset tag"], [])
+            self.assertEqual([(r["champ"], r["statut"]) for r in essai], [("designation", "sure"), ("repere", "sure")])
+        finally:
+            self.page.evaluate("() => I18n.choisir('fr')")
 
     def test_ambigue_proche_et_echantillon(self):
         entetes = ["Code machine", "DESIGNATION", "Désignation", "n° de série", "Date MES", "Truc", "Marque du moteur", "", "Repère"]

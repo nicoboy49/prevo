@@ -23,9 +23,9 @@ Object.assign(Ordres, (() => {
   // Ligne d'OT dans une copie de table, ou erreur si absente ; `modifiable` refuse un OT verrouillé.
   function ligneOt(lignes, otId, modifiable) {
     const ligne = lignes.find((l) => l.id === otId);
-    if (!ligne) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!ligne) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     if (modifiable && estVerrouille(ligne)) {
-      throw ErreurValidation('L\'OT ' + otId + ' est « ' + ligne.statut + ' » : il ne peut plus être modifié.');
+      throw ErreurValidation(I18n.t('ordres.ligne_ot.ot_peut_plus_etre', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
     }
     return ligne;
   }
@@ -55,8 +55,7 @@ Object.assign(Ordres, (() => {
       const ligne = ligneOt(lignes, otId, true);
       const changes = Object.keys(changements).filter((nom) => texte(ligne[nom]) !== texte(changements[nom]));
       if (changes.length && ligne.statut === 'Clôturé techniquement') {
-        throw ErreurValidation('L\'OT ' + otId + ' est « Clôturé techniquement » (sans doute sur un autre poste) : '
-          + 'ses saisies ne peuvent plus être modifiées. Le responsable peut le rouvrir.');
+        throw ErreurValidation(I18n.t('ordres.modifier_ot.ot_cloture_techniquement_sans', { otId }));
       }
       changes.forEach((nom) => { ligne[nom] = changements[nom]; });
       return changes;
@@ -84,7 +83,7 @@ Object.assign(Ordres, (() => {
     return Donnees.modifier('ordres_travail', (lignes, outils) => {
       const ligne = ligneOt(lignes, otId, false);
       if (ligne.statut !== statutAttendu) {
-        throw ErreurValidation('L\'OT ' + otId + ' est passé « ' + ligne.statut + ' » sur un autre poste. Actualisez puis recommencez.');
+        throw ErreurValidation(I18n.t('ordres.ecrire_statut.ot_passe_autre_poste', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       const verification = verifierPassage(Object.assign({}, ligne, ajout), cible);
       if (!verification.ok) throw ErreurValidation(verification.erreurs.join(' '));
@@ -114,12 +113,11 @@ Object.assign(Ordres, (() => {
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot || !texte(ot.gamme_id)) return;
     try {
-      if (typeof Preventif === 'undefined') throw new Error('le module Préventif n\'est pas chargé.');
+      if (typeof Preventif === 'undefined') throw new Error(I18n.t('ordres.mettre_ajour_gamme.module_preventif_pas_charge'));
       await Preventif.apresCloture(otId);
       avertissementsGamme.delete(otId);
     } catch (erreur) {
-      const message = 'L\'OT ' + otId + ' est bien clôturé, mais la gamme ' + ot.gamme_id + ' n\'a pas été mise à jour ('
-        + ((erreur && erreur.message) || erreur) + ') : vérifiez sa dernière réalisation sur la fiche de la gamme.';
+      const message = I18n.t('ordres.mettre_ajour_gamme.ot_bien_cloture_mais', { otId, gamme_id: ot.gamme_id, raisonErreur: App.raisonErreur(erreur) });
       avertissementsGamme.set(otId, message);
       UI.toast(message, 'attention');
       console.warn('Prévo (ordres) : ' + message, erreur);
@@ -143,7 +141,7 @@ Object.assign(Ordres, (() => {
     return Donnees.modifier('ordres_travail', (lignes) => {
       const ligne = ligneOt(lignes, otId, true);
       if (ligne.origine !== 'préventif') {
-        throw ErreurValidation('« Anomalie constatée » concerne les OT préventifs : ' + otId + ' est d\'origine « ' + ligne.origine + ' ».');
+        throw ErreurValidation(I18n.t('ordres.changer_anomalie.anomalie_constatee_concerne_ot', { otId, origine: Schema.libelleValeur('ordres_travail', 'origine', ligne.origine) }));
       }
       if (texte(ligne.anomalie_constatee) === valeur) return false;
       ligne.anomalie_constatee = valeur;
@@ -156,8 +154,8 @@ Object.assign(Ordres, (() => {
     const ancienne = texte((Donnees.trouver('ordres_travail', otId) || {}).priorite);
     return Donnees.modifier('ordres_travail', (lignes) => {
       const ligne = ligneOt(lignes, otId, true);
-      if (!PRIORITES.includes(nouvelle)) throw ErreurValidation('Priorité inconnue : ' + nouvelle + '.');
-      if (!texte(motif)) throw ErreurValidation('Le motif du changement de priorité est obligatoire.');
+      if (!PRIORITES.includes(nouvelle)) throw ErreurValidation(I18n.t('ordres.changer_priorite.priorite_inconnue', { nouvelle }));
+      if (!texte(motif)) throw ErreurValidation(I18n.t('ordres.changer_priorite.motif_changement_priorite_obligatoire'));
       ligne.priorite = nouvelle;
     }, { action: 'priorité ' + ancienne + ' → ' + nouvelle + ' : ' + motif });
   }
@@ -165,10 +163,10 @@ Object.assign(Ordres, (() => {
   /** Crée un OT lié (reprise d'un OT verrouillé) : ot_lie_id = OT d'origine. Renvoie son identifiant. */
   async function creerOtLie(otId) {
     const origine = Donnees.trouver('ordres_travail', otId);
-    if (!origine) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!origine) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     return creer({
       origine: 'manuel', equipement_id: origine.equipement_id, type: origine.type, priorite: origine.priorite,
-      titre: 'Reprise de ' + origine.id + ' — ' + texte(origine.titre).slice(0, 120),
+      titre: I18n.donnees('ordres.creer_ot_lie.reprise_origine_id', { origineId: origine.id, titre: texte(origine.titre).slice(0, 120) }),
       travail_a_faire: origine.travail_a_faire, consignes: origine.consignes,
       date_prevue: datePrevueParDefaut(origine.priorite), ot_lie_id: origine.id,
     });
@@ -183,9 +181,9 @@ Object.assign(Ordres, (() => {
   // clôturé techniquement. Lit le cache : appeler via modifierLieeAOt, qui le relit juste avant.
   function verifierOtModifiable(otId) {
     const ot = Donnees.trouver('ordres_travail', otId);
-    if (!ot) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!ot) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     if (estVerrouille(ot) || ot.statut === 'Clôturé techniquement') {
-      throw ErreurValidation('L\'OT ' + otId + ' est « ' + ot.statut + ' » (sans doute sur un autre poste) : il ne peut plus être modifié.');
+      throw ErreurValidation(I18n.t('ordres.verifier_ot_modifiable.ot_sans_doute_autre', { otId, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) }));
     }
   }
 
@@ -221,15 +219,15 @@ Object.assign(Ordres, (() => {
   // Contrôles faits AVANT toute écriture : réglage, passage possible, astuce, RG4 sur l'OT tel qu'il
   // sera (champs saisis + temps passé ajouté). Lève une ErreurValidation listant tous les manques.
   function verifierClore(ot, champs, heures) {
-    if (!clotureUneEtape()) throw ErreurValidation('La clôture en une étape n\'est pas activée (réglage cloture_une_etape, responsable).');
+    if (!clotureUneEtape()) throw ErreurValidation(I18n.t('ordres.verifier_clore.cloture_etape_pas_activee'));
     if (!Ordres.transitionsPossibles(ot).includes('Clôturé techniquement')) {
-      throw ErreurValidation('L\'OT ' + ot.id + ' est « ' + ot.statut + ' » : il ne peut pas être clôturé techniquement.');
+      throw ErreurValidation(I18n.t('ordres.verifier_clore.ot_peut_pas_etre', { otId: ot.id, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) }));
     }
     const longueur = Array.from(champs.astuce || '').length;
-    if (longueur > ASTUCE_MAX) throw ErreurValidation('Astuce trop longue : ' + longueur + ' caractères, ' + ASTUCE_MAX + ' au plus.');
+    if (longueur > ASTUCE_MAX) throw ErreurValidation(I18n.t('ordres.verifier_clore.astuce_trop_longue_caracteres', { n: longueur, max: ASTUCE_MAX }));
     const temps = Ordres.interne.lignesDeLOt('ot_temps', ot.id).concat(heures > 0 ? [{ heures: String(heures) }] : []);
     const manques = Ordres.verifierCloture(Object.assign({}, ot, champs), { temps });
-    if (manques.length) throw ErreurValidation('Clôture impossible, il manque : ' + manques.join(' ; ') + '.');
+    if (manques.length) throw ErreurValidation(I18n.t('ordres.verifier_clore.cloture_impossible_manque', { join: manques.join(' ; ') }));
   }
 
   /**
@@ -246,9 +244,9 @@ Object.assign(Ordres, (() => {
     CHAMPS_CLOTURE.forEach((nom) => { if (valeurs[nom] !== undefined) champs[nom] = texte(valeurs[nom]); });
     const heures = Donnees.nombre(valeurs.heures) || 0;
     const quantite = Donnees.nombre(valeurs.quantite) || 0;
-    if (texte(valeurs.heures) && !(heures > 0 && heures <= 24)) throw ErreurValidation('Temps passé : un nombre d\'heures entre 0 et 24 (ex. 1,5).');
-    if (heures > 0 && !texte(valeurs.technicien_id)) throw ErreurValidation('Temps passé : choisissez le technicien.');
-    if (texte(valeurs.article_id) && !(quantite > 0)) throw ErreurValidation('Pièce sortie : une quantité supérieure à 0.');
+    if (texte(valeurs.heures) && !(heures > 0 && heures <= 24)) throw ErreurValidation(I18n.t('ordres.clore.temps_passe_nombre_heures'));
+    if (heures > 0 && !texte(valeurs.technicien_id)) throw ErreurValidation(I18n.t('ordres.clore.temps_passe_choisissez_technicien'));
+    if (texte(valeurs.article_id) && !(quantite > 0)) throw ErreurValidation(I18n.t('ordres.clore.piece_sortie_quantite_superieure'));
     verifierClore(actuel, champs, heures);
     const statutAttendu = actuel.statut;
     if (texte(valeurs.article_id)) await Magasin.sortir(actuel.id, valeurs.article_id, quantite, texte(valeurs.commentaire_piece));
@@ -256,12 +254,12 @@ Object.assign(Ordres, (() => {
       await modifierLieeAOt(actuel.id, 'ot_temps', (lignes, outils) => {
         lignes.push({ id: outils.nouvelId(lignes), ot_id: actuel.id, technicien_id: valeurs.technicien_id,
           date: texte(valeurs.date_temps) || texte(champs.date_fin).slice(0, 10) || outils.aujourdhui(), heures: String(heures) });
-      }, { action: 'temps passé sur ' + actuel.id });
+      }, { action: I18n.donnees('ordres.clore.temps_passe', { actuelId: actuel.id }) });     // journal : D156
     }
     const saisis = await Donnees.modifier('ordres_travail', (lignes, outils) => {
       const ligne = ligneOt(lignes, actuel.id, true);
       if (ligne.statut !== statutAttendu) {
-        throw ErreurValidation('L\'OT ' + actuel.id + ' est passé « ' + ligne.statut + ' » sur un autre poste. Actualisez puis recommencez.');
+        throw ErreurValidation(I18n.t('ordres.clore.ot_passe_autre_poste', { actuelId: actuel.id, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       const changes = Object.keys(champs).filter((nom) => texte(ligne[nom]) !== champs[nom]);
       changes.forEach((nom) => { ligne[nom] = champs[nom]; });

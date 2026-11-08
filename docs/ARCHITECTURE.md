@@ -21,7 +21,12 @@ css/modules/*.css          mise en page propre à chaque module (une feuille par
                            chargées par index.html)
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
+js/i18n.js                 I18n      : moteur de traduction (t, html, pluriels, repli, data-i18n ; multilingue)
+js/i18n/langues.js         langues déclarées ; js/i18n/<code>.js : textes d'une langue, un bloc par section
+js/i18n/aide/<code>.js     aide longue d'une langue (clés aide.*, repli silencieux sur le français)
+js/i18n-chargeur.js        ajoute la langue active (si ce n'est pas le français) avant js/schema.js
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
+js/formats.js              Formats   : registre des formats (colonnes de chaque format, étapes de migration, manifeste)
 js/donnees.js              Donnees   : CSV, chargement, contrôle, mutation, journal, rafraîchissement
 js/stockage-serveur.js     StockageServeur : adaptateur « serveur » (API HTTP)
 js/stockage-dossier.js     StockageDossier : adaptateur « dossier » (File System Access)
@@ -50,8 +55,12 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 ```
 
 **Ordre de chargement dans `index.html`** (scripts classiques, jamais `type="module"`) :
-`js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js`, `js/lib/jszip.min.js`,
-`js/schema.js`, `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
+`js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js` (JSZip, retiré en T229, n'y est plus : le ZIP
+passe par `zip-flux.js`), la traduction (chantier multilingue, T234) : `js/i18n.js` (le moteur, objet `I18n`),
+`js/i18n/langues.js`, `js/i18n/fr.js`, `js/i18n/aide/fr.js`, `js/i18n-chargeur.js` (la langue active, voir plus bas),
+`js/schema.js`, `js/formats.js` (juste après le schéma, dont il dépend seul :
+chantier « socle de données »),
+`js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
 §15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
 `suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1 ; le lot 4 insère `ia.js`,
@@ -61,6 +70,17 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 `acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),
 `parametres-solo.js` juste après `parametres-codes.js` et `parametres-sauvegardes.js` juste après `parametres-solo.js`
 (§22.11)), `js/app.js` (en dernier).
+Langue active (T234, T295) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (le choix du poste, écrit par
+le sélecteur de langue, §24.10) puis « prevo.langue.installation » (la langue de l'installation, §24.11 ; la langue du
+compte viendra plus tard) ; la première des deux déclarée par `js/i18n/langues.js` (sinon le français) est la langue
+à afficher. Autre que le français, elle devient la langue active (`I18n.choisir`, qui donne aussi l'attribut `lang`
+de `<html>`) et ses deux fichiers (`js/i18n/<code>.js`, `js/i18n/aide/<code>.js`) sont
+écrits par `document.write` pendant l'analyse de la page : chargés et exécutés avant `js/schema.js`, en `file://` comme
+en http ; le dictionnaire de l'installation s'y ajoute quand elle n'est ni le français ni la langue affichée. Valeur
+absente, non déclarée ou mal formée, stockage refusé : ignorée (français), sans erreur. `acces/porte.html`
+charge `js/i18n.js`, `js/i18n/langues.js` et `js/i18n/fr.js` avant `acces/porte.js` (servis par la porte :
+`fichier_de_la_porte`, §22.6). `App` applique les attributs `data-i18n` et `data-i18n-attr` de `index.html` au
+démarrage (`I18n.appliquer(document)`).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
 ECharts (`js/lib/echarts.min.js`, version 5.5.1) n'est pas non plus chargé au démarrage :
@@ -174,10 +194,19 @@ const Schema = {
 Types : `id`, `texte`, `texte_long`, `entier`, `decimal`, `date`, `date_heure`, `booleen`,
 `choix` (avec `valeurs`), `ref` (avec `table`, et `champCible` si ce n'est pas la clé — ex. les
 `*_code` des OT visent `codes_defaillance.code` filtré par `famille`, attribut `filtre`), `document`
-(nom de fichier dans `donnees/documents/`). Champs facultatifs : `libelle` (toujours renseigné, en
-français), `obligatoire`, `defaut`, `protege`, `synonymes` (pour l'assistant d'import futur),
+(nom de fichier dans `donnees/documents/`). Champs facultatifs : `libelle` (toujours renseigné ; texte du dictionnaire, voir plus bas), `obligatoire`, `defaut`, `protege`, `synonymes` (pour l'assistant d'import futur),
 `depuisVersion` (version du format qui a ajouté le champ : `2` pour les quatre champs du §14.1 ;
 absent pour les champs du brief).
+
+**Libellés traduits (Lot 2 multilingue, §24).** Les `libelle` ne sont plus écrits dans `js/schema.js` : à la fin du
+fichier, une boucle remplace chacun par un accesseur énumérable qui lit `schema.<table>.<champ>` à chaque lecture
+(le nom d'une table, `schema.tables.<table>`) ; les lectures `.libelle` du code, ainsi que `JSON.stringify` et
+`Object.assign` sur une description de champ, voient donc le texte de la langue active sans rien changer.
+`Schema.libelleValeur(table, champ, valeur)` donne le texte affiché d'une valeur stockée d'un champ `choix`
+(clé `valeurs.<table>.<champ>.<valeur>`) ; une valeur vide, inconnue ou d'un autre type de champ est rendue telle
+quelle, une valeur retirée (`retirees`) garde son libellé. Chaque champ `choix` porte `nomTable`, le nom de sa table,
+qui suit ses copies. Les colonnes de `UI.tableau` ont une option `table` : avec `cle`, la cellule est une valeur
+stockée affichée par `Schema.libelleValeur(table, cle, valeur)`.
 
 **Format v2 (lot 2).** Quatre champs sont ajoutés **en fin de table**, après ceux du brief :
 `equipements.valeur_remplacement`, `demandes.symptome_code`, `demandes.ot_origine_id`,
@@ -254,7 +283,9 @@ Donnees.stockArticle(articleId)      // recalculé depuis mouvements_stock (un i
 await Donnees.journaliser(table, idLigne, action)   // entrée de journal sans modification (ex. avertissement RG8)
 Donnees.instantane()                 // { table: Uint8Array } des 22 tables sérialisées (export ZIP, copie de la démo)
 Donnees.baseVide()                   // vrai si aucun des 22 fichiers n'existe
-await Donnees.mettreAJourVersionSchema()   // passage au format courant, sauvegarde d'abord (§5.6)
+Donnees.etatDuFormat() / Donnees.lectureSeule()   // format de départ et courant ; données plus récentes (§5.6)
+await Donnees.migrerAuFormatCourant()   // mode dossier : passage au format courant, sauvegarde d'abord ; mode serveur :
+                                        // rien, le serveur l'a fait à son démarrage (§5.6, FORMAT.md §6)
 Donnees.demarrerSurveillance() / Donnees.arreterSurveillance()   // §5.5
 Donnees.csv.analyser(table, entree)  // → { lignes, colonnesInconnues, problemes, encodage }
 Donnees.csv.serialiser(table, lignes, colonnesInconnues) // → Uint8Array
@@ -306,6 +337,10 @@ le cache, mais la table reste **périmée** : `modifier` la relit toujours avant
 (sinon les lignes ajoutées entre-temps par un autre poste seraient perdues). Le rafraîchissement
 périodique ne la relit que si sa version a changé depuis notre ajout ; `Donnees.rafraichir()`
 appelé explicitement (ex. avant l'export ZIP) relit tout.
+Fichier en place qui se termine au milieu d'un texte entre guillemets (guillemet ouvert jamais fermé :
+`Donnees.csv.finitDansUnGuillemetOuvert`, miroir `finit_dans_un_guillemet_ouvert` du serveur) : l'adaptateur refuse
+l'ajout (`ErreurFichierAbime`, T200), sans repli sur `modifier` ; pour le journal, la ligne manquée ne fait pas
+échouer l'action de l'utilisateur (le bandeau « Fichier abîmé » le dit). FORMAT.md §3.
 
 ### 5.5 Rafraîchissement
 `Donnees.demarrerSurveillance()` : toutes les `rafraichissement_s` secondes (20 par défaut) et à
@@ -314,25 +349,26 @@ dont la version diffère est relue ; événement `changement` (`origine: 'distan
 écrit par ajout, n'est signalé que s'il a changé sur un autre poste (pas pour nos propres ajouts,
 qui ne le font pas relire) : depuis le lot 4, les onglets Suggestions et Décisions en dépendent.
 
-### 5.6 Passage au format courant : `mettreAJourVersionSchema` (lot 2)
-`await Donnees.mettreAJourVersionSchema()` → `{ misAJour, sauvegarde }`. Appelée par `App` au
-démarrage, après `chargerTout()`, **pour tous les profils et avant toute autre écriture** (§8).
-- Rien à faire (renvoie `{ misAJour: false, sauvegarde: null }`) si la base est vide ou si
-  `parametres.version_schema` vaut déjà `Schema.version` (ou plus).
-- Sinon, **décision de Nicolas** : d'abord une sauvegarde automatique complète
-  `adaptateur.sauvegarder('avant-format-v2')`, nommée `AAAA-MM-JJ_HHMMSS_avant-format-v2`
-  (restaurable depuis Paramètres, où elle apparaît avec le type « Avant format 2 ») ; **puis
-  seulement** `version_schema` passe à 2, par un `modifier('parametres')` décidé sur les lignes
-  fraîches (si un autre poste l'a déjà fait, rien n'est écrit). Journal : « passage au format 2 du
-  fichier ; sauvegarde … faite juste avant ».
-- Si la sauvegarde échoue, ou si le stockage ne sait pas sauvegarder (pas de méthode `sauvegarder`,
-  ou aucun nom renvoyé) : `ErreurStockage` (« Sauvegarde avant le passage au format 2 impossible :
-  … ; la mise à jour sera retentée à la prochaine ouverture. »), et `version_schema` **n'est pas
-  changé**. Seule exception : la démo (rien n'y est enregistré, aucune sauvegarde n'est exigée).
-- Deux postes ouverts ensemble sur une base au format 1 peuvent faire chacun leur sauvegarde (deux
-  copies identiques, sans gravité) ; un seul écrit la version.
-- « Créer une base vide » écrit directement `version_schema` = 2 dans `parametres.csv` : pas de
-  sauvegarde inutile au premier démarrage. Le jeu de démo porte déjà `version_schema` = 2.
+### 5.6 Passage au format courant : `migrerAuFormatCourant` (socle de données, D167-D169)
+Vocabulaire, historique des formats, sauvegardes et ZIP : **[FORMAT.md](FORMAT.md)** (référence). Ici, seulement le
+contrat de `Donnees`. Le registre d'étapes (1→2, 2→3 ; pures, idempotentes, additives) est `Formats.ETAPES`
+(`js/formats.js`) ; son miroir Python est `ETAPES_FORMAT` dans `serveur.py`.
+- `Donnees.etatDuFormat()` rend le format de départ (le plus petit entre `parametres.version_schema` et la
+  signature de chaque fichier) et le format courant ; `Donnees.lectureSeule()` dit si la base est d'un format plus
+  récent que l'appli.
+- **Mode serveur** : la migration est faite **par le serveur, au démarrage, avant toute connexion**, après une
+  sauvegarde `avant-format-vN`. Le navigateur n'écrit rien pour cela (`migrerAuFormatCourant` ne fait rien).
+- **Mode dossier** : `await Donnees.migrerAuFormatCourant()` (ancien nom `mettreAJourVersionSchema`, même
+  fonction), appelée par `App` après `chargerTout()` et avant toute autre écriture. Elle enchaîne les étapes une à
+  une ; **d'abord** une sauvegarde `avant-format-vN`, puis la migration, avec une ligne de journal « passage au
+  format N du fichier ; sauvegarde … faite juste avant ». Si la sauvegarde échoue (ou si le stockage ne sait pas
+  sauvegarder), `ErreurStockage` et rien n'est migré : la migration est retentée à l'ouverture suivante.
+  Un fichier illisible n'est jamais réécrit. Démo : rien n'est écrit.
+- **Format plus récent que l'appli** : lecture seule. Le navigateur lève `ErreurLectureSeule` pour toute écriture
+  (événement `lectureSeule`) ; le serveur répond 409 `format_plus_recent`.
+- « Créer une base vide » écrit directement `version_schema` au format courant ; le jeu de démo le porte déjà.
+- Deux postes ouverts ensemble sur une base ancienne peuvent faire chacun leur sauvegarde (deux copies identiques,
+  sans gravité) ; un seul écrit la version.
 
 ## 6. Adaptateurs de stockage (contrat commun)
 
@@ -343,30 +379,45 @@ Chaque fichier `js/stockage-*.js` expose une fabrique : `await StockageServeur.c
 mode                                  'serveur' | 'dossier' | 'demo'
 libelle                               texte affiché (ex. « Serveur 192.168.1.10:8080 »)
 await charger(table)                  → { octets: Uint8Array|null, version: string|null }  (null = fichier absent)
-await enregistrer(table, octets, versionAttendue)   → { version }
-                                      versionAttendue null = le fichier ne doit pas exister ; sinon ErreurConflit
-await ajouter(table, octets)          → { version }  (ErreurConflit si en-tête/encodage différent)
+await enregistrer(table, octets, versionAttendue, options?)   → { version }
+                                      versionAttendue null = le fichier ne doit pas exister ; sinon ErreurConflit ;
+                                      fichier en place abîmé → ErreurFichierAbime, sauf options.remplacerFichierAbime
+                                      (import ZIP seulement, T200 ; FORMAT.md §3)
+await ajouter(table, octets)          → { version }  (ErreurConflit si en-tête/encodage différent ;
+                                      ErreurFichierAbime si le fichier finit dans un guillemet ouvert)
 await listerVersions()                → { nomTable: version|null, … }
 await ecrireDocument(nom, blob)       → nom   (refuse d'écraser un document existant)
 await lireDocument(nom)               → Blob|null
 await urlDocument(nom)                → URL affichable (serveur : /api/documents/nom ; sinon URL d'objet)
 await sauvegarder(motif?)             → nom de la sauvegarde : manuelle sans motif (AAAA-MM-JJ_HHMMSS) ;
-                                      avec motif 'avant-format-v2' (liste fermée, le seul motif accepté)
-                                      → AAAA-MM-JJ_HHMMSS_avant-format-v2 ; autre motif → ErreurStockage
+                                      avec un motif de la liste fermée (avant-format-v2, avant-format-v3,
+                                      avant-import, avant-import-zip, avant-mise-a-jour)
+                                      → AAAA-MM-JJ_HHMMSS_<motif> ; autre motif → ErreurStockage
+                                      (avant-import-zip copie aussi documents/ ; FORMAT.md §8)
+await sauvegarderAvantMiseAJour(versionAppli)   (dossier seulement) → { sauvegarde: nom ou null, de }
+                                      sauvegarde « avant-mise-a-jour » puis derniere-version.json si la version
+                                      notée n'est pas versionAppli (le serveur le fait à son démarrage ; FORMAT.md §8)
 await listerSauvegardes()             → [{ nom, tables: [...] }]  (plus récente d'abord)
 await restaurer(nom, tables?)         → { restaurees: [...], copieSecurite: nom }
 await testerSauvegarde(nom)           → { nom, ok, tables: [{ table, lignes, erreur }] }  (serveur seulement, §22.11)
 await info()                          → { adressesReseau: [...], port, copieExterne: { derniereReussie, joursSansCopie,
-                                      erreur } | null } (serveur, §22.11) ou {}
+                                      erreur } | null, format: { base, courant, plusRecent, migration, … } }
+                                      (serveur, §22.11 et §5.6) ou {}
 ```
+`App` n'utilise l'adaptateur qu'au travers de `Donnees.protegerEcritures(adaptateur)` : en lecture seule (données
+d'un format plus récent, §5.6), ses écritures (`enregistrer`, `ajouter`, `ecrireDocument`, `sauvegarder`,
+`restaurer`, `sauvegarderAvantMiseAJour`) sont refusées par `ErreurLectureSeule` ; le serveur répond de son côté 409
+`format_plus_recent`.
 Version d'un fichier = empreinte SHA-256 du contenu, 16 premiers caractères hexadécimaux
 (décision D7). Sauvegarde quotidienne : avant la **première écriture de la journée**, copie de
 tous les CSV dans `sauvegardes/AAAA-MM-JJ/` (si ce dossier n'existe pas). Une restauration copie
 d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`. Le passage au
-format 2 (§5.6) copie tous les CSV dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-format-v2/`. Noms de
-sauvegarde acceptés (serveur et dossier, mêmes règles) :
+format N (§5.6 ; serveur au démarrage, navigateur en mode dossier) copie d'abord tous les CSV dans
+`sauvegardes/AAAA-MM-JJ_HHMMSS_avant-format-vN/`. Noms de sauvegarde acceptés (serveur et dossier, mêmes règles) :
 `AAAA-MM-JJ`, `AAAA-MM-JJ_HHMMSS`, `AAAA-MM-JJ_HHMMSS_avant-restauration`,
-`AAAA-MM-JJ_HHMMSS_avant-format-vN`. Le mode dossier
+`AAAA-MM-JJ_HHMMSS_avant-format-vN`, `…_avant-import`, `…_avant-import-zip`, `…_avant-mise-a-jour`. Chaque
+sauvegarde porte un `manifeste.json` ; les quotidiennes de plus de 30 jours et les manuelles au-delà des 60 plus
+récentes sont supprimées (jamais les « avant-… ») : détail dans [FORMAT.md](FORMAT.md) §8 et §9. Le mode dossier
 pose une marque `.en-cours` dans une sauvegarde pendant qu'il la copie et l'enlève à la fin : une
 sauvegarde qui porte encore la marque est incomplète (ni listée, ni restaurable ; celle du jour est
 refaite) — le serveur applique la même règle.
@@ -388,8 +439,12 @@ refaite) — le serveur applique la même règle.
 
 ## 7. API du serveur (`serveur.py`)
 
-Réponses JSON `{"erreur": "message en français"}` en cas d'erreur. Toute requête qui écrit
-(`PUT`, `POST`) exige l'en-tête **`X-Prevo: 1`** (sinon 403). Corps limité à **10 Mo**
+Réponses JSON `{"erreur": "message en français"}` en cas d'erreur. D157 (T246) : le message porte aussi son code
+et ses valeurs, `"erreur_code"` (clé `serveur.<code>` de `js/i18n/fr.js`) et `"erreur_valeurs"` s'il en a ; le
+navigateur affiche la clé dans sa langue, le français reçu sinon (`StockageServeur.texte`). Même règle pour tout champ
+qui porte un message (`message`, `raison`… ; une liste de messages : `<champ>_codes`). Toute requête qui écrit
+(`PUT`, `POST`) exige l'en-tête **`X-Prevo: 1`** (sinon 403). Corps limité à **10 Mo**, **50 Mo** pour
+l'envoi d'une table (`PUT /api/csv/<table>`, `POST /api/csv/<table>/ajout` : T208, `TAILLE_MAX_CORPS_CSV`)
 (`Content-Length` obligatoire : 411 sinon, 413 au-delà). En-tête `Host` accepté seulement pour
 une adresse IP, `localhost`, le nom du PC seul ou suivi d'un suffixe de réseau local
 (`.local`, `.lan`, `.home`, `.localdomain`, `.home.arpa`, `.internal`, `.intranet`) ou un nom donné
@@ -401,10 +456,10 @@ par `--hote` — sinon 403 (un suffixe quelconque permettrait le « DNS rebindin
 | `GET /api/info` | `{"port": 8080, "adresse_locale": "http://localhost:8080/", "adresses_reseau": ["http://192.168.1.10:8080/"]}` |
 | `GET /api/versions` | `{"tables": {"equipements": {"version": "…", "modifie": "AAAA-MM-JJ HH:MM:SS"} ou null, …}}` (les 22 tables) |
 | `GET /api/csv/<table>` | octets du fichier, en-tête `X-Version` ; 404 si absent |
-| `PUT /api/csv/<table>` | en-tête `X-Version-Attendue: <version>` ou `aucune` ; 200 `{"version"}` · 409 `{"erreur", "version_actuelle"}` · 423 si le fichier est verrouillé (Excel ouvert) |
-| `POST /api/csv/<table>/ajout` | corps = en-tête + lignes (UTF-8 sans BOM) ; ajoute en fin de fichier (crée le fichier avec BOM s'il n'existe pas) ; 409 si l'en-tête ou l'encodage du fichier existant diffère |
+| `PUT /api/csv/<table>` | en-tête `X-Version-Attendue: <version>` ou `aucune` ; 200 `{"version"}` · 409 `{"erreur", "version_actuelle"}` · 409 `{"erreur", "code": "fichier_abime", "table"}` si le fichier en place est abîmé (T200 ; en-tête `X-Prevo-Remplacer-Abime: 1` pour le remplacer quand même : import ZIP seulement ; avec les comptes, 403 si la session n'est pas celle d'un responsable) · 423 si le fichier est verrouillé (Excel ouvert) |
+| `POST /api/csv/<table>/ajout` | corps = en-tête + lignes (UTF-8 sans BOM) ; ajoute en fin de fichier (crée le fichier avec BOM s'il n'existe pas) ; 409 si l'en-tête ou l'encodage du fichier existant diffère · 409 `{"erreur", "code": "fichier_abime", "table"}` si le fichier en place finit dans un guillemet ouvert (T200) |
 | `GET /api/documents/<nom>` | octets, type MIME d'après l'extension, `Content-Security-Policy: sandbox`, `Content-Disposition: attachment; filename="<nom>"` hors images (jpg, jpeg, png, gif, webp), PDF et rapport figé en html (ouvert dans un onglet, `sandbox`) (audit F4, §22.12) ; 404 ; 415 extension inconnue |
-| `PUT /api/documents/<nom>` | 201 `{"nom"}` avec le **nom imposé par le serveur** `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules : le navigateur garde ce nom, jamais celui qu'il a demandé) · 400 nom refusé, ou image dont le contenu n'a pas la signature de son format (`verifier_signature_image` : `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`) · 409 même nom demandé dans la même seconde (jamais d'écrasement) · 413 dossier `documents/` plein (`quota_documents_mo`, 2048 par défaut, mesuré à chaque envoi) · 415 extension inconnue (`.doc` et `.xls` retirés) ; rien n'est écrit en cas de refus |
+| `PUT /api/documents/<nom>` | 201 `{"nom"}` avec le **nom imposé par le serveur** `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules : le navigateur garde ce nom, jamais celui qu'il a demandé) · 400 nom refusé, ou image dont le contenu n'a pas la signature de son format (`verifier_signature_image` : `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`) · 409 même nom demandé dans la même seconde (jamais d'écrasement) · 413 dossier `documents/` plein (`quota_documents_mo`, 4096 par défaut depuis T250, mesuré à chaque envoi) · 415 extension inconnue (`.doc` et `.xls` retirés) ; rien n'est écrit en cas de refus |
 | `POST /api/sauvegarde` | corps vide → sauvegarde manuelle `{"sauvegarde": "AAAA-MM-JJ_HHMMSS"}` ; corps JSON facultatif `{"motif": "avant-format-v2"}` → `{"sauvegarde": "AAAA-MM-JJ_HHMMSS_avant-format-v2"}` (motif `avant-import` depuis le lot 5, §18.1) ; motif hors de la liste fermée `MOTIFS_SAUVEGARDE`, corps qui n'est pas un objet JSON, JSON invalide ou trop imbriqué → 400 (contrôlé avant toute écriture) |
 | `GET /api/sauvegardes` | `{"sauvegardes": [{"nom", "tables": [...]}]}` |
 | `POST /api/restauration` | corps `{"sauvegarde": "…", "tables": [...] (facultatif)}` → `{"restaurees", "copie_securite"}` |
@@ -413,7 +468,7 @@ Règles : noms de tables limités aux 22 du schéma (liste recopiée dans `serve
 commentaire de renvoi vers `js/schema.js`, cohérence vérifiée par un test) ; nom de document demandé
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` sans `..`, nom enregistré précédé de `AAAAMMJJ-HHMMSS-` (préfixe facultatif à la
 lecture : les documents d'avant le lot 7 n'en ont pas), extensions de `TYPES_DOCUMENTS` seulement ; nom de sauvegarde
-`^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import)?)?$` ; tout chemin résolu doit
+`^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import-zip|_avant-import|_avant-mise-a-jour)?)?$` ; tout chemin résolu doit
 rester sous `donnees/` (vérification sur le chemin brut **et** décodé, `\` compris) ; écriture
 atomique (fichier temporaire dans le même dossier, `fsync`, `os.replace`) ; un verrou global
 sérialise les écritures ; au plus 32 requêtes servies en même temps pour tout le processus (`BoundedSemaphore` pris
@@ -458,14 +513,15 @@ Base vide (aucun CSV) → choix « Créer une base vide » ou « Partir des donn
 Navigateur sans File System Access → message « utilisez Chrome ou Edge » + démo.
 
 Suite du démarrage (lot 2), dans cet ordre, **avant le premier écran** :
-1. tables chargées → `Donnees.mettreAJourVersionSchema()` (§5.6), pour tous les profils et avant
-   toute autre écriture ; en cas d'échec (sauvegarde impossible), l'erreur est signalée, un bandeau
-   « Les fichiers n'ont pas pu passer au format 2 » s'affiche dans la coque, et l'application reste
-   utilisable ;
+1. tables chargées → `Donnees.migrerAuFormatCourant()` (§5.6) en mode dossier, pour tous les profils et avant
+   toute autre écriture (en mode serveur, le serveur a déjà migré au démarrage) ; données d'un format plus récent :
+   lecture seule signalée par un bandeau ; en cas d'échec (sauvegarde impossible), l'erreur est signalée, un bandeau
+   « Les fichiers n'ont pas pu passer au format courant » s'affiche dans la coque, et l'application reste utilisable
+   (détail et règles : [FORMAT.md](FORMAT.md)) ;
 2. profil (mémorisé ou demandé ; comptes exigés : déduit de la session, voir ci-dessous et §22.4) ;
 3. technicien ou responsable : `Preventif.genererOTEchus()` (RG5, §14.3) ; toast « n OT préventifs
    générés » si n > 0 ; erreur → `App.signalerErreur`, l'application reste utilisable. **Pas de
-   génération automatique si l'étape 1 a échoué** (elle écrirait des fichiers au format 2 sans
+   génération automatique si l'étape 1 a échoué** (elle écrirait avant la sauvegarde de migration, sans
    sauvegarde confirmée) : la prochaine ouverture retente tout. Puis
    `performance.mark('prevo:preventif')`, posée une seule fois, aussi pour le demandeur (rien à
    générer) ;
@@ -481,11 +537,37 @@ profil s'affiche, puis l'application revient à la route demandée (cas du QR sc
 `type`, `prenom` + `nom` → `nom`, `technicien_id` → `technicienId` ; un appareil enrôlé : le nom saisi, type
 `demandeur`), l'écran de profil de 1.2 ne s'affiche jamais et `prevo.profil` n'est plus écrit (`prevo.poste` reste).
 Un mot de passe provisoire (`a_changer`) est changé avant tout. Pendant l'usage, l'événement `prevo:session-absente`
-(401 relu par `stockage-serveur.js`) ramène l'écran de connexion par-dessus l'écran courant, sans changer la route :
-après la connexion, les tables sont relues et la coque se rouvre sur la même route. Le bouton de profil du menu et
+(401 relu par `stockage-serveur.js`) ramène l'écran de connexion par-dessus l'écran courant, sans changer la route.
+T329 (décisions de Nicolas du 07/11) : la page ne se recharge pas (même quand la langue du compte n'est pas celle du
+poste) ; l'écran de connexion reste dans la langue où la personne travaillait, avec le message
+`socle.session_perdue.reconnectez_vous_meme_compte` ; l'écran courant n'est ni vidé ni reconstruit, et les fenêtres
+ouvertes (`dialog[open]`) sont fermées sans être retirées (sinon, modales, elles rendraient l'écran de connexion
+inerte). Le **même compte avec les mêmes droits** (identifiant, rôle, technicien lié) retrouve l'écran, le défilement
+et ses fenêtres rouvertes telles quelles (toast `socle.session_perdue.reconnecte_saisie_gardee`), puis enregistre ;
+le rafraîchissement habituel relit ensuite les tables. **Un autre compte**, ou des droits changés : les fenêtres sont
+abandonnées (événement `cancel`, comme Échap : `UI.fenetre` rend null), puis les tables sont relues et la coque se
+rouvre sur la même route (dans la langue du nouveau compte) : la saisie n'est ni montrée ni enregistrée sous un autre
+nom. Pendant l'écran de connexion, une erreur 401 n'ajoute pas de toast (`App.signalerErreur`). Le bouton de profil du menu et
 l'entrée « Plus » du téléphone deviennent « se déconnecter » (`POST /api/deconnexion`, puis l'écran de connexion) ;
 `App.changerProfil()` fait de même ; un appareil enrôlé n'a aucun bouton (seul le responsable le révoque). Le menu
 affiche « Prénom Nom · Rôle ». Sans comptes (portée « ce PC »), en modes dossier et démo : rien ne change.
+
+**Brouillons gardés sur l'appareil** (T329, décisions de Nicolas du 07/11 ; `js/modules/brouillons.js`, objet
+`Brouillons`, chargé juste après `poste.js`) : la déclaration de panne (`#/di/nouvelle`) et le compte rendu d'un OT
+(onglet Compte rendu) survivent à un onglet déchargé par le navigateur (téléphone en veille), à un rechargement ou à
+une session perdue. Clé `localStorage` « prevo.brouillon|<base>|<auteur>|<nom> » (`App.porteeDesBrouillons()` : base
+`serveur` ou `dossier:<nom du dossier>` ; auteur `compte:<identifiant>`, `compte:appareil:<id>` pour un appareil enrôlé,
+sans comptes `profil:<type>:<technicien ou nom>` ; '' en démo et en lecture seule : aucun brouillon) ; valeur
+`{ le, valeurs, depart, … }` (noms `demande` et `compte-rendu|<OT>`). Règles : lié au compte qui l'a tapé, jamais montré
+à un autre (la clé porte l'auteur) ; écrit 400 ms après la dernière frappe et aussitôt quand la page passe en
+arrière-plan (`visibilitychange`, `pagehide`), seulement s'il diffère des valeurs enregistrées (`depart`), sinon
+effacé ; effacé à l'enregistrement (`suivi.terminer()`), par « Abandonner le brouillon », ou au bout de 7 jours (lu
+périmé, et `Brouillons.purger()` à l'ouverture, tous auteurs) ; **rien ne part au serveur**. Reprise : bandeau
+« Brouillon repris » ; déclaration commencée pour un autre équipement ou un autre OT d'origine : bandeau « La
+reprendre » (une nouvelle la remplace) ; la photo n'est jamais gardée (le bandeau le dit) ; compte rendu enregistré
+ailleurs depuis (`depart` différent) : avertissement, rien n'est fusionné ; l'OT s'ouvre sur l'onglet Compte rendu ;
+OT devenu non modifiable : texte montré à recopier, « Effacer le brouillon ». Sans comptes, le profil étant
+déclaratif, qui prend le même profil sur le poste voit ses brouillons. Tests : `tests/test_saisie_gardee.py`.
 
 **État prêt** : quand les tables sont chargées et le premier écran affiché,
 `document.documentElement.dataset.etat = 'pret'` et `performance.mark('prevo:pret')` (lus par
@@ -574,8 +656,9 @@ Actualiser » s'affiche à la place.
 `App.estTechnicien()`, `App.estDemandeur()`, `App.libelleProfil()`, `App.changerProfil()`,
 `App.urlFicheEquipement(id)` (URL réseau en mode serveur — depuis le lot 3, `adresse_qr` quand
 elle est renseignée —, sinon `GMAO:<id>`), `App.chargerScriptDemo()`, `App.exporterZip()`,
-`App.signalerErreur(erreur)`, depuis le lot 3 `App.chargerEcharts()` et `App.adressesReseau()`
-(§15.1), et depuis le lot 5 `App.chargerSheetJS()` (§18.1).
+`App.signalerErreur(erreur)` (texte de `App.messageErreur(erreur)` ; `App.raisonErreur(erreur)`
+pour le glisser dans une phrase ; fichier abîmé : texte selon le rôle, T201), depuis le lot 3
+`App.chargerEcharts()` et `App.adressesReseau()` (§15.1), et depuis le lot 5 `App.chargerSheetJS()` (§18.1).
 
 **Menu** : latéral sur grand écran (≥ 1100 px), repliable en icônes (mémorisé
 `prevo.menuReplie`), icônes seules de 641 à 1099 px, barre du bas sur téléphone (≤ 640 px :
@@ -934,10 +1017,11 @@ Restent :
 - Points ouverts du lot 5 (§18.11), dont les contrôles des formulaires à appliquer ou non à l'import.
 - Piste notée par Nicolas : stocker le prix unitaire dans `mouvements_stock` au moment de la sortie
   pour figer le coût des OT passés (changement de format, lève la limite de D24 ; à décider).
-- Nouveau format : ajouter les champs en fin de table avec `depuisVersion: N`, porter
-  `Schema.version` à N, ajouter `avant-format-vN` aux listes fermées de motifs de sauvegarde
-  (`MOTIFS_SAUVEGARDE` de `serveur.py` et de `js/stockage-dossier.js`) : `mettreAJourVersionSchema`
-  fera la sauvegarde puis le passage.
+- Nouveau format : suivre la liste de contrôle de [FORMAT.md](FORMAT.md) §11 (champs en fin de table avec
+  `depuisVersion: N`, `Schema.version` à N, étape dans `Formats.ETAPES` et son miroir `ETAPES_FORMAT` de
+  `serveur.py`, `avant-format-vN` dans les listes fermées `MOTIFS_SAUVEGARDE` de `serveur.py` et de
+  `js/stockage-dossier.js`). La sauvegarde puis le passage sont faits par le serveur à son démarrage (mode
+  serveur) ou par `Donnees.migrerAuFormatCourant` à l'ouverture (mode dossier) : §5.6.
 
 ## 14. Contrat du lot 2 (CDC validé le 2026-10-20 : D19–D32)
 
@@ -968,6 +1052,10 @@ a été fait et pourquoi.
   démarrage par `Donnees.mettreAJourVersionSchema()`, **juste après** une sauvegarde automatique
   `AAAA-MM-JJ_HHMMSS_avant-format-v2` ; sans sauvegarde confirmée, pas de passage (nouvel essai à
   la prochaine ouverture). Détail au §5.6 ; motif de sauvegarde au §6 et au §7.
+  Mis à jour par le chantier « socle de données » (D168) : le passage n'est plus fait par le navigateur pour tous.
+  En mode serveur, c'est le **serveur, à son démarrage**, avant toute connexion ; en mode dossier, c'est
+  `Donnees.migrerAuFormatCourant()` (ancien nom `mettreAJourVersionSchema`, même fonction), à l'ouverture. Dans
+  les deux cas, sauvegarde `avant-format-vN` d'abord ; voir §5.6 et [FORMAT.md](FORMAT.md) §6.
 
 ### 14.2 Découpage des modules (D28) et ordre de chargement
 Un module = un préfixe de fichiers, chacun ≤ 700 lignes (dérogation assumée au « un fichier JS par
@@ -1285,7 +1373,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   « Indicateurs » (ordre 50, `indicateurs`), « Équipe » (ordre 85, `equipe`, groupe
   « Administration », avant Paramètres).
 - **Ordre de chargement** (remplace celui du §14.2 ; `ORDRE_MODULES` de `tests/test_depot.py` change
-  avec lui) :
+  avec lui ; T329 : `brouillons.js` juste après `poste.js`, voir « Brouillons gardés sur l'appareil ») :
   ```
   apropos.js  mise-a-jour.js  accueil.js  causes-frequentes.js
   parc-regles.js  parc-arbre.js  parc-formulaires.js  parc-etiquettes.js  parc-fiche.js
@@ -1298,7 +1386,9 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   planning-regles.js  planning-ecritures.js  planning-ecrans.js
   indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
   rapport-contenu.js  rapport-ecrans.js
-  parametres.js  parametres-codes.js  (puis js/app.js)
+  zip-donnees.js
+  zip-tables.js  zip-flux.js  zip-lecture.js
+  parametres.js  parametres-codes.js  parametres-solo.js  parametres-sauvegardes.js  parametres-zip.js  parametres-acces.js  (puis import-*.js, §18.1, et wiki-*.js, §20 ; puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
   `indicateurs-regles.js`, qui aurait dépassé 700 lignes. Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
@@ -1310,6 +1400,12 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   Lot 7 (T170) : `parametres-acces.js` (objet `ParametresAcces`, carte « Accès et installation » de Paramètres, §22.10)
   se charge après `parametres-sauvegardes.js` et se relie à `Parametres.interne` par le même relais (`carteAcces`,
   `brancherAcces`).
+  Chantier socle de données (T189, D171 ; T228 : ZIP écrit par `ZipFlux`, un document à la fois, limites de l'import contrôlées sur les tailles des documents avant toute lecture, photos stockées sans compression, plus de `JSZip.generateAsync`) : `zip-donnees.js` (objet `ZipDonnees`, export ZIP complet : 24 CSV, documents
+  cités, rapports figés, `manifeste.json`, jamais `acces/` ; `App.exporterZip` délègue) se charge après `rapport-ecrans.js`.
+  Socle de données (T190, D172) : `zip-lecture.js` (objet `ZipLecture`, `lire(source)` : lecture et contrôles stricts d'un ZIP de données, migration en mémoire, sans rien écrire) se charge après `zip-donnees.js`. Lecture en deux passes (T205) : `lire` décompresse chaque document pour le contrôler puis l'oublie (le résultat n'en garde que nom, taille et empreinte SHA-256) ; `lireDocument(lu, nom)` le relit depuis le même fichier, taille, CRC-32 et empreinte revérifiés, au moment de l'écrire (`parametres-zip.js`, un document à la fois) ; pic de mémoire : les tables + un document (`memoire()` : mesure de la dernière lecture, pour les tests). Lecture par morceaux (T227, morceau 2 de T215) : le ZIP est lu par `ZipFlux` (tranches, décompression contrôlée), jamais en entier ni gardé ; plus de JSZip (contrôle 4 retiré, les autres numéros gardés) ; navigateur sans « deflate-raw » : refus `ZipFlux.MESSAGE_NAVIGATEUR` avant toute lecture. Limites (T229, décisions de Nicolas du 05/11) : ZIP de 4 Go au plus sans ZIP64 (`LIMITES.zip` = `ZipFlux.LIMITES.octets`, 4 Go moins 2 octets, lu au chargement : `zip-flux.js` doit se charger avant), 4 Go décompressés, 10 000 entrées ; un message de refus dit « plus de 4 Go » quand l'arrondi égalerait la limite.
+  Socle de données (T213) : `zip-tables.js` (objet `ZipTables`, `lire(contenus, fichiersTables, deja, manifeste)` : étape 11 de `ZipLecture`, les tables du ZIP lues, CSV illisibles refusés sauf fichier marqué « abime » au manifeste à l'empreinte juste, rendu dans `abimes` ; format d'origine, migration en mémoire, tables absentes) se charge juste avant `zip-lecture.js`, qui l'appelle : sorti de `zip-lecture.js`, arrivé à 700 lignes.
+  Socle de données (T226, morceau 1 de T215 « ZIP par morceaux ») : `zip-flux.js` (objet `ZipFlux`, module bas niveau sans écran ni stockage : `lireRepertoire(blob)` lit le répertoire central par tranches (`Blob.slice`, jamais le fichier entier), `contenu(blob, entree)` décompresse une entrée en flux (`DecompressionStream` « deflate-raw »), taille réelle et CRC-32 contrôlés pendant et après ; `ecrivain({ date })` écrit un ZIP en Blob composé (`CompressionStream`), sans descripteur de données ni ZIP64, 4 Go et 65 534 entrées au plus ; erreurs `ErreurZip` à code ; pas de JSZip en secours : sans « deflate-raw », `MESSAGE_NAVIGATEUR`) se charge juste avant `zip-lecture.js`. L'import (T227) et l'export (T228) s'en servent à la place de JSZip, retiré du dépôt en T229 (`js/lib/jszip.min.js`, sa balise, sa licence et sa ligne d'« À propos »).
+  Socle de données (T191, D172) : `parametres-zip.js` (objet `ParametresZip`, bouton « Importer un ZIP… » de la carte « Sauvegardes » : import par remplacement complet, §22.11 « Import ZIP » ; relié à `Parametres.interne` par les relais `blocImportZip` et `brancherImportZip`) se charge juste après `parametres-sauvegardes.js`.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
   `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
@@ -2654,11 +2750,14 @@ Version de clôture `v1.2.0`.
   | `decide_par`, `decide_le` | texte, `date_heure` | qui a décidé, et quand |
   | `motif` | `texte_long` | motif d'un rejet ; « rejoué : page créée entre-temps » (D112) |
 
-- **Passage au format 3** : `Donnees.mettreAJourVersionSchema()` (§5.6) tel quel, motif `avant-format-v3`
+- **Passage au format 3** : au lot 6, `Donnees.mettreAJourVersionSchema()` (§5.6) tel quel, motif `avant-format-v3`
   (déjà dans `MOTIFS_SAUVEGARDE` de `serveur.py` et `js/stockage-dossier.js`) ; aucun fichier réécrit sauf
   `parametres.csv` ; une base au format 1 passe directement au format 3. Une base déjà en version 3 (première
   version du lot, jamais publiée) n'a rien à faire. « Créer une base vide » et la démo portent
   `version_schema` = 3. `serveur.py` : `TABLES` à 24 (test de cohérence avec `js/schema.js`).
+  Depuis le chantier « socle de données » (D167, D168), le passage se fait étape par étape (1 → 2 → 3, colonnes
+  ajoutées en fin de table, une ligne de journal par étape), par le serveur à son démarrage en mode serveur et par
+  `Donnees.migrerAuFormatCourant()` à l'ouverture en mode dossier : §5.6 et [FORMAT.md](FORMAT.md) §6.
 - `Donnees.problemes()` : lien vers une page inexistante ou archivée, OT cité inexistant, deux pages actives
   de même `cle`, entrée « validée » dont les changements ne sont pas dans les pages (`attention`) ; page
   active sans OT cité, contradiction ouverte depuis plus de `contradictionAncienneJours` (`info`).
@@ -3196,9 +3295,25 @@ installer.
   (`{"version": "1.2.0", "date": "AAAA-MM-JJ", "adresse": "<release GitHub>", "nouveautes": [≤ 2 puces du CHANGELOG]}`,
   UTF-8, LF) et publié à la racine du site à chaque release, servi avec `Access-Control-Allow-Origin: *` (lecture
   depuis le poste, autre origine ; docs/RELEASE.md).
-- **Lecture** (`js/modules/mise-a-jour.js`, `MiseAJour`, chargé juste après `apropos.js`) : seulement si le paramètre
-  `maj_signalee` vaut `1` (Paramètres, responsable, section « Mises à jour », `0` par défaut), sur le poste du
-  responsable, jamais en version web (`App.versionWeb`) ; `App` appelle `MiseAJour.verifier()` une fois l'application
+- **T305 (D174-D176, décisions de Nicolas des 06 et 07/11)** : **active par défaut**, coupée par `maj_signalee` = `0`
+  (Paramètres › Mises à jour : la case, cochée par défaut, dit à côté ce qui est lu, quand, ce qui part et comment
+  couper ; rien dans l'assistant d'installation). Tant que le responsable n'a rien réglé (clé absente ou vide), un
+  bandeau d'information unique par poste le dit sur son accueil (`#maj-information`, « Compris » : `prevo.majInformee`).
+  Requête minimale : `fetch(adresse, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
+  redirect: 'error' })`, sans paramètre ni en-tête ajouté : ni cookie, ni adresse de la page, ni identifiant, numéro
+  d'installation ou statistique. Ce que prevo.pro voit quand même, comme pour toute visite : l'adresse IP publique de
+  l'atelier, le navigateur (User-Agent) et l'en-tête `Origin` que le navigateur ajoute lui-même à une lecture vers un
+  autre site (l'adresse locale de Prévo, par exemple `https://192.168.1.20:8443`, ou `null` en fichier local) : accepté
+  par Nicolas le 07/11 et dit dans le guide (§2.9). Adresse de téléchargement en **liste blanche** (D176,
+  `MiseAJour.adresseDeTelechargementPermise`) : `https://prevo.pro/…` ou `https://github.com/nicoboy49/prevo/…`, hôte
+  exact, sans nom ni mot de passe, port par défaut ; sinon le fichier est ignoré (aucun bandeau). `nouveautes_en`
+  (facultatif, mêmes règles que `nouveautes`) est montré dans un Prévo affiché en anglais, `nouveautes` sinon ;
+  textes toujours affichés comme du texte. Règles du fichier (seule source) : docs/RELEASE.md. La seule connexion que Prévo ouvre de lui-même vers Internet est cette lecture de version.json ; s'y ajoutent, seulement si vous les utilisez, l'assistant IA en ligne et la dictée vocale.
+  Le serveur n'a plus de téléchargement de secours de mkcert (`telecharger_mkcert`, sans appel, retiré par T305 :
+  mkcert est dans le zip depuis 2.0.0-beta.1).
+- **Lecture** (`js/modules/mise-a-jour.js`, `MiseAJour`, chargé juste après `apropos.js`) : sauf si le paramètre
+  `maj_signalee` vaut `0` (Paramètres, responsable, section « Mises à jour », `1` par défaut depuis T305), sur le poste
+  du responsable, jamais en version web (`App.versionWeb`) ; `App` appelle `MiseAJour.verifier()` une fois l'application
   prête (après la marque `prevo:pret`). Au plus une lecture par jour et par poste : `prevo.majLecture` (localStorage)
   garde la date et le résultat, un échec comptant pour la lecture du jour ; `fetch` sans cache, délai 5 s ; le fichier
   est vérifié (version `x.y.z`, adresse `https://`, date `AAAA-MM-JJ` facultative, nouveautés : 3 au plus, 200
@@ -3216,6 +3331,19 @@ installer.
   par jour (rechargements) ; « Ignorer » tient au rechargement ; version égale ou plus ancienne, fichier mal formé,
   absent (404) ou serveur injoignable : rien et aucune erreur JavaScript ; `version.json` de la release (champs,
   nouveautés tirées du CHANGELOG, sans Markdown) ; `test_depot.py` : ordre des modules.
+
+### 21.1 « Suggérer une amélioration » (T306)
+
+Lien visible par tous les profils dans « À propos » (`#apropos-suggestion-lien`, repli `#apropos-suggestion-courriel`)
+et au pied du menu (`#menu-suggestion-lien`, rempli par `placerSelecteurLangue` de `js/app.js`). Il ouvre un nouvel
+onglet (`target="_blank" rel="noopener noreferrer"`) sur le formulaire d'issue GitHub
+`https://github.com/nicoboy49/prevo/issues/new?template=<2-proposer-une-amelioration.yml | 3-suggest-an-improvement.yml>&title=…&contexte=…`
+(modèle anglais si `I18n.langue` vaut `en`) ; `contexte` ne porte que la version de Prévo, la langue active et le
+navigateur réduit à « nom version, système » (`Apropos.navigateurReduit`, `navigator.userAgentData` sinon
+`navigator.userAgent`) : aucune donnée de la base, aucun nom, aucun jeton. Repli : `mailto:contact@prevo.pro` au même
+contenu. Les adresses sont dans `Apropos.ADRESSES` (`js/modules/apropos.js`), un seul endroit, réutilisable par la
+mention « traduction automatique » du Lot 5. Aucune requête au chargement : un lien cliqué, la politique de sécurité
+du contenu ne change pas. Test : `test_suggestion.py`.
 
 ## 22. Contrat du lot 7 — accès et installation (CDC validé le 2026-10-26 : D121–D140, CS119–CS137)
 
@@ -3243,7 +3371,8 @@ qui contourne ces règles.
 
 Fichier à côté de `serveur.py` (jamais dans `donnees/`, jamais sauvegardé ni exporté), JSON UTF-8, écrit de façon
 atomique ; priorité : ligne de commande > fichier > défauts. `serveur.py --aide` imprime chaque clé, sa valeur par
-défaut et son texte d'aide (le même que `js/modules/acces-textes.js`).
+défaut et son texte d'aide (le même que `js/modules/acces-textes.js`, dont les textes sont dans
+`js/i18n/aide/<langue>.js`, clés `aide.acces.*`, depuis T247).
 
 | Clé | Type, défaut | Rôle |
 | --- | --- | --- |
@@ -3262,7 +3391,7 @@ défaut et son texte d'aide (le même que `js/modules/acces-textes.js`).
 | `demarrage` | `aucun` \| `systeme` \| `session` | tâche planifiée (§22.9) |
 | `veille_desactivee` | booléen | réglages `powercfg` appliqués |
 | `copie_sauvegardes` | chemin, `""` | copie externe nocturne (§22.11) |
-| `quota_documents_mo` | 2048 | plafond du dossier `documents/` |
+| `quota_documents_mo` | 4096 (T250 ; 2048 avant) | plafond du dossier `documents/`, autant que l'import ZIP (4 Go) |
 | `ia_fournisseur`, `ia_url`, `ia_cle`, `ia_en_ligne` | `ollama` \| `openai`, `http://localhost:11434`, `""`, faux | fournisseur d'IA côté serveur (§22.12) ; la variable `PREVO_IA_CLE` passe avant `ia_cle` |
 | `_aide` | texte | commentaire d'en-tête pour qui ouvre le fichier |
 
@@ -3275,7 +3404,30 @@ navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
 - `comptes.json` : `{ "version": 1, "comptes": [ { "identifiant": "prenom.nom", "prenom", "nom", "role":
   "responsable"|"technicien"|"demandeur", "technicien_id", "actif": true, "algo": "scrypt-n15-r8-p3"|
   "pbkdf2-sha256-600000", "sel": base64, "empreinte": base64, "a_changer": bool, "cree_le", "modifie_le",
-  "mot_de_passe_le" } ] }`.
+  "mot_de_passe_le", "langue"? } ] }`.
+  **Langue du compte (T298, D148)** : champ facultatif `langue`, absent ou vide = la langue de l'installation.
+  Valeur fermée : une langue déclarée par `js/i18n/langues.js` (`langues_declarees`, la valeur exacte : ni espace ni
+  autre casse), ou vide (le champ est alors retiré) ; tout le reste → 400 `comptes.langue_inconnue` (ou
+  `comptes.texte_attendu` pour un non-texte à `/api/acces/comptes`), rien d'écrit (`langue_de_compte`). Elle se
+  change par la personne elle-même (`POST /api/mot-de-passe {"langue"}` seul, §22.4 : seul ce champ change, ni sel, ni
+  empreinte, ni `modifie_le`, aucune session fermée) ou par le responsable (création et `action: modifier` de
+  `/api/acces/comptes…`). Une valeur hors liste écrite à la main est ignorée (`langue_publique` : '' dans la session).
+  La 2.0.0 bêta 2 relit sans erreur un `comptes.json` qui porte `langue` et garde le champ (`compte_public` le laisse
+  passer vers le responsable ; ses réécritures reprennent chaque compte tel qu'il a été lu) ; sans changement de langue,
+  la 2.0.1 ne réécrit pas `comptes.json` (base bêta 2 relue à l'octet près, `tests/test_langue_compte.py`).
+  **Identifiants et noms (T301, D164 ; règle de Nicolas : une même personne n'a jamais deux identifiants, deux
+  personnes jamais le même)** : une seule règle, `plier_nom` (serveur.py) : İ, I, ı, i → i ; casse pliée (casefold,
+  ß → ss) ; accents retirés (ş → s, ğ → g, ç → c, ö → o, ü → u) ; elle fabrique l'identifiant (`identifiant_depuis` :
+  « Ayşe Işık » → `ayse.isik`, « Élodie Le Gall » → `elodie.le-gall`, inchangé) et compare les noms (`forme_de_nom`,
+  lien d'un responsable à sa fiche de technicien). Création : un compte (actif ou non) au même prénom et au même nom
+  ramenés ainsi → 400 `comptes.meme_personne` avec son identifiant, sauf `autre_personne` vrai (case « C'est une autre
+  personne » d'Équipe › Accès, montrée après ce refus) : « .2 ». Identifiant tapé (`comptes_designes`) :
+  l'identifiant exact tranche toujours ; sinon les comptes que le texte désigne ramené par `plier_nom`, ou par la règle
+  d'avant T301 (« Işık » → `is-k` : les comptes créés avant ne sont jamais renommés). Plusieurs comptes désignés :
+  `trouver_compte` n'en rend aucun (réinitialisation : 400 `comptes.plusieurs` avec la liste, pour le responsable ou
+  la ligne de commande) ; à la connexion, 401 `sessions.identifiant_ambigu` (« tapez-le exactement ») sans vérifier
+  aucun mot de passe, l'essai comptant comme un échec (blocage au 10e) ; Prévo ne choisit jamais un compte à la place
+  de la personne. Les essais comptent par compte désigné (« YILMAZ » et « yilmaz » ensemble), sinon par texte ramené.
 - `sessions.json` : `{ "<sha256 du jeton>": { "identifiant", "cree_le", "vu_le", "longue": bool, "agent" } }` —
   seule l'empreinte du jeton est gardée (SHA-256 en hexadécimal) ; dates en heure locale `AAAA-MM-JJTHH:MM:SS`.
 - `appareils.json` : `{ "invitations": [ { "id", "empreinte", "cree_le", "expire_le", "revoquee" } ], "appareils":
@@ -3284,7 +3436,10 @@ navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
   caractères hexadécimaux tirés au sort, jamais réemployés ; `invitation` = l'id de l'invitation qui a servi.
 - `journal-acces.csv` (`;`, UTF-8 avec BOM, apostrophe de protection) : `date;qui;adresse;agent;resultat;tailscale`,
   `resultat` ∈ `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`,
-  `reinitialisation`, `creation`, `modification` ; lignes de plus de 12 mois purgées à la première écriture du jour.
+  `reinitialisation`, `creation`, `modification`, et `langue:<avant>><après>` (T298 : langue d'un compte changée,
+  `installation` pour vide : `langue:installation>en`, `langue:en>fr` ; après `modification` quand c'est le
+  responsable ; Équipe › Accès › Journal : « Langue changée (installation → en) ») ; lignes de plus de 12 mois purgées
+  à la première écriture du jour.
 
 Mot de passe : 12 à 256 caractères, aucune règle de composition ; échec : délai `min(2^(n-5), 8)` s dès le 5e échec
 consécutif, blocage 15 min au 10e (par compte), ralentissement de 1 s par adresse IP au-delà de 20 échecs par heure ;
@@ -3360,10 +3515,10 @@ Précisions de T153 (appareils enrôlés, D125, CS123) :
 
 | Méthode et chemin | Qui | Réponse |
 | --- | --- | --- |
-| `GET /api/session` | tous | `{"comptes": bool, "session": null \| {"identifiant", "role", "prenom", "nom", "technicien_id", "a_changer", "appareil": bool}}` ; sans comptes : `{"comptes": false, "session": null}` |
+| `GET /api/session` | tous | `{"comptes": bool, "session": null \| {"identifiant", "role", "prenom", "nom", "technicien_id", "a_changer", "appareil": bool, "langue"}}` (`langue` : celle du compte si c'est une langue déclarée, sinon "" ; toujours "" pour un appareil, T298) ; sans comptes : `{"comptes": false, "session": null}` |
 | `POST /api/connexion` | tous | corps `{"identifiant", "mot_de_passe", "rester": bool}` → 200 `{"comptes": true, "session": {…}}` + cookie, 401, 429 ; 400 corps invalide |
 | `POST /api/deconnexion` | session | 200 `{"comptes": true, "session": null}`, cookie effacé (`id=; …; Max-Age=0`) |
-| `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 comme la connexion (session neuve, toutes les autres sessions du compte fermées, « rester » gardé) ; 400 si le nouveau est trop court, trop long ou égal à l'actuel ; 403 si l'actuel est faux (compté comme un échec de connexion) ; 429 pendant un blocage |
+| `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 comme la connexion (session neuve, toutes les autres sessions du compte fermées, « rester » gardé) ; 400 si le nouveau est trop court, trop long ou égal à l'actuel ; 403 si l'actuel est faux (compté comme un échec de connexion) ; 429 pendant un blocage. T298 : `{"langue": code}` **seul** → la langue du compte de la session (jamais un autre), sans mot de passe demandé ni session fermée : 200 `{"comptes": true, "session"}` à jour ; 400 `comptes.langue_inconnue` hors liste (rien d'écrit) ; `langue` avec tout autre champ (`actuel`, `nouveau`…) → 400 `sessions.langue_seule`, rien de changé ni compté ; 403 pour un appareil enrôlé (`sessions.langue_appareil`) et un mot de passe provisoire |
 | `POST /api/enroler` | tous (route publique) | `{"invitation", "nom"}` → 200 `{"comptes": true, "session": {…, "appareil": true}}` + cookie `appareil` (un an) ; 401 invitation inconnue, expirée ou révoquée ; 403 enrôlement désactivé (`demandeurs_avec_compte`) ; 400 corps ou nom invalide |
 | `GET /api/acces/comptes` | responsable | `{"comptes": [ … ]}` par `compte_public` : jamais d'empreinte, de sel ni d'algorithme |
 | `POST /api/acces/comptes` | responsable | `{"prenom", "nom", "role", "technicien_id"}` → 200 `{"compte", "mot_de_passe_provisoire"}` : 16 caractères, `a_changer` vrai, rendu une seule fois (jamais écrit dans un fichier, le journal ni la console) ; 400 champ inconnu ou manquant, rôle inconnu, technicien absent de `techniciens.csv` |
@@ -3463,7 +3618,9 @@ chacun relu sur le serveur à chaque ouverture :
   (`action: modifier`), « Réinitialiser… » (confirmation, `action: reinitialiser`), « Désactiver » (confirmation,
   danger) ou « Activer » ; jamais de désactivation de son propre compte depuis l'écran. Le mot de passe provisoire
   (création, réinitialisation) est montré une seule fois dans une fenêtre (`#acces-mot-de-passe-provisoire`,
-  champ en lecture seule à noter) et n'est ni mémorisé ni réécrit dans la page.
+  champ en lecture seule à noter) et n'est ni mémorisé ni réécrit dans la page. T298 : « Créer un compte » et
+  « Modifier… » ont la liste « Langue » (`langue` : « Langue de l'installation », vide, puis les langues déclarées,
+  chacune sous son nom dans sa langue).
 - **Appareils** : « Inviter un appareil » avec la durée (1 h, 24 h, 3 jours, 7 jours → `heures` de
   `POST /api/acces/invitations`) ; la fenêtre montre une seule fois le QR (`UI.qrSvg`) et le lien
   `<adresse des QR>/#/enroler/<jeton>`, l'adresse étant celle des étiquettes (`App.urlFicheEquipement`, donc
@@ -3585,6 +3742,28 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   (`location.replace`, la route `#/…` gardée) ; échec ⇒ étapes « Faites confiance au PC atelier » du système
   reconnu (`navigator.userAgent` : Android, iPhone/iPad, sinon les deux au choix), numérotées, une par écran du
   téléphone, captures, bouton « Réessayer ».
+- **Langue de la porte et de la connexion** (T297, D148 ; conception validée par Nicolas le 07/11) : serveur.py pose
+  la langue de l'installation dans l'attribut `data-langue-installation` de `porte.html` (langue_defaut déclarée et
+  bien formée, `MOTIF_CODE_LANGUE` + `langues_declarees()`, sinon « fr ») et de `index.html` (seulement quand
+  langue_defaut est réglée ; sans elle, la page garde la langue du navigateur, D150) ; `js/i18n-chargeur.js` la lit
+  (`I18n.langueDeLaPage`) : choix de l'appareil (`prevo.langue`), sinon installation, sinon français. Sélecteur en haut
+  de la porte et de l'écran de connexion, sans menu : un globe et les langues écrites chacune dans sa langue, aucun mot
+  autour (`aria-label` « Langue / Language »). Sans session, la porte sert un seul fichier de plus, `js/i18n-chargeur.js`
+  (texte public, il ne lit que le stockage de l'appareil) ; aucune route, aucune donnée, `POLITIQUE_PORTE` inchangée.
+  La porte (http) et l'application (https) n'ont pas le même stockage : la porte passe sa langue à l'application dans
+  l'adresse qu'elle ouvre déjà (T324, Nicolas, 07/11 : `?langue=<code>`, et `langue_neuve=1` si elle vient d'être
+  choisie sur la porte ; `Porte.adresseCible`) ; `js/i18n-chargeur.js` la reprend comme choix du poste quand il n'en a
+  pas, ou quand elle vient d'être choisie (un choix fait ensuite dans l'application n'est pas écrasé), puis retire les
+  deux paramètres de l'adresse (`history.replaceState`) ; valeur hors des langues déclarées : ignorée. Ordre : langue
+  du compte une fois connecté, sinon choix de la porte ou du poste, sinon langue de l'installation. Aucune adresse
+  nouvelle : le serveur sert la même page.
+- **Langue de la console et du journal du serveur** (T297, D157) : français ou anglais selon langue_defaut (fr → fr,
+  toute autre langue déclarée → en), sinon la langue du système (`locale.getlocale()`) ; choisie au démarrage
+  (`choisir_langue_console`) : un changement dans Paramètres vaut au redémarrage suivant. Chaque message de console est
+  un `traduisible` ; en anglais, `afficher` écrit la clé `serveur.<code>` de `js/i18n/en.js` (`lire_textes_anglais`,
+  petit lecteur, aucun eval ; le français si la clé manque). Restent en français : `--aide`, le journal des requêtes,
+  le détail des pertes d'un fichier abîmé. Les lanceurs (`Lancer_GMAO.bat`, `Reinitialiser_mot_de_passe.bat`,
+  `lancer.sh`) écrivent leurs lignes d'avant Python en français puis en anglais.
 - **Adresses données par Prévo** (QR d'accueil, étiquettes, fiche d'accès, guide, `/api/info`) : toujours la porte
   (`http://<adresse>:<port_http>/`) ; l'adresse https n'est jamais affichée.
 - **Certificat local** : `outils-tiers/mkcert.exe` (ou `mkcert` sur Linux/macOS) dont l'empreinte SHA-256 est
@@ -3605,7 +3784,8 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   `certificat_auto` faux ⇒ « Démarrage refusé », code 2, aucun écouteur ouvert. `GestionnaireRequetes` :
   `client_de_confiance()` (127.0.0.1, ::1 ; T164 y ajoute le mandataire attesté), `sur_la_porte()`, `servir_porte`
   (après `hote_autorise` et `analyser_chemin`, avant tout contrôle d'accès : `fichier_de_la_porte` — `acces/**` sauf
-  `porte.html`, `favicon.svg`, `css/polices/**`, s'ils existent —, `/acces/ca.crt`, sinon `page_de_porte()` ; un PUT
+  `porte.html`, `favicon.svg`, `css/polices/**`, `js/i18n.js` et `js/i18n/**` (textes de l'interface, T234), s'ils
+  existent —, `/acces/ca.crt`, sinon `page_de_porte()` ; un PUT
   ou POST n'est jamais lu, connexion fermée après la réponse). La page sur le disque porte `data-port-https=""`, rempli
   au service par `port_https` ; sa politique est `POLITIQUE_PORTE` (`connect-src 'self' https://<hôte de la
   requête>:<port_https>`, `img-src 'self' data:`), jamais HSTS. `/acces/ca.crt` (porte et application) :
@@ -3623,7 +3803,9 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   https + pathname + search + hash)` ; système par `navigator.userAgent` (`android` ; `iPhone|iPad|iPod` ou
   `Macintosh` tactile ⇒ iPhone ; sinon choix) ; sans autorité (`/acces/ca.crt` 404), le bouton de téléchargement est
   remplacé par l'explication. Illustrations `acces/captures/<systeme>-<n>-<etape>.svg` (schémas, à remplacer par les
-  captures de recette sous le même nom). Tests : `tests/atelier.py` (`ServeurAtelier` : 0.0.0.0, comptes, faux mkcert
+  captures de recette sous le même nom) ; leur version anglaise, même nom, dans `acces/captures/en/`, prise par la
+  porte dans toute autre langue que le français (T341 ; D163 révisée le 08/11 : les illustrations suivent la langue
+  de la porte). Tests : `tests/atelier.py` (`ServeurAtelier` : 0.0.0.0, comptes, faux mkcert
   pour l'adresse réseau du PC, le téléphone simulé se connecte à cette adresse et le PC à 127.0.0.1 ; aucune sortie du
   PC), `tests/test_acces_porte.py`.
 
@@ -3831,17 +4013,22 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   reprend à l'étape 8), puis `config.relancer(cible)`. Rend `{"copie": nombre de fichiers, "vers", "relance": bool}`.
   L'ancien dossier n'est jamais supprimé. `{"rester": true}` (« Rester ici », T171) : `deplacement_refuse` vrai dans
   le brouillon, étape `a_faire`, rien de copié ; une demande de déplacement ultérieure l'efface.
-- `POST terminer` `{"base": "vide" | "demo"}` (défaut `vide` ; `demo` seulement si `base_presente` est faux dans le
-  brouillon, 400 sinon : les CSV existants ne sont jamais remplacés ; valeur inconnue 400) → réglages = défauts +
+- `POST terminer` `{"base": "vide" | "demo", "langue_defaut": code}` (`base` : défaut `vide` ; `demo` seulement si
+  `base_presente` est faux dans le brouillon, 400 sinon : les CSV existants ne sont jamais remplacés ; valeur inconnue
+  400 ; `langue_defaut` (T296) : défaut `fr`, sinon une langue déclarée par `js/i18n/langues.js` — `langues_declarees`
+  y lit chaque ligne `I18n.declarer({ code: '…'`, la liste même du navigateur, relue à chaque appel ; fichier illisible :
+  `fr` seul —, 400 `installation.langue_inconnue` sinon, rien d'écrit) → réglages = défauts +
   brouillon, `ecoute` dérivée, `_https_auto` ; 400 au message si `comptes`
   sans responsable actif, si `verifier_regles_portee` refuse (réseau sans https ni mandataire…) ou si le réseau
   compte sur mkcert absent (Prévo refuserait de démarrer) ; `demo` ⇒ `installer_jeu_de_demo` d'abord (un échec ne
   laisse rien d'écrit) ; puis `prevo.config.json` écrit **seulement ici**
   (`ecrire_configuration` s'il n'existe pas, `modifier_configuration` sinon : `_aide`, `ia_cle` et les clés inconnues
-  gardés) au chemin de `--config` (défaut : à côté de `serveur.py`) ; Solo ⇒ `poser_mode_solo` : `mode_solo` = 1,
-  `cloture_une_etape` = 1, `solo_technicien_id` dans `parametres.csv` (écriture de table normale, sauvegarde du
-  jour d'abord, toutes les autres lignes gardées ; fichier créé avec `version_schema` s'il manque, `version_schema`
-  jamais réécrit sinon) ; brouillon supprimé ; `config.relancer(None)`. Rend
+  gardés) au chemin de `--config` (défaut : à côté de `serveur.py`) ; puis `poser_parametres` dans `parametres.csv`
+  (écriture de table normale, sauvegarde du jour d'abord, toutes les autres lignes gardées ; fichier créé avec
+  `version_schema` en tête s'il manque, `version_schema` jamais réécrit sinon) : Solo ⇒ `mode_solo` = 1,
+  `cloture_une_etape` = 1, `solo_technicien_id` (`valeurs_du_mode_solo`) ; base absente au départ (`base_presente`
+  faux) ⇒ `langue_defaut` (T296), aussi après le jeu de démo ; une base présente au départ ne reçoit jamais de langue
+  ici (absente, elle vaut `fr`, §24.11) ; brouillon supprimé ; `config.relancer(None)`. Rend
   `{"configuration" (les clés écrites), "fichier", "relance": bool, "base"}`.
 - `GET fiche` → données de la fiche d'accès (T168 la met en page), d'après le brouillon, sinon le fichier de
   configuration (ce que `terminer` vient d'écrire), sinon les réglages du serveur : `{"situation", "portee",
@@ -3938,8 +4125,11 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   invite d'administrateur annoncée ; élévation refusée → message, l'étape reste ouverte ; commandes hors Windows),
   `sauvegardes` (dossier ou « Plus tard »), `deplacer` (carte `#inst-dossier` du récapitulatif quand l'étape est à
   faire et que le brouillon n'a pas `deplacement_refuse` : « Déplacer Prévo dans C:\Prevo (recommandé) » avec ce que
-  ça fait, ou « Rester ici » → `{"rester": true}`), `terminer` (avec `{"base"}` quand la carte `#inst-base` « Par quoi
-  commencer ? » est montrée : `base_presente` faux dans le brouillon) puis attente de la relance (`attendreRelance`
+  ça fait, ou « Rester ici » → `{"rester": true}`), `terminer` (avec `{"base", "langue_defaut"}` quand la carte
+  `#inst-base` « Par quoi commencer ? » est montrée : `base_presente` faux dans le brouillon ; la carte porte la liste
+  « Langue de Prévo » `#inst-langue_defaut`, T296 : les langues déclarées sous leur nom dans leur langue,
+  `UI.optionsLangues`, proposée = `UI.langueDuNavigateur()` ; l'assistant reste dans la langue de la page, la langue
+  choisie s'applique à la fin, quand Prévo s'ouvre sur la base créée) puis attente de la relance (`attendreRelance`
   interroge toutes les 2 s jusqu'à ce que le serveur relancé réponde : après `terminer`, `/api/info` avec
   `installation_a_faire` faux ou 401, rechargement sur `#/accueil` ; après `deplacer`, `GET etat` avec `dossier`
   égal au nouveau dossier, rechargement sur `#/installation` où l'assistant reprend à l'étape 8 ; message au bout de
@@ -3968,7 +4158,9 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
     les 24 tables (sauvegarde du jour d'abord), puis, en Solo, recrée le technicien « moi » dans la table de la démo
     (`technicien_moi` : TEC-0005, ou un technicien de la démo du même nom), met son identifiant dans le brouillon
     (`poser_mode_solo` le prend) et dans le compte responsable lié (`modifier_compte`). `vide` : rien de plus que ce
-    que Solo pose ; hors Solo la base reste sans CSV et la première ouverture propose « démo ou vide » comme en 1.2.
+    que Solo pose, et `langue_defaut` (T296) ; hors Solo, `parametres.csv` seul (`version_schema`, `langue_defaut`) :
+    la base existe, les autres tables manquent et se lisent vides (comme en Solo), la première ouverture ne repropose
+    plus « démo ou vide » (avant T296 : base sans CSV, « démo ou vide » comme en 1.2).
   - *Profils remplacés par la connexion* : avec `comptes`, `prevo.profil` mémorisé par 1.2 est ignoré (T155 : la
     session fait foi, l'écran de connexion s'affiche, `App.profil` vient de la session) ; sans comptes (Solo « ce
     PC »), le profil mémorisé reste valable. Prouvé par `test_installation_migration`.
@@ -3987,7 +4179,10 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   `PREVO_MKCERT` et `PREVO_TAILSCALE` ; parcours Solo « ce PC » à 1280 px jusqu'à « Terminer » et le fichier écrit,
   Atelier à 375 px sans défilement horizontal et zones de 48 px, informaticien sur une page, les quatre textes de chaque
   étape comparés à `AccesTextes`, « Régler autrement », impression en média `print`, client du réseau sans assistant,
-  `/` sans configuration inchangé) ; `tests/test_installation_api.py` (serveur du processus avec `config.lancer_eleve`, `config.relancer`,
+  `/` sans configuration inchangé ; T296 : navigateur en-GB, English proposé, `langue_defaut` = en écrit, Prévo ouvert
+  en anglais sur un poste sans choix ; fr-FR : français) ; `tests/test_installation_migration.py` couvre aussi la langue
+  (T296 : base présente jamais touchée, `fr` sans le champ, démo et vide hors Solo avec la langue, « xx », « EN », vide,
+  null, nombre, liste : 400 par code et rien d'écrit) ; `tests/test_installation_api.py` (serveur du processus avec `config.lancer_eleve`, `config.relancer`,
   `dossier_application` et `systeme` injectés ; faux mkcert et faux tailscale par `PREVO_MKCERT` et `PREVO_TAILSCALE`,
   jamais hérités du poste : `tests/commun.py` ; les quatre parcours comparés clé à clé ; 404 vu du réseau par un
   serveur sur 0.0.0.0 et par `tests/mandataire_test.py` ; serveur réel au premier lancement) ;
@@ -4055,6 +4250,94 @@ Précisions de T175 (sauvegardes du serveur, `tests/test_sauvegardes_lot7.py`) :
 - **`acces/`** : copié par `copier_acces_dans_sauvegarde` (T150) dans toute sauvegarde du serveur sans `sessions.json`,
   jamais restauré par `restaurer` : une restauration complète laisse `comptes.json` et `sessions.json` tels quels.
 
+**Import ZIP** (chantier « socle de données », T191 ; D172 ; docs/FORMAT.md §10 ; CS168 : ce changement touche la
+sécurité, il est donc écrit ici). `js/modules/parametres-zip.js` (objet `ParametresZip` : `etat()`, `importer(fichier)`,
+relais `blocImportZip` et `brancherImportZip` de `parametres.js`) : bouton « Importer un ZIP… » (`#btn-import-zip`,
+champ caché `#fichier-import-zip`) en bas de la carte « Sauvegardes ». Remplacement complet seulement, jamais de
+fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écrit par l'API et les adaptateurs existants.
+Exception unique (T319, Nicolas, 07/11) : un **réglage** de Paramètres (`Parametres.reglagesConnus` : formulaire et
+mode Solo) que la base a et que le ZIP n'a pas (export 1.2, bêta 1, bêta 2, démo : `langue_defaut`, `devise`, réglages
+de la 2.0) garde la valeur de la base (`reglagesGardes`), ajouté à la suite des lignes du ZIP et nommé à la
+confirmation (`#reglages-gardes-import-zip`) ; le reste de `parametres.csv` (`rapports_mensuels`, clés inconnues) suit
+le ZIP.
+Mode Solo gardé de la base (T323, Nicolas, 07/11) : le technicien « moi » (`solo_technicien_id`) ne vaut après
+l'import que si une seule fiche du ZIP porte le prénom et le nom de la fiche « moi » de la base (`moiSoloApresImport` :
+même identifiant ou un autre, qu'il suit) ; sinon il est vidé, la confirmation le dit (`#solo-moi-import-zip`), et à
+l'ouverture `Parametres.interne.demanderMoiSolo` (parametres-solo.js, appelé par js/app.js une fois prêt) demande au
+responsable sa fiche, ou d'en créer une ; Prévo ne devine jamais. Annuler : la question revient à l'ouverture suivante.
+
+- **Droits** : la règle de l'export (`ZipDonnees.exportPermis`) : avec les comptes, le responsable seul (bouton absent
+  pour les autres rôles, qui n'ouvrent pas Paramètres ; un appel direct est refusé ; le serveur refuse de toute façon
+  `POST /api/sauvegarde` et `/api/restauration` à un autre rôle, 403, donc rien n'est écrit) ; sans comptes (« ce PC »,
+  mode dossier), le profil qui ouvre Paramètres. Démo : bouton inactif, note `#note-import-zip` « indisponible en
+  démo ». Lecture seule (D169) : fenêtre `#import-zip-refus` dès le clic, et pour un fichier donné quand même.
+- **Contrôles, avant toute écriture** : `ZipLecture.lire` (`zip-lecture.js`, §15.1 ; détail dans son en-tête) : taille
+  du fichier (4 Go sans ZIP64, T229), nombre d'entrées (10 000) (T212), répertoire central lu par Prévo (noms hostiles : absolus, « .. », « . »,
+  barre inverse, segment vide, caractère de contrôle, UTF-8 invalide ; doublons ; chiffrement ; méthode), tailles
+  déclarées puis réelles (CRC-32), taux de compression (bombe), 50 Mo par CSV et 10 Mo par document (T208),
+  4 Go décompressés (T229), noms admis (CSV des
+  tables à la racine, `documents/<nom>` à la règle des noms du serveur, `manifeste.json`), manifeste et empreintes
+  SHA-256 (aucun fichier ajouté, manquant ou modifié), format plus récent refusé, CSV illisible ou abîmé refusé. Un ZIP
+  plus ancien est migré en mémoire. Refus : fenêtre `#import-zip-refus` (message de `ZipLecture`), rien d'écrit.
+- **Fichier marqué abîmé** (T213, option B de Nicolas) : un CSV illisible ou abîmé n'est accepté (`ZipTables`,
+  `lu.abimes`) que si le manifeste le marque `"abime": true` ET que son empreinte correspond (étape 10, vérifiée
+  avant) ; sinon refus comme ci-dessus. Il est écrit avec les octets du ZIP, tels quels (ni sérialisation, ni
+  migration, ni réparation ; ses références à des documents ne sont pas réécrites), option `abimeDepuis` = la date
+  `abime_depuis` du manifeste, sinon maintenant (`fichiers-abimes.json`, adaptateur dossier ; serveur : en-tête
+  `X-Prevo-Abime-Depuis`). Sécurité : l'empreinte ne prouve que l'intégrité du ZIP, pas son origine (n'importe qui
+  peut la recalculer) ; la dérogation reste donc bornée : responsable seul (comme l'import), et le serveur ne relâche
+  que la comparaison de l'en-tête au schéma, pour un fichier qu'il voit lui-même abîmé (`raisons_fichier_abime`) ;
+  UTF-8 et cellules dangereuses restent contrôlés. En mode dossier (« ce PC »), aucune frontière de droits : la
+  personne peut déjà modifier ces fichiers. Un journal abîmé importé tel quel ne reçoit pas la ligne de l'import.
+- **Données seules** (T214, décision de Nicolas) : Paramètres › « Exporter les données seules (sans les documents) »
+  (`#btn-export-donnees-seules`, `App.exporterZip({ sansDocuments: true })`, `ZipDonnees.contenu`) : les CSV et
+  `manifeste.json` (`"documents": "exclus"`, pas de `manquants`), mêmes contrôles des limites,
+  `prevo-export-AAAA-MM-JJ-sans-documents.zip`. Import : `ZipLecture` refuse un tel manifeste si le ZIP contient
+  des documents ; tables remplacées comme d'habitude ; aucun document écrit, supprimé ni remplacé ; la confirmation
+  (`#documents-import-zip`, `data-sans-documents="1"`) dit « Ce ZIP ne contient pas les documents : les N documents
+  déjà présents sont gardés tels quels ; M documents cités par les données importées n'existent pas ici. » (N : cités
+  par les données actuelles et présents ; M : cités par les données importées et absents ; chaque document n'est lu
+  que pour savoir s'il est là). L'import complet non plus ne supprime jamais un document existant absent du ZIP.
+- **Confirmation** `#confirmation-import-zip` : date, version et mode de l'export (manifeste ; « sans manifeste » pour
+  un export plus ancien), format (« mises au format 3 » si migré), lignes actuelles → importées par table
+  (`[data-actuel]`, `[data-importe]`), tables absentes du ZIP qui seront vidées (`[data-videe]`), nombre de documents,
+  points relevés à la lecture (documents manquants à l'export…), et l'avertissement « Toutes les données actuelles
+  seront remplacées ; une sauvegarde complète, documents compris, est faite juste avant ; les comptes et l'accès ne
+  sont pas touchés. » « Annuler » (bouton par défaut) : rien d'écrit.
+- **Déroulé** (surveillance arrêtée pendant les écritures) : (a) sauvegarde `avant-import-zip` d'abord (tables,
+  `documents/`, et `acces/` en mode serveur, T187/T188) ; échec → arrêt, rien d'écrit ; (b) documents du ZIP écrits par
+  `ecrireDocument` ; nom demandé = nom du ZIP sans le préfixe `AAAAMMJJ-HHMMSS-` ; le nom rendu (horodaté par le
+  serveur) est gardé ; deux noms demandés égaux dans le même import → `-2`, `-3`… ; en mode dossier, un document du même
+  nom identique à l'octet est repris, différent → `-2`… ; un document existant n'est jamais supprimé ni remplacé ;
+  échec → arrêt avant les tables (les documents déjà copiés restent, inutilisés) ; (c) références réécrites vers les
+  noms rendus (`equipements.document`, `demandes.photo`, `controles_reglementaires.rapport`, `rapports_mensuels`) ; une
+  référence à un document absent du ZIP reste telle quelle ; (d) les 24 tables remplacées, dans l'ordre du schéma :
+  `Donnees.csv.serialiser` (protection des cellules, en-tête du format courant, colonnes inconnues du ZIP gardées) puis
+  `App.adaptateur.enregistrer` avec la version fraîche (`Donnees.rechargerTable` avant et après : contrôle de version ;
+  écritures refusées en lecture seule) ; `version_schema` = format courant ; (e) une ligne de journal (table `parametres`)
+  `import ZIP : <fichier>, 24 tables, <m> documents ; sauvegarde <nom> faite juste avant` ; (f) fenêtre `#import-zip-termine`, puis
+  `location.reload()` (mode dossier : « Reprendre le dossier »).
+- **Échec pendant (c) à (e)** : `App.adaptateur.restaurer(<avant-import-zip>)` remet toutes les tables (avec la copie
+  de sécurité `avant-restauration` habituelle, qui garde l'état interrompu) ; une table absente de la sauvegarde (elle
+  n'existait pas avant) est vidée ; fenêtre `#import-zip-echec` qui nomme la sauvegarde ; si la restauration échoue
+  aussi, la fenêtre dit de restaurer cette sauvegarde à la main (Paramètres › Sauvegardes).
+- **Jamais touché** : `acces/` (comptes, sessions, appareils) : rien dans ce déroulé n'y écrit, et `restaurer` ne le
+  remet pas. **Pas restauré** : les documents (la restauration remet les tables seulement ; les documents copiés par
+  un import interrompu restent ; ceux d'avant sont intacts, et copiés dans `documents/` de la sauvegarde).
+- Écart retenu : les tables ne passent pas par `Donnees.modifier`, qui ne garde que les colonnes inconnues de la table
+  actuelle (celles du ZIP seraient perdues sans le dire, CS140) et journaliserait chaque ligne ; c'est le chemin de
+  `Import.annuler` (lot 5, §18.7) : sérialisation de `Donnees`, adaptateur protégé, version contrôlée.
+- **Risques restants** : le ZIP est lu par morceaux (T227), jamais en entier : mémoire bornée aux tables plus un
+  document, pas encore mesurée sur un gros ZIP (recette T215) ; un poste à court de mémoire pourrait encore fermer
+  l'onglet (rien n'est écrit avant la confirmation) ; le contenu des documents
+  n'est pas analysé au-delà des signatures d'image contrôlées par le serveur (`verifier_signature_image` ; aucune en
+  mode dossier) : un document reste servi isolé (`Content-Security-Policy: sandbox`, enveloppe sans script hors
+  serveur, §15.1) ; en http par le réseau (contexte non sécurisé), un ZIP avec manifeste est refusé faute de
+  `crypto.subtle` (importer depuis le PC serveur ou en https) ; une sauvegarde de plus de 15 s (gros dossier
+  `documents/`) dépasse le délai des requêtes : l'import s'arrête sans rien écrire ; une écriture d'un autre poste
+  pendant l'import donne un conflit, donc le retour en arrière ; la ligne de journal compte les documents du ZIP, repris
+  ou écrits.
+
 ### 22.12 Corrections de l'audit (D134, CS134)
 
 E2 `verifier_contenu_csv(table, octets)` avant `enregistrer_csv` et `ajouter_au_csv` (`COLONNES_PAR_TABLE` recopié
@@ -4076,10 +4359,11 @@ tour, ni refusée ni perdue, une seule limite pour la porte et l'application ;
 corps lu après le contrôle de session (`traiter`, T151) ; délai IA fixé par le serveur (`DELAI_IA_S`, T158) ; une
 sauvegarde manuelle par minute, 429 (T175) ; quota du dossier `documents/` : avant d'écrire, sous `VERROU_ECRITURE`,
 taille du dossier (`taille_des_documents`, parcours `os.scandir` à chaque envoi : un compteur en mémoire se tromperait
-dès qu'on fait de la place à la main) + taille du corps ≤ `quota_documents_mo` × 1 Mo, sinon 413 « Dossier des
-documents plein (… Mo sur … Mo avec ce document) : faites de la place ou augmentez quota_documents_mo. » et rien
-d'écrit ; F4 (précisé à T159) `.doc`/`.xls` retirés de `TYPES_DOCUMENTS` (415 « Type de document refusé » pour toute
-extension inconnue, à la lecture comme à l'écriture ; `docx`, `xlsx`, `odt`, `ods` restent ; les listes du navigateur,
+dès qu'on fait de la place à la main) + taille du corps ≤ `quota_documents_mo` × 1 Mo (4 096 par défaut depuis
+T250, comme l'import ZIP), sinon 413 « Dossier des documents plein (… Mo sur … Mo avec ce document) : faites de la
+place, ou agrandissez la place des documents dans Paramètres › Accès et installation, sur le PC serveur. » (T250 :
+le refus dit où se règle le quota) et rien d'écrit ; F4 (précisé à T159) `.doc`/`.xls` retirés de `TYPES_DOCUMENTS`
+(415 « Type de document refusé » pour toute extension inconnue, à la lecture comme à l'écriture ; `docx`, `xlsx`, `odt`, `ods` restent ; les listes du navigateur,
 `parc-formulaires.js` et `stockage-dossier.js`, suivent), `Content-Disposition: attachment; filename="<nom>"` sur
 tout document qui n'est ni une image (`TYPES_AFFICHABLES` : jpg, jpeg, png, gif, webp), ni un PDF, ni le rapport
 figé en html (que « Ouvrir » affiche dans un onglet : `sandbox` y interdit déjà scripts et formulaires, un
@@ -4124,8 +4408,11 @@ Un encart d'explication à la première visite de chaque écran, dans la démo c
 - **Modules** : `js/modules/aide-ecrans-textes.js` (objet `AideEcransTextes`, une entrée par identifiant d'écran
   d'`App.ecran` : `titre`, `ancre` de `GUIDE.html`, `texte` et `essayez`, ou `profils` { responsable, technicien,
   demandeur } ; `demo` = phrase de la version web) et `js/modules/aide-ecrans.js` (objet `AideEcrans`). Textes
-  validés par Nicolas (dossier de conception du site, `AIDE-ECRANS.md` § 2), produits par un script ; à modifier à la
-  source.
+  validés par Nicolas (dossier de conception du site, `AIDE-ECRANS.md` § 2), produits par
+  `outils/generer_aide_ecrans.py` ; à modifier à la source. Depuis T247 (chantier multilingue), le module ne garde
+  que des clés (accesseurs `get … () { return I18n.t('aide.ecran.…'); }`) : les textes sont dans le fichier d'aide de
+  chaque langue, `js/i18n/aide/<langue>.js` (bloc « aide » ; le bloc « acces » porte ceux d'`AccesTextes`, produits
+  par `outils/generer_acces_textes.py`) ; une langue sans fichier d'aide affiche l'aide française, sans erreur.
 - **Branchement** : `App.rendre`, après un affichage réussi d'un écran nouveau (pas sur une erreur d'affichage),
   appelle `AideEcrans.apresAffichage(ecran, conteneur)` ; l'encart (`UI.bandeau('info')`, `#aide-ecran`,
   `role="status"`, titre en `h2`) se place après `.entete-page` s'il existe, sinon en tête de `#contenu` ; il ne
@@ -4141,3 +4428,243 @@ Un encart d'explication à la première visite de chaque écran, dans la démo c
   l'écran » : case `#poste-aide-active`, bouton `#btn-revoir-aide`.
 - **Tests** : `tests/test_aide_ecrans.py`. Les autres tests coupent l'aide (`CasNavigateur.AIDE_ECRANS = False` :
   `prevo.aideActive = '0'` posé avant le chargement de chaque contexte), comme `outils/generer_captures.py`.
+
+## 24. Textes de l'interface (multilingue, Lot 2)
+
+Chantier multilingue, Lot 2 (« extraction des textes », décisions D145 à D166 du cahier des charges du chantier) :
+tout texte visible passe par le moteur `I18n`, et le dictionnaire français est la référence. Règle du lot : **l'écran
+ne change en rien** (CS148) et **aucun texte visible ne reste en dur** (CS147). Le Lot 2 ne livre que le français ;
+le Lot 3 ajoute l'anglais et le sélecteur de langue (§24.10), le Lot 4 la langue du compte. Le chargement de la langue active est décrit
+au §1 (`js/i18n-chargeur.js`), l'aide longue générée au §23, les messages du serveur au §7.
+
+### 24.1 Le moteur (`js/i18n.js`, objet global `I18n`)
+
+Script classique, compatible `file://`. Interface :
+
+- `I18n.t(cle, valeurs)` renvoie un texte brut. Les `{nom}` sont remplacés par `valeurs.nom`.
+- `I18n.html(cle, valeurs)` renvoie un fragment sûr pour `UI.html` et `UI.remplir` : le balisage écrit dans le
+  dictionnaire est gardé, chaque valeur interpolée est échappée. Il sert aux phrases qui ont du HTML au milieu
+  (un lien, un mot en gras).
+- **Pluriels** : si l'entrée du dictionnaire est un objet `{ one: '{n} cas', other: '{n} cas' }` (les autres
+  catégories CLDR sont permises), la forme est choisie par `Intl.PluralRules` de la langue active d'après
+  `valeurs.n` ; une catégorie absente se replie sur `other`. Règle de Nicolas : dès qu'un nombre précède un nom,
+  on écrit une entrée de pluriel, même si le français ne change pas (« {n} cas », « {n} mois »), pour que les
+  langues futures puissent accorder.
+- **Repli** : langue active, puis français ; une clé absente partout renvoie la clé elle-même et fait un
+  `console.warn`, une seule fois par clé. Les clés `aide.*` (aide longue) se replient sur le français **sans**
+  avertissement ni erreur (décision de Nicolas : une langue peut n'avoir traduit que l'interface).
+- `I18n.ajouter(code, dictionnaire)` fusionne des clés dans une langue (appels répétables) ;
+  `I18n.declarer(langue)` enregistre une langue ; `I18n.choisir(code)` change la langue active et l'attribut `lang`
+  de `<html>` (`'fr'` par défaut, écrit dans `index.html`) ;
+  `I18n.appliquer(racine)` remplit les éléments `data-i18n="cle"` (texte) et
+  `data-i18n-attr="title:cle1;placeholder:cle2"` (attributs) de `index.html` ; `I18n.langue` (code actif, `'fr'`)
+  et `I18n.langues` (copie des langues déclarées) sont en lecture seule.
+- **Textes écrits dans les données (D156, T292)** : ce que l'appli écrit elle-même (journal, titres et motifs
+  pré-remplis, profil inscrit, raisons du wiki) passe par `I18n.donnees(cle, valeurs)`, jamais `I18n.t` : la langue de
+  l'installation, pas celle de l'écran. Un texte composé ailleurs (rapport figé, raison d'une gamme, contrôle d'une
+  réponse de l'IA) s'écrit dans `I18n.enLangueDesDonnees(fonction)` (synchrone : `t`, `html`, `locale` y rendent
+  cette langue). Depuis le Lot 4 (T295) : la langue de l'installation (`langue_defaut`, D149, §24.11) si son
+  dictionnaire est chargé dans la page, sinon le français, sans erreur.
+
+### 24.2 Les fichiers et leur ordre de chargement
+
+- `js/i18n/langues.js` : les langues déclarées, par exemple
+  `I18n.declarer({ code: 'fr', nom: 'Français', locale: 'fr-FR', statut: 'reference' })`.
+- `js/i18n/<code>.js` : le dictionnaire d'une langue, **un bloc par section**, pour que des tâches menées en parallèle
+  ne touchent jamais les mêmes lignes :
+
+  ```js
+  // ==== section planning ====
+  I18n.ajouter('fr', {
+    'planning.liste.vide': { one: '{n} intervention', other: '{n} interventions' },
+    'planning.semaine.titre': 'Semaine du {date}',
+  });
+  // ==== fin planning ====
+  ```
+
+  Clés triées dans chaque bloc, une par ligne, chaînes entre apostrophes simples. Les échappements JS restent tels
+  que dans la source : jamais d'espace insécable écrite en clair (`test_depot` la refuse), on garde ` ` et
+  ` `.
+- `js/i18n/aide/<code>.js` : l'aide longue, un bloc par générateur (« aide », « acces »…). Elle est à part parce
+  qu'elle est produite par des outils (`outils/generer_aide_ecrans.py`, `outils/generer_acces_textes.py`, §23) et
+  repliée en silence.
+- **Ordre** : `js/i18n.js`, `js/i18n/langues.js`, `js/i18n/fr.js`, `js/i18n/aide/fr.js`, `js/i18n-chargeur.js`, puis
+  `js/schema.js` et la suite (ordre exact au §1). `acces/porte.html` charge aussi le moteur et `fr.js` avant son
+  script. Les fichiers d'une autre langue sont ajoutés par le chargeur, de façon synchrone, juste après le français
+  et avant `js/schema.js`.
+
+### 24.3 Les clés
+
+- Forme générale : `<section>.<composant ou écran>.<élément>`, en minuscules, avec des points et des soulignés.
+  La section d'un fichier est celle de son domaine (préfixe de `js/modules/`, plus le socle). Sections actuelles :
+  commun, schema, valeurs, socle, planning, causes, dictee, mise, aide, ordres, demandes, parc, preventif, controles,
+  wiki, suggestions, import, magasin, indicateurs, rapport, accueil, equipe, acces, connexion, poste, apropos,
+  installation, porte, parametres, sauvegardes, zip, serveur, ia.
+- Une clé n'est renommée que si elle est fausse ou trompeuse (le contrôle la signale).
+- `schema.tables.<table>` : nom d'une table ; `schema.<table>.<champ>` : libellé d'un champ (§4).
+- `valeurs.<table>.<champ>.<valeur stockée>` : affichage d'une valeur de liste (D155, voir 24.5).
+- `serveur.<code>` : message de `serveur.py` traduit par le navigateur (§7).
+- **`commun.*`** : mots courants (Annuler, Enregistrer, jours, mois…) décidés une fois, uniquement pour des textes
+  de **même sens et même rôle** : un bouton « Enregistrer » et un titre « Enregistrer » ne partagent pas forcément
+  leur clé. En cas de doute, clé propre au domaine. Depuis T257 la section `commun` est **figée** : les extractions
+  de domaines menées en parallèle ne la modifient plus. L'option `--commun-existant` de `outils/extraire_textes.py`
+  reprend la clé existante pour un texte identique, sans jamais en créer, et liste chaque reprise au rapport pour que
+  l'on vérifie le sens et le rôle.
+
+### 24.4 Jamais de texte figé au chargement
+
+Un texte traduit n'est jamais calculé une fois pour toutes quand un module se charge : il est lu au moment de
+l'affichage, sinon le changement de langue (Lot 3) exigerait de recharger la page. Conséquences dans le code :
+
+- une constante qui contenait des textes devient une **fonction** (`Indicateurs.libellesPeriodes()` à la place de
+  `PERIODES`) ou un **accesseur** `get` (`get titre()`, `menu: { get libelle() }` pour `App.ecran`, `id` en premier) ;
+- une phrase à choix de mot (hausse ou baisse) est coupée en phrases complètes, une par cas ;
+- **piège d'`Object.assign`** : `Object.assign(cible, source)` lit chaque accesseur de `source` **une seule fois** et
+  copie la valeur, qui reste figée dans la cible. Pour assembler un objet à accesseurs, on utilise
+  `Object.defineProperties(cible, Object.getOwnPropertyDescriptors(source))`, qui garde les accesseurs (cas de
+  `wiki-regles.js`, `wiki-calculs.js`, `wiki-ingestion.js`) ;
+- les constantes recopiées d'un module à l'autre au chargement (`X: Module.CONSTANTE`) sont invisibles pour l'outil :
+  on les cherche à la main.
+
+### 24.5 Ce qui n'est jamais traduit
+
+Chaque exception est inscrite dans `outils/exceptions_textes.json`, avec sa classe et sa raison ; le contrôle ne la
+signale jamais.
+
+- **D146** : les données (jeu de démonstration compris) ne sont pas traduites, seulement l'interface.
+- **D155** : les valeurs stockées des listes (statuts, types, priorités) sont des codes français fixes ; seul leur
+  affichage passe par `valeurs.*`. Même classe pour les **synonymes** de titres de colonnes reconnus à l'import
+  (données d'entrée, non affichées).
+- **D156** : les marqueurs écrits dans les données et relus par le code (actions du journal, « Pièce : »,
+  « Réception ACH- », « Ancien n° : »…) restent fixes ; le détail qui les suit s'écrit dans la langue de
+  l'installation (§24.1, `I18n.donnees`), jamais dans celle de l'écran.
+- **D157** : la console et les lanceurs (messages pour qui maintient l'application).
+- **D159** : les consignes envoyées à l'assistant IA restent en français (avec « réponds en <langue> »).
+- **identifiants** : identifiants, noms de fichiers, en-têtes CSV, codes, sélecteurs, reconnus automatiquement par
+  l'outil. **titre-initial** : le `<title>` nu de `index.html` avant le chargement des scripts, remplacé ensuite par
+  `App.definirTitre`.
+
+### 24.6 Ajouter un texte, pas à pas
+
+1. Écrire l'appel là où le texte s'affiche : `I18n.t('planning.semaine.titre', { date: d })`, ou `I18n.html(…)` s'il
+   contient du HTML ; en HTML statique, `data-i18n` ou `data-i18n-attr`. Dans une constante ou un objet, passer par
+   une fonction ou un accesseur (24.4).
+2. Ajouter la clé dans le bon bloc de `js/i18n/fr.js`, à sa place triée. Si un nombre précède un nom, écrire l'entrée
+   de pluriel `{ one, other }` avec la variable `n`. Les variables portent un nom parlant (pas `{v1}`).
+3. Pour un mot courant déjà présent dans `commun`, reprendre sa clé seulement si sens et rôle sont les mêmes.
+4. Lancer `py -X utf8 outils/controler_textes.py --domaine <domaine>` : il doit répondre 0.
+5. Lancer les tests du domaine et la photographie des écrans (24.7) : l'écran doit être identique.
+
+Pour extraire en masse, on remet d'abord à la main les cas du rapport en forme saine, puis
+`py -X utf8 outils/extraire_textes.py --domaine <d> --essai` (rapport sans écriture), puis la même commande sans
+`--essai`, et l'on ne renomme que ce que le contrôle signale. Un nouveau message de `serveur.py` s'écrit
+`traduisible(…)` (§7). Une valeur de liste du schéma reçoit sa clé `valeurs.…`.
+
+### 24.7 Les outils et ce qu'ils vérifient
+
+- `outils/extraire_textes.py` : classe les textes visibles d'un fichier ou d'un domaine, écrit les clés et réécrit
+  les appels. Les cas douteux vont au rapport de relecture, ils ne sont pas extraits.
+- `outils/controler_textes.py` (**CS147**) : aucun texte visible en dur hors exceptions ; clés manquantes ou orphelines
+  (une clé calculée ne couvre plus tout le dictionnaire depuis T262) ; variables `{…}` identiques entre l'appel et la
+  valeur, noms génériques refusés ; texte de `index.html` sous `data-i18n` égal à la valeur du dictionnaire. Code
+  retour 0 si rien à signaler. `--domaine` limite aux fichiers d'un domaine (répétable).
+- `outils/textes_serveur.py` : le même contrôle pour `serveur.py` (module `ast`), appelé par le précédent pour le
+  domaine « serveur » ; `--ecrire` complète la section serveur de `fr.js`.
+- `outils/photographier_ecrans.py` (**CS148**) : relève les textes visibles et les attributs de chaque écran, pour
+  chaque profil, en **démo** (`index.html` en `file://`) et en **mode serveur** (serveur sur une copie du jeu de
+  démo, base vide, porte des téléphones), et les compare aux relevés de référence de
+  `tests/fixtures/ecrans-reference/` (`demo.json`, `serveur.json`). Options utiles : `--mode`, `--ecrans`
+  (expression régulière), `--captures` et `--comparer-captures` pour les images.
+- Les tests existants ne changent pas : les textes qu'ils attendent sont ceux d'avant le chantier.
+
+### 24.8 Messages du serveur
+
+`serveur.py` envoie les messages affichables avec leur code (`"erreur_code"`, `"erreur_valeurs"`) à côté du
+français ; le navigateur affiche la clé `serveur.<code>` (`StockageServeur.texte` pour les modules qui font leur
+propre `fetch`). Écriture, règles et contrôle : §7 et `outils/textes_serveur.py`.
+
+### 24.9 Contrôle d'une langue (Lot 3, T264)
+
+`py -X utf8 outils/controler_textes.py --langue <code>` (répétable ; module `outils/textes_langues.py`, **CS149**,
+**CS151**) compare `js/i18n/<code>.js` et `js/i18n/aide/<code>.js` au français, que la langue soit déclarée ou non
+(le fichier de la langue est requis) : clés manquantes ou orphelines, mêmes variables `{…}` (toutes catégories
+réunies), même section, clés définies deux fois, bloc `I18n.ajouter` d'une autre langue. Une entrée plurielle en
+français l'est dans la langue avec exactement les catégories requises, une entrée simple reste simple. Catégories
+requises (entiers, CLDR) : `one, other` pour fr, en, tr, it et pt-PT, et pour un code absent de la table ; `many`
+(fr, it, pt) n'est pas requis, il ne sert qu'aux multiples d'un million et à la notation compacte, que Prévo
+n'affiche pas. Les clés de l'aide longue manquantes ne sont qu'un avertissement tant que `js/i18n/aide/<code>.js`
+n'a aucune clé (repli voulu sur le français) ; une valeur identique au français n'est pas un écart. `--domaine`
+limite aux sections de ces domaines (traduire groupe par groupe) ; `--langue fr` : le contrôle du français seul.
+Sans option, le français et chaque langue déclarée dans `js/i18n/langues.js` sont contrôlés : une langue n'entre
+dans le contrôle par défaut qu'une fois déclarée. `js/i18n/en.js` a les sections de `fr.js`, dans le même ordre.
+
+### 24.10 Choix de la langue (Lot 3, T278)
+
+Langues déclarées (`js/i18n/langues.js`, dans l'ordre du sélecteur) : français (référence, `fr-FR`) et anglais
+britannique (`en`, locale `en-GB`, D151). Le sélecteur (`UI.selecteurLangue`, `js/interface.js`, D147) est une liste
+déroulante native : chaque langue sous son nom dans sa langue (« Français », « English », tirés de `langues.js`, jamais
+du dictionnaire), sans drapeau, la langue active choisie. Deux emplacements, une seule construction : l'écran
+« Ce poste », carte « Affichage » (ligne « Langue de l'écran », `<label for>`, phrase « Choix gardé par ce navigateur,
+pour ce poste. ») ; le pied du menu latéral, sous « Explications » (`#menu-langue`, rempli par `js/app.js` ; la liste
+seule, nommée par son `aria-label`), caché quand le menu n'a que ses icônes (tablette, menu replié) et, comme tout le
+menu, au téléphone. Au changement (D148, sans compte) : le choix est retenu par le navigateur du poste
+(`localStorage` « prevo.langue » ; la langue qu'aurait le poste sans choix, celle de l'installation, retire la clé,
+§24.11), puis la page est rechargée (`location.reload()`) :
+`js/i18n-chargeur.js` charge la langue avant `js/schema.js`. Pas de changement de langue sans rechargement. Stockage
+refusé : message court, la liste revient à la langue active, la page reste dans sa langue. En démo, le rechargement
+ramène à l'écran de démarrage (la démo vit dans la page). Viennent au Lot 4 : la langue du compte et la bascule à la
+connexion (D148), la langue du navigateur (`navigator.language`) pour la démo (D150).
+
+### 24.11 Langue de l'installation (Lot 4, T295)
+
+`langue_defaut` (D149) est une ligne de `parametres.csv` (code d'une langue déclarée, `fr` par défaut), réglée dans
+Paramètres, section « Entreprise » (« Langue de l'installation », les langues sous leur nom dans leur langue), dans
+tous les modes ; une ligne de plus, pas une colonne : le format des fichiers (`version_schema`) ne change pas, et le
+serveur l'accepte comme toute clé (`parametres` est une table clé-valeur). Elle sert à deux choses :
+
+- **Langue affichée** (D148, D150 ; T298) : 0. la langue du compte connecté (ci-dessous) ; 1. le choix de ce poste
+  (« prevo.langue ») ; 2. sinon la langue de l'installation ; 3. sans réglage (ni l'un ni l'autre : démo, ou première ouverture avant toute base ; clé
+  « prevo.langue.installation » absente), la langue du navigateur (`navigator.languages`, dans l'ordre : code exact, puis
+  langue sans région ; toute variante `pt-*`, dont `pt-BR`, va à `pt-PT` ; `I18n.langueDuNavigateur`, T299), sinon
+  l'anglais ; 4. le français n'est atteint que par `I18n.langueAAfficher` appelée sans les langues du navigateur (`js/app.js`
+  une fois les paramètres lus). Aujourd'hui seuls `fr` et `en` sont déclarés : une langue non déclarée (de, tr, it, pt…) donne
+  l'anglais. Dans la démo, changer de langue recharge la page et efface ce qu'on y a modifié : `UI.selecteurLangue`
+  demande d'abord confirmation (`UI.confirmer`) ; Annuler remet la liste sur la langue actuelle. Hors démo, aucun
+  avertissement. (`I18n.langueAAfficher`) Toute valeur est vérifiée contre les
+  langues déclarées : vide, inconnue ou mal formée, elle est ignorée. Le chargeur tourne avant toute lecture des
+  données : la langue de l'installation lui vient de `localStorage` « prevo.langue.installation », que `js/app.js`
+  écrit chaque fois qu'il lit `parametres.csv` (ouverture des données, changement sur ce poste ou un autre ;
+  `suivreLangueInstallation`). Si la page n'est alors pas dans la langue à afficher, ou n'a pas le dictionnaire de
+  l'installation, elle se recharge **une fois** : la raison est notée dans `sessionStorage` (« prevo.langue.rechargement »)
+  et jamais deux rechargements de suite pour la même (sans `sessionStorage`, aucun). Un changement venu d'un autre
+  poste n'interrompt pas une saisie en cours. Démo et fichiers déposés : la langue est notée pour les données, rien
+  n'est retenu ni rechargé (un rechargement perdrait les données, qui vivent dans la page).
+- **Langue du compte** (T298) : `GET /api/session` porte la langue du compte (§22.4) ; `js/app.js`
+  (`suivreLangueDuCompte`) l'écrit dans `localStorage` « prevo.langue.compte » dès qu'il connaît la session (ouverture,
+  connexion) et l'efface sans session de compte (déconnexion, ouverture sans session, appareil enrôlé, sans comptes,
+  modes dossier et démo ; une session perdue pendant l'usage la garde, T329, §8) ;
+  `js/i18n-chargeur.js` la lit en premier (`I18n.langueAAfficher`, 4e argument,
+  valeur vérifiée contre les langues déclarées). Une page qui n'est pas dans la langue que le chargeur choisirait se
+  recharge une fois, avec la même garde (`rechargerPourLaLangue`) : après la connexion, la langue du compte ; après la
+  déconnexion, celle du poste ou de l'installation (poste ou tablette partagés) ; jamais quand la session se perd
+  pendant l'usage (T329 : la saisie serait perdue ; l'écran de connexion reste dans la langue du compte). La personne choisit sa langue sur
+  « Ce poste », carte Affichage, quand une session de compte est ouverte : « Pour mon compte » (enregistrée dans le
+  compte, `App.changerLangueDuCompte` → `POST /api/mot-de-passe {"langue"}` ; elle la suit sur tous les postes) ou
+  « Pour ce poste seulement » (comme sans comptes ; la langue du compte est alors retirée, sinon elle passerait
+  devant) ; coché d'abord : « pour mon compte » si le compte a sa langue ; changer de choix garde la langue affichée.
+  La liste du menu suit la même règle (au compte s'il a sa langue, sinon au poste). Sans comptes, rien ne change.
+- **Textes écrits dans les données** (D156) : `I18n.donnees` et `I18n.enLangueDesDonnees` écrivent dans la langue de
+  l'installation (`I18n.noterInstallation`, `I18n.langueDesDonnees`), quelle que soit la langue de l'écran ; le
+  chargeur charge aussi `js/i18n/<code>.js` de l'installation (sans son aide longue) quand elle n'est ni le français
+  ni la langue affichée ; dictionnaire absent : le français.
+
+**Base neuve** (T296 ; D149, D165) : partout où une base est créée, la liste « Langue de Prévo » (les langues
+déclarées sous leur nom dans leur langue, `UI.optionsLangues`) propose la langue du navigateur ramenée à une langue
+déclarée (`UI.langueDuNavigateur`, qui appelle `I18n.langueDuNavigateur` : sinon l'anglais) et la valeur va dans
+`parametres.csv` (`langue_defaut`) à la création. Trois chemins : l'assistant d'installation (étape 8, carte « Par
+quoi commencer ? » sur une base absente au départ ; `POST /api/installation/terminer` reçoit `langue_defaut`, §22.10 —
+Solo compris : même route) ; l'écran « base vide » (`#ecran-base-vide`, liste `#base-vide-langue`, mode serveur sans
+assistant et mode dossier : `remplirBaseVide` écrit `version_schema` et `langue_defaut`, ou ajoute `langue_defaut`
+aux lignes du jeu de démo). Tant que la base est vide, `suivreLangueInstallation` ne retient ni ne recharge rien : la
+page reste dans la langue du navigateur (sans cela, en mode dossier, un rechargement perdait le dossier choisi) ; la
+base créée, la langue choisie s'applique (un rechargement s'il le faut). Une base existante n'est jamais touchée.

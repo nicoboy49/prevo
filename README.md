@@ -1,326 +1,353 @@
 # Prévo
 
-**La GMAO libre et gratuite des PME industrielles.**
+*Version française : [README.fr.md](README.fr.md)*
 
-> **Version stable : [Prévo 1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1).** C'est celle à
-> télécharger pour travailler au quotidien. Elle corrige un défaut de perte de données sur fichier abîmé.
->
-> **Aperçu pour volontaires : [Prévo 2.0.0 bêta 2](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.2)
-> (pré-version).** Par rapport à la 1.2.1, la 2.0 apporte l'assistant d'installation et les comptes (rôles
-> vérifiés par le serveur), et simplifie les téléphones : https sans rien acheter (lecture des étiquettes QR par la
-> caméra et dictée vocale dans Prévo), demandeurs invités par un QR sans mot de passe, accès hors de l'atelier par
-> Tailscale. Elle n'a pas encore été éprouvée sur le terrain. **Ne l'utilisez pas pour votre production**, et
-> sauvegardez votre dossier de données avant de l'essayer. Elle a la même protection que la 1.2.1 contre la perte de données ; la bêta 1 en
-> était atteinte : si vous l'avez encore, ne modifiez pas ses fichiers CSV dans un tableur.
->
-> Signalez tout problème dans l'onglet *Issues*, **sans y joindre de données de votre entreprise** : les issues
-> sont publiques.
+**The free, open-source CMMS for small industrial companies.**
 
-## Pour qui, pourquoi
+[![Latest version](https://img.shields.io/github/v/release/nicoboy49/prevo?label=version)](https://github.com/nicoboy49/prevo/releases/latest)
+[![MIT licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
+[![Languages](https://img.shields.io/badge/languages-fran%C3%A7ais%20%7C%20English-green)](#languages)
 
-Dans beaucoup de PME, la maintenance tient sur un cahier, un tableur ou la mémoire
-du technicien. Les GMAO du marché sont chères, longues à déployer et pensées pour
-de grandes équipes. Prévo s'adresse aux entreprises de moins de 50 personnes dont
-la maintenance repose sur 1 à 3 techniciens : il est gratuit, tourne sur un PC de
-l'atelier, se consulte au téléphone, et garde les données dans des fichiers CSV qui
-restent à l'entreprise. Il a été conçu par un technicien de maintenance devenu
-formateur, à partir de vingt ans de terrain.
+Website: **[prevo.pro](https://prevo.pro)** · Online demo: **[prevo.pro/demo](https://prevo.pro/demo/)** ·
+Download: **[latest version](https://github.com/nicoboy49/prevo/releases/latest)**
 
-Prévo est une GMAO (gestion de maintenance assistée par ordinateur) pour un atelier ou une petite
-industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive et
-préventif suggéré, magasin de pièces, planning, contrôles réglementaires, indicateurs et rapport mensuel.
-Elle tourne sans installation lourde ni abonnement : les données sont des fichiers CSV lisibles dans
-Excel, stockés dans un dossier de votre choix. Le code est écrit en français, avec des bibliothèques
-embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est autorisé et choisi).
+> **Prévo 2.0** brings the installation wizard, accounts and access from a phone, English alongside
+> French, a versioned data format with automatic backups, and ZIP export and import. Version 1.2.1 stays
+> available for anyone who does not want to change yet. Before updating, copy your data folder; report
+> any problem in the *Issues* tab.
 
-![Une matinée dans l'atelier avec Prévo : odeur de brûlé, signalement au téléphone en 30 secondes, demande traitée au bureau, ordre de travail créé et planifié (extrait de la vidéo de présentation)](docs/captures/prevo-demo.gif)
+## Who it is for, and why
 
-![Accueil du responsable sur le jeu de démo : compteurs, demandes à traiter et ordres de travail en retard](docs/captures/accueil.png)
+In many small companies, maintenance lives in a notebook, a spreadsheet or the technician's memory.
+The CMMS products on the market are expensive, slow to deploy and designed for large teams. Prévo is
+for companies of fewer than 50 people whose maintenance rests on 1 to 3 technicians: it is free, runs
+on a workshop PC, can be used from a phone, and keeps the data in CSV files that stay with the company.
+It was designed by a maintenance technician turned trainer, from twenty years in the field.
 
-- **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
-- **Format des fichiers** : [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
+Prévo is a CMMS (computerised maintenance management system) for a workshop or a small industrial
+site: equipment register, work requests, work orders, preventive maintenance and suggested preventive
+maintenance, parts store, planning, statutory inspections, indicators and a monthly report.
+It runs without a heavy installation or a subscription: the data is CSV files that open in
+Excel, stored in a folder of your choice. The interface is in French and English; the code is written in
+French, with bundled libraries. What leaves the PC is described below
+([Privacy](#privacy)).
 
-La **2.0.0 bêta 2** contient les **lots 1 à 7** du cahier des charges, dont le wiki de maintenance, la reprise des données
-existantes (lot 5) et l'accès sécurisé avec son assistant d'installation (lot 7) ; les nouveautés de chaque version sont dans
-[CHANGELOG.md](CHANGELOG.md).
+![Manager's home screen in English: counters, requests to process and overdue work orders](docs/captures/en/accueil.png)
 
-## Essayer en 30 secondes
+- **User guide**: [GUIDE.en.html](GUIDE.en.html) (French version: [GUIDE.html](GUIDE.html)), to open in
+  the browser (printable).
+- **File format**: [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md) (in French).
+- **Roadmap**: [ROADMAP.md](ROADMAP.md) (intentions, no dates).
 
-1. Ouvrez `index.html` dans Chrome ou Edge (double-clic ou glisser-déposer dans le navigateur).
-2. Cliquez sur **Essayer avec les données de démo**, puis choisissez un profil (**Responsable** voit
-   tout).
+**2.0** contains **work packages 1 to 7** of the specification, including the maintenance wiki, taking over
+existing data (package 5) and secure access with its installation wizard (package 7), and the
+multilingual work (French and English); what is new in each version is in [CHANGELOG.md](CHANGELOG.md) (in French).
 
-Le jeu de démo est un atelier entièrement fictif, avec treize mois d'historique dont les dates sont
-recalées sur aujourd'hui. Il vit en mémoire : rien n'est enregistré, et un bouton permet de l'exporter
-en ZIP.
+## Try it in 30 seconds
+
+1. Open `index.html` in Chrome or Edge (double-click, or drag and drop into the browser).
+2. Click **Try it with the demo data**, then choose a profile (**Manager** sees
+   everything).
+
+The demo set is an entirely fictional workshop, with thirteen months of history whose dates are
+shifted to today. It lives in memory: nothing is saved, and a button lets you export it
+as a ZIP. The demo data is in French (the demo set is not translated).
 
 ## Installation
 
-### Version stable : Prévo 1.2.1 (conseillée)
+1. **Unzip** the zip of the [latest version](https://github.com/nicoboy49/prevo/releases/latest) and put its
+   folder at `C:\Prevo` (recommended; elsewhere, the wizard offers to move it there).
+2. **Double-click `Lancer_GMAO.bat`**: Python is in the zip, there is nothing else to install. On Mac
+   or Linux: `./lancer.sh` (Python 3.11 or newer).
+3. **Follow the wizard** that opens in the browser: three questions (who uses Prévo, from where, your
+   account) and the language of Prévo; it sets up the rest and prepares the access sheet to print.
 
-1. **Téléchargez** [prevo-1.2.1.zip](https://github.com/nicoboy49/prevo/releases/download/v1.2.1/prevo-1.2.1.zip)
-   (page de la [version 1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1)) et dézippez-le dans un
-   dossier de votre choix.
-2. **Un seul poste** : ouvrez `index.html` dans Chrome ou Edge, puis cliquez sur « Choisir le dossier de données ».
-   **Plusieurs postes et téléphones** : double-cliquez sur `Lancer_GMAO.bat` (Python 3.8 ou plus récent ; s'il
-   manque, le lanceur propose de l'installer, avec votre accord) ; sur Mac ou Linux : `./lancer.sh`.
+Until the installation is finished, Prévo can be reached only from this PC. Beyond this PC, accounts and
+https are mandatory: Prévo refuses to start otherwise. Everything can be redone afterwards in Settings › Access
+and installation, on the server PC. The guide details each step ([GUIDE.en.html](GUIDE.en.html), chapters 2 and 8).
+Did you have Prévo 1.2 or a 2.0 beta? Put the new version in the same folder: the zip has no
+`donnees/` folder, your CSV files stay, and the wizard replaces none of them; Prévo makes a backup
+“before the Prévo update”, then brings your data to the current format.
 
-Le détail (mode dossier, mode serveur, pare-feu, téléphones) est dans
-[le README de la 1.2.1](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md#installation).
+Staying on 1.2? Version [1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1) has neither wizard nor
+accounts: it installs as described in [its README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md)
+(folder mode in Chrome or Edge, or server mode with Python 3.8 or newer).
 
-### Aperçu pour volontaires : Prévo 2.0.0 bêta 2
+### Which installation for you?
 
-Pour essayer la 2.0 en connaissance de cause : pas pour la production, et après une sauvegarde de votre dossier de
-données.
-
-1. **Dézippez** le zip de [Prévo 2.0.0 bêta 2](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.2) et placez son
-   dossier en `C:\Prevo` (conseillé ; ailleurs, l'assistant propose de l'y déplacer).
-2. **Double-cliquez sur `Lancer_GMAO.bat`** : Python est dans le zip, il n'y a rien d'autre à installer. Sur Mac
-   ou Linux : `./lancer.sh` (Python 3.11 ou plus récent).
-3. **Suivez l'assistant** qui s'ouvre dans le navigateur : trois questions (qui utilise Prévo, d'où, votre
-   compte), puis il règle le reste et prépare la fiche d'accès à imprimer.
-
-Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC. Au-delà de ce PC, comptes et
-https sont obligatoires : Prévo refuse de démarrer autrement. Tout se refait ensuite dans Paramètres › Accès et
-installation, sur le PC serveur. Le guide détaille chaque étape ([GUIDE.html](GUIDE.html), chapitres 2 et 8).
-Vous aviez Prévo 1.2 ? Sauvegardez d'abord votre dossier de données, puis mettez la bêta dans le même dossier : le
-zip n'a pas de dossier `donnees/`, vos fichiers CSV restent, et l'assistant n'en remplace aucun.
-
-Les sections suivantes, jusqu'au mode dossier, décrivent la 2.0 ; pour la 1.2.1, voir son README (lien ci-dessus).
-
-### Quelle installation pour vous ? (Prévo 2)
-
-| | Solo | Atelier | Intranet | Hébergé |
+| | Solo | Workshop | Intranet | Hosted |
 | --- | --- | --- | --- | --- |
-| **Pour qui** | Une personne en maintenance | Une équipe de 1 à 3 techniciens, et des demandeurs | Une entreprise avec un informaticien | Une entreprise qui ne veut rien installer |
-| **Où tourne Prévo** | Votre PC | Un PC ou un mini-PC de l'atelier | Un serveur de l'entreprise | Chez un hébergeur |
-| **Qui installe** | Vous, avec l'assistant | Le responsable, avec l'assistant ; puis deux minutes par téléphone, une seule fois | L'informaticien, avec [docs/INSTALLATION.md](docs/INSTALLATION.md) | Un prestataire |
-| **Téléphone dans l'atelier** | Oui, avec votre mot de passe | Oui, étiquettes QR comprises | Oui | Oui |
-| **Téléphone hors de l'atelier** | Oui, par un réseau privé (Tailscale) | Oui, par Tailscale | Par le VPN de l'entreprise | Oui |
-| **Comptes** | Aucun sur ce PC seul ; le vôtre dès qu'un téléphone se connecte | Un par technicien ; les demandeurs par téléphone enrôlé (QR, sans mot de passe) | Un par personne, demandeurs compris | Un par personne |
-| **Démarre avec la machine** | Au choix | Oui | Oui (tâche planifiée ou service) | — |
-| **Sauvegardes** | Chaque jour, et copie externe chaque nuit | Chaque jour, et copie externe chaque nuit | Chaque jour, et celles de l'entreprise | Celles de l'hébergeur |
-| **Disponible** | Dans Prévo 2 | Dans Prévo 2 | Dans Prévo 2 | Sur demande, auprès de SELECTIS (https://selectis.eu) |
+| **Who it is for** | One person doing maintenance | A team of 1 to 3 technicians, and requesters | A company with an IT person | A company that does not want to install anything |
+| **Where Prévo runs** | Your PC | A PC or mini-PC in the workshop | A company server | At a hosting provider |
+| **Who installs it** | You, with the wizard | The manager, with the wizard; then two minutes per phone, once only | The IT person, with [docs/INSTALLATION.md](docs/INSTALLATION.md) | A service provider |
+| **Phone in the workshop** | Yes, with your password | Yes, QR labels included | Yes | Yes |
+| **Phone outside the workshop** | Yes, through a private network (Tailscale) | Yes, through Tailscale | Through the company VPN | Yes |
+| **Accounts** | None on this PC alone; yours as soon as a phone connects | One per technician; requesters by enrolled phone (QR, no password) | One per person, requesters included | One per person |
+| **Starts with the machine** | Optional | Yes | Yes (scheduled task or service) | — |
+| **Backups** | Every day, and an external copy every night | Every day, and an external copy every night | Every day, and the company's own | The host's |
+| **Available** | In Prévo 2 | In Prévo 2 | In Prévo 2 | On request, from SELECTIS (https://selectis.eu) |
 
-Hébergé n'est pas dans le zip : c'est une prestation, étudiée sur demande avec SELECTIS.
+Hosted is not in the zip: it is a service, studied on request with SELECTIS.
 
-### Pour l'informaticien
+### For the IT person
 
-Configuration (`prevo.config.json` et chacune de ses clés), mandataires inverses (`tailscale serve`, Caddy, nginx,
-IIS, Cloudflare Tunnel), démarrage en tâche planifiée ou en service, comptes, journaux, sauvegardes, mise à jour et
-désinstallation : [docs/INSTALLATION.md](docs/INSTALLATION.md). Ce document n'est pas dans le zip : lisez-le dans
-le dépôt (https://github.com/nicoboy49/prevo/blob/main/docs/INSTALLATION.md).
+Configuration (`prevo.config.json` and each of its keys), reverse proxies (`tailscale serve`, Caddy, nginx,
+IIS, Cloudflare Tunnel), start-up as a scheduled task or a service, accounts, logs, backups, updating and
+uninstalling: [docs/INSTALLATION.md](docs/INSTALLATION.md) (in French:
+[docs/INSTALLATION.fr.md](docs/INSTALLATION.fr.md)). This document is not in the zip: read it in the repository
+(https://github.com/nicoboy49/prevo/blob/main/docs/INSTALLATION.md).
 
-### Pare-feu et téléphones
+### Firewall and phones
 
-Quand Prévo démarre avec le PC, l'assistant ajoute lui-même une règle au pare-feu de Windows, limitée au réseau
-privé de l'atelier. Sinon, au premier lancement sur le réseau, Windows demande d'autoriser Python : **cochez
-uniquement « Réseaux privés »**, jamais « Réseaux publics ».
+When Prévo starts with the PC, the wizard itself adds a rule to the Windows firewall, limited to the
+workshop's private network. Otherwise, on the first launch on the network, Windows asks to allow Python: **tick
+only “Private networks”**, never “Public networks”.
 
-Un téléphone doit être sur le **même Wi-Fi** que le PC serveur (ou sur le réseau privé Tailscale). Il scanne le QR
-code de l'accueil du responsable, ou l'adresse de la fiche d'accès. La première fois, la page « Faites confiance au
-PC atelier » guide l'installation du certificat de l'atelier (Android, iPhone) ; ensuite Prévo s'ouvre en https,
-avec la caméra et le micro. Un demandeur n'a pas de mot de passe : le responsable lui envoie une invitation (QR).
+A phone must be on the **same Wi-Fi** as the server PC (or on the private Tailscale network). It scans the QR
+code on the manager's home screen, or the address on the access sheet. The first time, the page “Trust the workshop PC”
+guides the installation of the workshop certificate (Android, iPhone); after that, Prévo opens over https,
+with the camera and the microphone. A requester has no password: the manager sends an invitation (QR).
 
-Les données du mode serveur sont dans le dossier `donnees/` (hors dépôt git), avec les sauvegardes
-quotidiennes (`donnees/sauvegardes/`), les documents joints et les comptes (`donnees/acces/`).
+In server mode, the data is in the `donnees/` folder (outside the git repository), with the daily backups
+(`donnees/sauvegardes/`), the attached documents and the accounts (`donnees/acces/`).
 
-### Mode dossier (un seul poste, sans serveur)
+### Folder mode (one workstation, no server)
 
-Ouvrez `index.html` dans **Chrome ou Edge**, cliquez sur « Choisir le dossier de données » et désignez un dossier
-de votre PC : Prévo y lit et écrit les fichiers CSV. Ce mode est fait pour **un seul poste à la fois**, sans
-téléphone ni compte ; « Reprendre le dossier précédent » évite de le choisir à nouveau. Il utilise l'API d'accès
-aux fichiers de Chrome et d'Edge ; Firefox et Safari ne la proposent pas. Pour travailler à plusieurs, avec des
-téléphones ou avec l'assistant IA, installez Prévo (ci-dessus) : même seul sur un PC, c'est le mode conseillé.
+Open `index.html` in **Chrome or Edge**, click “Choose the data folder” and pick a folder on your PC: Prévo reads
+and writes the CSV files there. This mode is meant for **one workstation at a time**, with no phone and no
+account; “Resume the previous folder” saves you from choosing it again. It uses the file access API of Chrome
+and Edge; Firefox and Safari do not offer it. To work as a team, with phones or with the AI assistant, install
+Prévo (above): even alone on a PC, that is the recommended mode.
 
-## Fonctions par module
+## Features by module
 
-Cette liste décrit la 2.0 (le code de cette page) ; celle de la 1.2.1, sans comptes ni assistant d'installation,
-est dans [son README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md).
+- **Three storage modes**: folder, local Python server, in-memory demo. Concurrent writes are
+  handled: in case of a conflict, the change is replayed on the most recent version of the file
+  (three attempts). Tables changed on another workstation are re-read automatically.
+- **Roles** Requester, Technician and Manager: menus and screens adapted. With accounts, the server checks
+  the role on every request (a requester sees neither costs nor technicians, a technician sees neither hourly rate nor prices);
+  without accounts (this PC alone, folder mode, demo), the profile only adapts the screens.
+- **Access and accounts** (server mode): three scopes (this PC, the workshop Wi-Fi, also outside the workshop);
+  beyond this PC, sign-in and https are mandatory. Accounts checked by the server (password kept as a
+  hash, lock-out after ten failures, “Stay signed in on this device”), created and deactivated in Team ›
+  Access, with an exportable sign-in log; requesters' phones enrolled by an invitation QR, with no
+  password, revocable at any time. https without buying anything: an http front door leads each
+  device to https, with a certificate that Prévo makes for the workshop; outside the workshop through Tailscale, without
+  opening the router; start-up with the PC (Windows scheduled task, systemd service). Installation wizard in three
+  questions, printable access sheet, and Settings › Access and installation to redo everything from the server PC.
+- **Solo mode** (one person does everything): the manager profile with a lighter menu, “New WO” first, the
+  technician “me” pre-filled and closing in one step.
+- **Home** by profile: the manager's counters (requests to process, overdue work orders, open P1s, preventive tasks
+  of the week, items to order, inspections within 30 days, qualifications to renew, preventive
+  suggestions), the technician's work orders, the requester's requests; sign-in QR code in server mode.
+- **Work requests**: entry in five questions (on a phone too, photo included),
+  priority calculated from criticality and impact (“safety” always gives P1),
+  manager decisions (accept, group, defer, refuse with a reason the requester can see).
+  A panel shows the frequent causes of the same symptom, with how solid its figures are.
+- **Work orders**: full life cycle (prepared, scheduled, in progress, technical and
+  administrative closing, on hold and cancellation with a reason), checked technical closing (cause and
+  remedy codes, job report, return to service), qualification checked at assignment, lock-out
+  procedure displayed, parts issued from the work order, calculated cost, printable A4 work sheet,
+  CSV export of the list.
+- **Weekly planning**: one row per technician with their load and capacity, work orders to schedule
+  dragged onto a day or placed with “Schedule…” (no mouse needed); list by day on a phone.
+- **Preventive maintenance**: routines triggered by a date, a counter or a measurement threshold; one work order per
+  due routine, created on opening with its checklist; closing updates the routine; calendar of the
+  next 12 weeks; anomaly seen during a preventive task → linked request in one click.
+- **Suggested preventive maintenance**: Prévo re-reads the history and proposes creating a routine, reviewing the
+  preventive maintenance, reviewing a routine whose visits often find an anomaly, or lengthening a
+  routine with no findings (never for criticality A). Each suggestion shows its rule and its facts; Prévo
+  **never changes a routine by itself**, and every decision is written to the log.
+- **Store**: items, movements, stock recalculated from the movements, issue refused if the stock
+  would go negative, suggested reorder point, “To order” list, purchase requests from
+  “requested” to “received”, suppliers, stocktake.
+- **Equipment register and QR labels**: site, workshop, line tree; equipment sheet (history,
+  counters, routines, inspections, parts); QR labels in batches on A4 sheets of 24 or 8, with the
+  reference written in plain text.
+- **Statutory inspections**: schedule by equipment, inspection done with its report, closing
+  of the observations, pre-filled statutory work order (no regulatory watch).
+- **Team and qualifications**: technicians, capacity, qualifications and their expiry dates, history of
+  renewals.
+- **Indicators** (manager): availability, MTBF, MTTR (including waiting for parts), downtime, share
+  and compliance of preventive maintenance, overdue work orders, response times, costs, stock value; each
+  figure says how many work orders it covers, and a figure that cannot be calculated says why. Charts with
+  their values in a table, CSV and image exports.
+- **Frozen monthly report**: one A4 page per month (compared figures, highlights, points to
+  review including “repair or replace?”), which reopens without Prévo; “Prepare an email”
+  opens the workstation's email application, Prévo sends nothing itself.
+- **Settings**: shared settings, failure codes, backups (test of a backup, external copy
+  every night in server mode) and restore, database check, ZIP export.
+- **Taking over your data** (manager): the “Import data” wizard takes over, in five steps,
+  a workshop's lists (locations, equipment, items, suppliers, technicians and
+  qualifications, codes, counters, inspections, routines) and the job history from another CMMS, from Excel (.xlsx,
+  .xls), OpenDocument (.ods), CSV or a paste: columns recognised by their heading (the AI can suggest some,
+  from the headings only), row-by-row preview before anything is written, backup just before, “Cancel this
+  import”.
+- **AI assistant** (optional, off by default): Ollama on a workshop PC (recommended model
+  `qwen2.5:7b`) or an OpenAI-compatible API. It suggests a symptom and an impact for a request, a
+  structured job report, failure codes taken **only** from the existing list, a routine
+  checklist, a comment for the monthly report and the texts of the maintenance wiki (below).
+  The AI proposes, the human validates (“Use”, “Edit”, “Ignore”): nothing is written without a click.
+  A permanent notice says where the texts go (“stays on this PC”… “data sent to …”). In server
+  mode, the provider, its address and its key are set once on the server PC, never in a browser, and the server relays
+  requests from all workstations; an online provider can be used only if the server PC allows it. With
+  accounts, the AI is reserved for technicians and the manager. In folder mode, the key stays in the workstation's browser.
+- **Maintenance wiki**: the workshop's encyclopaedia (“Wiki” menu): one page per machine, breakdown,
+  item, technician, job and know-how, all linked. The facts (breakdowns, jobs,
+  parts, stock, qualifications) are calculated by Prévo without AI, and the search does not use AI.
+  With the AI assistant, each administratively closed work order enters a queue that the manager
+  processes whenever they like (“Process the queue”): the AI proposes short texts (“In brief” and
+  “Tips” of a machine, “What it is for” of an item, know-how drawn first from the “Tip for next
+  time” entered at technical closing), Prévo checks them (every sentence cites a work order,
+  no number or date from outside the work order, no counting, no safety instruction, lengths) and the
+  manager approves, rejects or reruns; a contradiction is flagged on the page (“To be settled”),
+  never overwritten. Cost measured on the demo with Claude Sonnet (`claude-sonnet-5-5`): 227 work orders integrated
+  for $5.16, or $0.026 per work order (about 2.5 cents); it depends on the provider and the length
+  of the job reports; nothing is charged with Ollama.
+- **Dictation**: microphone button on long text fields, text added at the end of the field,
+  warning on first use (the voice is transcribed by Google or Microsoft), can be turned off
+  per workstation; without a secure page, Prévo points to the keyboard's microphone.
+- **This workstation**: screen open to everyone for the browser settings (language, profile and workstation name without accounts,
+  AI assistant, dictation, **light theme** or dark).
+- **Languages**: see [below](#languages).
+- **Input kept and drafts**: if the session ends during data entry, the sign-in screen appears without
+  erasing anything, and the same account gets its input back. A problem report and a work order's job report
+  are kept as you type in the device's browser, for the account that typed them (7 days at most): a
+  phone left on standby finds them again.
+- **Update notice** (on by default, can be turned off in Settings › Updates): Prévo reads
+  `https://prevo.pro/version.json` at most once a day per workstation and says, on the manager's home screen and in
+  “About”, that a newer version exists, with the download link (prevo.pro or this repository
+  only). A banner explains it once. Nothing installs by itself; never in the demo.
+- **“Suggest an improvement”** (About and foot of the menu): opens a GitHub form pre-filled with the
+  version, the language and the browser, nothing else; failing that, contact@prevo.pro.
+- **Guide and data sheet**: [GUIDE.en.html](GUIDE.en.html) and [GUIDE.html](GUIDE.html) (self-contained, printable,
+  with screenshots) and [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md), generated from the schema.
 
-- **Trois modes de stockage** : dossier, serveur Python local, démo en mémoire. Écritures concurrentes
-  gérées : en cas de conflit, la modification est rejouée sur la version la plus récente du fichier
-  (trois essais). Les tables modifiées sur un autre poste sont relues toutes seules.
-- **Rôles** Demandeur, Technicien et Responsable : menus et écrans adaptés. Avec les comptes, le serveur vérifie
-  le rôle à chaque requête (un demandeur ne voit ni coûts ni techniciens, un technicien ni taux horaire ni prix) ;
-  sans comptes (ce PC seul, mode dossier, démo), le profil adapte seulement les écrans.
-- **Accès et comptes** (mode serveur) : trois portées (ce PC, le Wi-Fi de l'atelier, aussi hors de l'atelier) ;
-  au-delà de ce PC, connexion obligatoire et https. Comptes vérifiés par le serveur (mot de passe gardé en
-  empreinte, blocage après dix échecs, « Rester connecté sur cet appareil »), créés et désactivés dans Équipe ›
-  Accès, avec le journal des connexions exportable ; téléphones des demandeurs enrôlés par un QR d'invitation, sans
-  mot de passe, révocables à tout moment. Le https sans rien acheter : une porte d'entrée en http conduit chaque
-  appareil en https, avec un certificat que Prévo fabrique pour l'atelier ; hors de l'atelier par Tailscale, sans
-  ouvrir la box ; démarrage avec le PC (tâche planifiée Windows, service systemd). Assistant d'installation en trois
-  questions, fiche d'accès imprimable, et Paramètres › Accès et installation pour tout refaire depuis le PC serveur.
-- **Mode Solo** (une personne fait tout) : le profil responsable avec un menu allégé, « Nouvel OT » en premier, le
-  technicien « moi » pré-rempli et la clôture en une étape.
-- **Accueil** par profil : compteurs du responsable (DI à traiter, OT en retard, P1 ouverts, préventifs
-  de la semaine, articles à commander, contrôles sous 30 jours, habilitations à renouveler, suggestions
-  de préventif), OT du technicien, demandes du demandeur ; QR code de connexion en mode serveur.
-- **Demandes d'intervention** : saisie en cinq questions (sur téléphone aussi, photo comprise),
-  priorité calculée à partir de la criticité et de l'impact (« sécurité » donne toujours P1),
-  décisions du responsable (accepter, regrouper, différer, refuser avec un motif visible du demandeur).
-  Un encart montre les causes fréquentes du même symptôme, avec la solidité de ses chiffres.
-- **Ordres de travail** : cycle de vie complet (préparé, planifié, en cours, clôtures technique et
-  administrative, attente et annulation avec motif), clôture technique contrôlée (codes cause et
-  remède, compte rendu, remise en service), habilitation vérifiée à l'affectation, procédure de
-  consignation affichée, pièces sorties depuis l'OT, coût calculé, bon de travail A4 imprimable,
-  export CSV de la liste.
-- **Planning de la semaine** : une ligne par technicien avec sa charge et sa capacité, OT à planifier
-  glissés sur un jour ou placés par « Planifier… » (sans souris) ; liste par jour sur téléphone.
-- **Préventif** : gammes déclenchées par une date, un compteur ou un seuil de mesure ; un seul OT par
-  gamme échue, créé à l'ouverture avec sa check-list ; la clôture met la gamme à jour ; calendrier des
-  12 prochaines semaines ; anomalie vue pendant un préventif → demande liée en un clic.
-- **Préventif suggéré** : Prévo relit l'historique et propose de créer une gamme, de revoir le
-  préventif, de revoir une gamme dont les visites trouvent souvent une anomalie, ou d'allonger une
-  gamme sans constat (jamais en criticité A). Chaque suggestion montre sa règle et ses faits ; Prévo
-  **ne modifie jamais une gamme tout seul**, et chaque décision est inscrite au journal.
-- **Magasin** : articles, mouvements, stock recalculé depuis les mouvements, sortie refusée si le stock
-  deviendrait négatif, point de commande suggéré, liste « À commander », demandes d'achat de
-  « demandée » à « reçue », fournisseurs, inventaire.
-- **Parc et étiquettes QR** : arborescence site, atelier, ligne ; fiche équipement (historique,
-  compteurs, gammes, contrôles, pièces) ; étiquettes QR par lot sur planches A4 de 24 ou 8, repère
-  écrit en clair.
-- **Contrôles réglementaires** : échéancier par équipement, contrôle réalisé avec son rapport, levée
-  des observations, OT réglementaire pré-rempli (sans veille réglementaire).
-- **Équipe et habilitations** : techniciens, capacité, habilitations et leurs échéances, historique des
-  renouvellements.
-- **Indicateurs** (responsable) : disponibilité, MTBF, MTTR (dont attente de pièces), durée d'arrêt,
-  part et respect du préventif, OT en retard, délais de prise en charge, coûts, valeur du stock ; chaque
-  chiffre dit sur combien d'OT il porte, et un chiffre non calculable dit pourquoi. Graphiques avec
-  leurs valeurs en tableau, exports CSV et image.
-- **Rapport mensuel figé** : une page A4 par mois (chiffres comparés, faits marquants, points à
-  examiner dont « réparer ou remplacer ? »), qui se rouvre sans Prévo ; « Préparer un courriel »
-  ouvre la messagerie du poste, Prévo n'envoie rien lui-même.
-- **Paramètres** : réglages partagés, codes de défaillance, sauvegardes (test d'une sauvegarde, copie externe
-  chaque nuit en mode serveur) et restauration, contrôle de la base, export ZIP.
-- **Reprendre ses données** (responsable) : l'assistant « Importer des données » reprend, en cinq étapes,
-  les listes d'un atelier (localisations, équipements, articles, fournisseurs, techniciens et
-  habilitations, codes, compteurs, contrôles, gammes) et l'historique des interventions d'une autre GMAO, depuis Excel (.xlsx,
-  .xls), OpenDocument (.ods), CSV ou un collage : colonnes reconnues par leur titre (l'IA peut en proposer,
-  sur les seuls titres), aperçu ligne par ligne avant toute écriture, sauvegarde juste avant, « Annuler cet
-  import ».
-- **Assistant IA** (facultatif, désactivé par défaut) : Ollama sur un PC de l'atelier (modèle conseillé
-  `qwen2.5:7b`) ou une API compatible OpenAI. Il propose un symptôme et un impact pour une demande, un
-  compte rendu structuré, des codes de défaillance pris **uniquement** dans la liste existante, une
-  check-list de gamme, un commentaire du rapport mensuel et les textes du wiki de maintenance (ci-dessous).
-  L'IA propose, l'humain valide (« Utiliser », « Modifier », « Ignorer ») : rien n'est écrit sans clic.
-  Une mention permanente dit où vont les textes (« reste sur ce PC »… « données envoyées à … »). En mode
-  serveur, le fournisseur, son adresse et sa clé sont réglés une fois sur le PC serveur, jamais dans un
-  navigateur, et le serveur relaie les demandes de tous les postes ; un fournisseur en ligne n'est utilisable que
-  si le PC serveur l'autorise. Avec les comptes, l'IA est réservée aux techniciens et au responsable. En mode
-  dossier, la clé reste dans le navigateur du poste.
-- **Wiki de maintenance** : l'encyclopédie de l'atelier (menu « Wiki ») : une page par machine, panne,
-  article, technicien, intervention et savoir-faire, toutes reliées. Les faits (pannes, interventions,
-  pièces, stock, habilitations) sont calculés par Prévo sans IA, et la recherche n'utilise pas l'IA.
-  Avec l'assistant IA, chaque OT clôturé administrativement entre dans une file que le responsable
-  traite quand il le veut (« Traiter la file ») : l'IA propose des textes courts (« En bref » et
-  « Astuces » d'une machine, « À quoi il sert » d'un article, savoir-faire tirés d'abord de l'« Astuce
-  pour la prochaine fois » saisie à la clôture technique), Prévo les contrôle (chaque phrase cite un OT,
-  aucun nombre ni date hors de l'OT, aucun comptage, aucune consigne de sécurité, longueurs) et le
-  responsable valide, rejette ou relance ; une contradiction est signalée sur la page (« À trancher »),
-  jamais écrasée. Coût mesuré sur la démo avec Claude Sonnet (`claude-sonnet-5-5`) : 227 OT intégrés
-  pour 5,16 $, soit 0,026 $ par OT (environ 2,5 centimes) ; cela dépend du fournisseur et de la longueur
-  des comptes rendus ; rien n'est facturé avec Ollama.
-- **Dictée vocale** : bouton micro sur les champs de texte longs, texte ajouté à la fin du champ,
-  avertissement à la première utilisation (la voix est transcrite par Google ou Microsoft), désactivable
-  par poste ; sans page sécurisée, Prévo rappelle le micro du clavier.
-- **Ce poste** : écran ouvert à tous pour les réglages du navigateur (profil et nom du poste sans comptes,
-  assistant IA, dictée, **thème clair** ou sombre).
-- **Mise à jour signalée** (responsable, désactivée par défaut) : Paramètres, « Me signaler les nouvelles
-  versions de Prévo » ; Prévo lit alors `https://prevo.pro/version.json` au plus une fois par jour et par
-  poste et dit, sur l'accueil du responsable et dans « À propos », qu'une version plus récente existe, avec
-  le lien de téléchargement. Rien ne s'installe tout seul ; sans accord, aucun appel.
-- **Guide et fiche technique** : [GUIDE.html](GUIDE.html) (autonome, imprimable, avec captures) et
-  [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md), générée depuis le schéma.
+## Languages
 
-## Format des données
+Prévo is shown in **French** and **English** (British English; numbers, amounts and dates in the format of the
+language). The language follows this order: that of the signed-in **account**, otherwise the choice made on **this
+workstation** (or on the phones' front door), otherwise the **installation language** (Settings › Company). The demo
+opens in the browser's language. The texts that Prévo writes itself into the data (work order history, pre-filled
+titles…) are in the installation language; list values stay in French in the CSV files, and are translated on screen.
+The currency can also be set (EUR by default), with no conversion of amounts. The demo data is in French (the demo
+set is not translated).
 
-Les données sont 24 fichiers CSV (format 3 depuis le lot 6) : séparateur `;`, UTF-8 avec BOM,
-fins de ligne CRLF. Ils s'ouvrent et se modifient dans Excel. Comme Excel abîme certaines valeurs
-(zéros de tête, formules, fractions prises pour des dates), Prévo les protège par une apostrophe
-en tête de cellule et la retire à la lecture. À la lecture, il accepte aussi les dates écrites
-`JJ/MM/AAAA` par Excel. Chaque fichier et chaque colonne sont décrits dans
-[FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
+**Adding or fixing a language**: see [CONTRIBUTING.md](CONTRIBUTING.md#add-or-fix-a-language). Turkish,
+Italian and Portuguese are planned for 2.1 ([roadmap](ROADMAP.md)).
 
-Ne modifiez pas un fichier dans Excel pendant que quelqu'un enregistre dans Prévo : le serveur
-signale un fichier verrouillé, et le mode dossier détecte le conflit.
+## Privacy
 
-Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
+Prévo collects nothing: no statistics, no installation identifier, no account with us. Your data
+stays in your folder, on your PC. What can leave the PC, and when:
 
-## Limites connues
+- **New-version notice** (on by default, can be turned off): one read per day and per workstation of the
+  public file `https://prevo.pro/version.json`, with no cookie, no page address, no redirect. The
+  prevo.pro server sees, as for any page, the IP address and the browser. Never in the demo.
+- **AI assistant** (off by default): with Ollama on a workshop PC, nothing leaves; with an online AI,
+  the texts sent (a fixed list of fields, described in the guide) go to the chosen provider, and a
+  permanent notice says so.
+- **Dictation**: in Chrome and Edge, the voice is transcribed by Google or Microsoft; Prévo says so on first
+  use, and dictation can be turned off in “This workstation”.
+- **“Suggest an improvement”**: only when you click; opens GitHub with the Prévo version, the
+  language and the shortened browser (for example “Chrome 130, Windows”), nothing else.
+- **Tailscale** (access outside the workshop, if you choose it): a third-party service, with its own account.
 
-Celles de la 2.0 ; celles de la 1.2.1 sont dans [son README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md).
+Drafts stay in the device's browser; backups and the external copy stay with you.
 
-- **Un certificat à reconnaître par appareil.** Sur le Wi-Fi de l'atelier, chaque téléphone et chaque autre poste
-  fait confiance au PC atelier une fois, guidé par la page de Prévo ; d'ici là, il reste sur cette page et n'ouvre
-  pas Prévo. Un certificat fourni par l'informaticien, ou l'accès par Tailscale, évite cette étape.
-- **Hors de l'atelier, il faut Tailscale ou un VPN.** Tailscale demande un compte chez Tailscale (un service
-  tiers), son application sur le PC serveur et sur chaque téléphone. Prévo n'ouvre jamais la box. N'exposez Prévo
-  sur Internet que derrière Tailscale, le VPN de l'entreprise ou un mandataire inverse en https
-  ([docs/INSTALLATION.md](docs/INSTALLATION.md)) : Prévo n'a pas de double facteur.
-- **Pas d'annuaire d'entreprise.** Ni Active Directory, ni LDAP, ni connexion unique : des comptes locaux, l'export
-  du journal des connexions, et le mandataire inverse ou le VPN de l'entreprise pour vos propres contrôles d'accès.
-- **L'hébergement n'est pas fourni.** Prévo s'installe chez vous, sur un PC qui doit rester allumé ; un hébergement
-  se discute sur demande avec SELECTIS.
-- **Sans comptes, les profils ne protègent rien.** Sur ce PC seul, en mode dossier et en démo, chacun choisit son
-  profil : les profils adaptent les écrans. C'est pourquoi Prévo refuse d'écouter le réseau sans comptes ni https.
-- **Le serveur ne sert que l'application.** Il répond seulement pour `index.html`, `favicon.svg`, `GUIDE.html` et
-  les dossiers `css/`, `js/` et `acces/` (la porte d'entrée) : c'est une liste blanche. Tout autre fichier du dossier
-  (`README.md`, `docs/`, `tests/`, `outils/`, `serveur.py`…) répond « introuvable » (404). Les données ne passent
-  que par l'API de l'application, après connexion et selon le rôle ; `donnees/acces/` (comptes, sessions) n'est
-  jamais servi.
-- **Python.** Le zip embarque Python pour Windows 64 bits ; ailleurs, il faut Python 3.11 ou plus récent (et, pour
-  le certificat de l'atelier, le mkcert du système : voir [docs/INSTALLATION.md](docs/INSTALLATION.md)).
-- **Chrome ou Edge requis pour le mode dossier** (API d'accès aux fichiers).
-- **Coût des pièces au prix actuel.** Le coût d'un OT utilise le prix actuel de l'article ; une
-  réception d'achat ne change pas ce prix (le responsable le modifie à la main), mais un changement
-  de prix modifie aussi le coût des OT passés, et donc les indicateurs de coût. Un rapport mensuel
-  figé, lui, garde les chiffres du jour où il a été figé (« Recalculer » en crée une nouvelle version).
-- **Étiquettes QR et adresse du PC.** En mode serveur, le QR contient l'adresse réseau du PC (celle de la
-  porte d'entrée, en http : elle ne change pas avec le https). Si elle change (la box attribue une autre
-  adresse, le port change), les étiquettes déjà collées ne mènent plus à la fiche : réservez une adresse fixe
-  pour ce PC dans la box. En modes dossier et démo, le QR contient `GMAO:<identifiant>`, lisible seulement par
-  le scan de Prévo sur ce poste.
-- **Les indicateurs valent ce que vaut la saisie.** MTBF, MTTR et disponibilité reposent sur la durée
-  d'arrêt saisie à la clôture et sur les heures de fonctionnement par jour de chaque équipement ; un
-  équipement sans ces heures est exclu, et la liste des exclus est affichée. « Dont attente de
-  pièces » n'est calculé que pour les pannes dont tout l'historique est au journal de Prévo (pas pour
-  un OT ajouté à la main dans Excel).
-- **Les suggestions sont des faits à examiner.** Elles comptent les pannes par cause codée à la
-  clôture : une cause mal codée fausse le compte. Pour « revoir le préventif », toutes les causes
-  comptent, même celles qu'une gamme ne vise pas : ignorez la suggestion avec un motif. Sur une base
-  passée du format 1 au format 2, seules les visites faites après ce passage comptent pour « allonger
-  une gamme » (avant, l'absence d'anomalie n'était pas saisie).
-- **Assistant IA.** Une proposition peut être fausse : elle est toujours relue avant d'être utilisée.
-  Un modèle local est lent sans carte graphique (plus d'une minute par réponse est possible). En modes
-  dossier et démo, Ollama refuse la page ouverte depuis le disque : pour l'IA, lancez Prévo en mode serveur,
-  même seul sur un PC. Un fournisseur en ligne reçoit les textes envoyés.
-- **Wiki de maintenance.** Il ne se fabrique qu'à partir des OT clôturés administrativement ; ses textes
-  rédigés sont contrôlés et validés, mais restent à relire. Les textes du wiki de la démo ont été écrits
-  par Claude Sonnet (un agent par OT, avec la consigne de Prévo) puis relus : ils décrivent un atelier
-  fictif. Le coût par OT n'a été mesuré qu'avec ce fournisseur ; avec une IA locale (Ollama), rien n'est
-  facturé, mais la qualité des textes et la durée n'ont pas été mesurées.
-- **Dictée.** Elle dépend du navigateur : Chrome et Edge envoient la voix à Google ou Microsoft, et
-  le micro n'est permis que sur une page sécurisée (sur le PC lui-même, ou en https).
+## Data format
 
-## Comment ce projet a été fait
+The data is 24 CSV files (format 3 since package 6): separator `;`, UTF-8 with BOM,
+CRLF line endings. They open and can be edited in Excel. Because Excel damages some values
+(leading zeros, formulas, fractions taken for dates), Prévo protects them with an apostrophe
+at the start of the cell and removes it when reading. When reading, it also accepts the dates written
+`DD/MM/YYYY` by Excel. Each file and each column is described in
+[FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md) (in French).
 
-Le cahier des charges a été rédigé par Nicolas Briand avec Claude ; le code a ensuite été produit
-par des sous-agents Claude Code, sous la coordination d'un orchestrateur qui n'accepte une tâche
-que si sa vérification passe, avec relecture indépendante à chaque étape. La méthode et les
-preuves, lot par lot, sont détaillées dans [docs/PILOTAGE.md](docs/PILOTAGE.md).
+Do not edit a file in Excel while someone is saving in Prévo: the server
+reports a locked file, and folder mode detects the conflict.
 
-## Licence et crédits
+To run the tests or contribute: see [CONTRIBUTING.md](CONTRIBUTING.md); to report a vulnerability:
+[SECURITY.md](SECURITY.md) (never in a public issue).
 
-Code sous licence MIT (voir `LICENSE`), Copyright (c) 2026 Nicolas Briand — SELECTIS. Pour les
-bibliothèques tierces et la police, voir `NOTICE`.
+## Known limitations
 
-Prévo embarque, sans modification, PapaParse, qrcode-generator, jsQR, JSZip (et pako) et Apache
-ECharts, ainsi que la police Sora (SIL Open Font License 1.1). Leurs licences sont reproduites dans
-`js/lib/LICENCES.txt`.
+- **A certificate to accept on each device.** On the workshop Wi-Fi, each phone and each other workstation
+  trusts the workshop PC once, guided by Prévo's page; until then, it stays on that page and does not open
+  Prévo. A certificate supplied by the IT person, or access through Tailscale, avoids this step.
+- **Outside the workshop, you need Tailscale or a VPN.** Tailscale requires an account with Tailscale (a third-party
+  service), and its app on the server PC and on each phone. Prévo never opens the router. Expose Prévo
+  on the Internet only behind Tailscale, the company VPN or a reverse proxy over https
+  ([docs/INSTALLATION.md](docs/INSTALLATION.md)): Prévo has no two-factor authentication.
+- **No company directory.** No Active Directory, no LDAP, no single sign-on: local accounts, the export
+  of the sign-in log, and the company's reverse proxy or VPN for your own access controls.
+- **Hosting is not provided.** Prévo installs on your premises, on a PC that must stay on; hosting
+  is discussed on request with SELECTIS.
+- **Without accounts, profiles protect nothing.** On this PC alone, in folder mode and in the demo, everyone chooses their
+  profile: profiles adapt the screens. That is why Prévo refuses to listen on the network without accounts and https.
+- **The server serves only the application.** It answers only for `index.html`, `favicon.svg`, `GUIDE.html` and
+  the `css/`, `js/` and `acces/` folders (the front door): it is an allow-list. Any other file in the folder
+  (`README.md`, `docs/`, `tests/`, `outils/`, `serveur.py`…) answers “not found” (404). Data goes only
+  through the application's API, after sign-in and according to the role; `donnees/acces/` (accounts, sessions) is
+  never served.
+- **Python.** The zip bundles Python for 64-bit Windows; elsewhere, Python 3.11 or newer is needed (and, for
+  the workshop certificate, the system's mkcert: see [docs/INSTALLATION.md](docs/INSTALLATION.md)).
+- **Chrome or Edge required for folder mode** (file access API).
+- **Memory use of ZIP export and import measured under Chrome only**: Edge and Firefox were not measured.
+- **Parts cost at the current price.** A work order's cost uses the item's current price; a
+  purchase receipt does not change that price (the manager changes it by hand), but a price change
+  also changes the cost of past work orders, and so the cost indicators. A frozen monthly
+  report, however, keeps the figures of the day it was frozen (“Recalculate” creates a new version).
+- **QR labels and the PC's address.** In server mode, the QR contains the PC's network address (that of the
+  front door, in http: it does not change with https). If it changes (the router assigns another
+  address, the port changes), the labels already stuck on no longer lead to the sheet: reserve a fixed address
+  for this PC in the router. In folder and demo modes, the QR contains `GMAO:<identifier>`, readable only by
+  Prévo's scan on this workstation.
+- **Indicators are only as good as the data entry.** MTBF, MTTR and availability rest on the downtime
+  entered at closing and on the operating hours per day of each piece of equipment; equipment
+  without these hours is excluded, and the list of exclusions is shown. “Of which waiting for
+  parts” is calculated only for breakdowns whose whole history is in Prévo's log (not for
+  a work order added by hand in Excel).
+- **Suggestions are facts to examine.** They count breakdowns by the cause coded at
+  closing: a wrongly coded cause skews the count. For “review the preventive maintenance”, all causes
+  count, even those a routine does not target: ignore the suggestion with a reason. On a database
+  moved from format 1 to format 2, only the visits made after that move count for “lengthen
+  a routine” (before, the absence of an anomaly was not recorded).
+- **AI assistant.** A proposal can be wrong: it is always reviewed before being used.
+  A local model is slow without a graphics card (more than a minute per answer is possible). In folder
+  and demo modes, Ollama refuses the page opened from disk: for the AI, run Prévo in server mode,
+  even alone on a PC. An online provider receives the texts sent.
+- **Maintenance wiki.** It is built only from administratively closed work orders; its written
+  texts are checked and approved, but still need reading. The demo wiki texts were written
+  by Claude Sonnet (one agent per work order, with Prévo's instructions) and then reviewed: they describe a fictional
+  workshop. The cost per work order was measured only with this provider; with a local AI (Ollama), nothing is
+  charged, but the quality of the texts and the time taken were not measured.
+- **Dictation.** It depends on the browser: Chrome and Edge send the voice to Google or Microsoft, and
+  the microphone is allowed only on a secure page (on the PC itself, or over https).
+- **Two languages for now.** French and English; the demo data, the console's request log and the
+  command-line help (`--aide`) stay in French.
+
+## How this project was made
+
+The specification was written by Nicolas Briand with Claude; the code was then produced
+by Claude Code sub-agents, under the coordination of an orchestrator that accepts a task
+only if its verification passes, with an independent review at each step. In short:
+[docs/METHODE.md](docs/METHODE.md); the method and the evidence, package by package:
+[docs/PILOTAGE.md](docs/PILOTAGE.md) (in French).
+
+## Licence and credits
+
+Code under the MIT licence (see `LICENSE`), Copyright (c) 2026 Nicolas Briand — SELECTIS. For the
+third-party libraries and the font, see `NOTICE`.
+
+Prévo bundles, unmodified, PapaParse, qrcode-generator, jsQR, Apache ECharts and SheetJS
+Community Edition, as well as the Sora font (SIL Open Font License 1.1). Their licences are reproduced in
+`js/lib/LICENCES.txt`; the Windows zip adds Python and mkcert, with their licences (see `NOTICE`).
+
+Everyone takes part in accordance with the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Contact
 
-Nicolas Briand — SELECTIS, formation et maintenance industrielle.
-Site : https://selectis.eu
+Nicolas Briand — SELECTIS, industrial maintenance training and consultancy.
+Website: https://selectis.eu
+Email: contact@prevo.pro

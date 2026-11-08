@@ -13,6 +13,11 @@ Ce qui est vérifié :
                   relié, parametres.csv de la démo avec mode_solo ; « demo » pour l'informaticien : sans mode_solo ;
                   « vide » : rien de plus que ce que Solo pose ; base inconnue 400 ; jeu de démo illisible : 500 et rien
                   d'écrit ;
+    langue        (T296) langue_defaut à « terminer » : base présente jamais touchée ; base absente : « fr » sans le
+                  champ, « en » avec la démo (après ses lignes) et pour « vide » hors Solo (parametres.csv seul,
+                  version_schema en tête) ; « xx », « EN », vide, null, nombre, liste : 400 par code
+                  (installation.langue_inconnue, les langues déclarées en valeur), rien d'écrit ; serveur et outils
+                  lisent les mêmes langues dans js/i18n/langues.js ;
     cohérence     lire_jeu_de_demo rend exactement donnees/demo/*.csv ; les cellules que decaler_texte_csv décale sont
                   exactement les colonnes date et date_heure du schéma ;
     deplacer      deplacer_installation (module) vers un dossier temporaire : compte des fichiers, SHA-256 de chaque
@@ -38,6 +43,7 @@ import io
 import json
 import re
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,6 +54,9 @@ from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler
 from test_installation_api import (CasAssistant, Enregistreur, MOT_DE_PASSE, NOM_TAILSCALE, configuration, lire_csv,
                                    parametres_de, serveur, sha256)
 from test_installation_ecrans import CasInstallation
+
+sys.path.insert(0, str(RACINE / "outils"))
+from textes_langues import langues_declarees  # noqa: E402  (lecteur de js/i18n/langues.js des outils, T296)
 
 MOTIF_DEBUT_DE_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 MOTIF_TABLE_SCHEMA = re.compile(r"^    ([a-z_]+): \{$")
@@ -162,7 +171,8 @@ class TestBaseDeDepart(CasAssistant):
         self.assertIn("existante", refus.json()["erreur"])
         self.assertFalse(Path(instance.config.reglages["_fichier"]).exists())
         self.assertEqual({p.name: p.read_bytes() for p in donnees.glob("*.csv")}, originaux)
-        fin = self.ok(client.post("terminer"))
+        # T296 : une langue envoyée sur une base présente au départ ne la change pas (aucune ligne langue_defaut).
+        fin = self.ok(client.post("terminer", {"langue_defaut": "en"}))
         self.assertEqual((fin["base"], fin["relance"], self.enregistreur.relances), ("vide", True, [None]))
         apres = {p.name: p.read_bytes() for p in donnees.glob("*.csv")}
         self.assertEqual(sorted(apres), sorted(originaux))                   # aucun CSV ajouté ni retiré
@@ -180,6 +190,7 @@ class TestBaseDeDepart(CasAssistant):
                          ("1", "1", "TEC-0001"))
         self.assertEqual(parametres["version_schema"], "'3")                  # présent : jamais réécrit (apostrophe gardée)
         self.assertEqual(parametres["entreprise_nom"], "Atelier des Trois Vallées (démo)")
+        self.assertNotIn("langue_defaut", parametres)
         self.assertTrue(Path(instance.config.reglages["_fichier"]).is_file())
         self.assertTrue(any(p.is_dir() for p in Path(instance.config.dossier_sauvegardes).iterdir()))   # sauvegarde du jour
 
@@ -239,11 +250,14 @@ class TestBaseDeDepart(CasAssistant):
         self.ok(client.post("certificat", {"mode": "mandataire"}))
         self.ok(client.post("demarrage", {"demarrage": "aucun", "veille_desactivee": False}))
         self.ok(client.post("sauvegardes", {"dossier": ""}))
-        fin = self.ok(client.post("terminer", {"base": "demo"}))
+        fin = self.ok(client.post("terminer", {"base": "demo", "langue_defaut": "en"}))
         self.assertEqual(fin["base"], "demo")
         donnees = Path(instance.config.dossier_donnees)
         self.assertEqual(sorted(p.stem for p in donnees.glob("*.csv")), sorted(serveur.TABLES))
         attendus = jeu_de_demo_decale(6 * 7)
+        # parametres.csv : les lignes de la démo, puis la langue choisie (T296).
+        entete, lignes = attendus["parametres"]
+        attendus["parametres"] = (entete, lignes + [["langue_defaut", "en"]])
         for table, (entete, lignes) in attendus.items():
             with self.subTest(table=table):
                 self.assertEqual(lignes_csv((donnees / (table + ".csv")).read_bytes()), (entete, lignes))
@@ -261,6 +275,45 @@ class TestBaseDeDepart(CasAssistant):
         parametres = parametres_de(donnees)
         self.assertEqual((parametres["mode_solo"], parametres["solo_technicien_id"], parametres["version_schema"]),
                          ("1", "TEC-0001", "3"))
+        self.assertEqual(parametres["langue_defaut"], "fr")                  # T296 : sans langue_defaut reçue, le français
+
+    def test_base_absente_vide_hors_solo_parametres_avec_la_langue(self):
+        # T296 : hors Solo, « vide » crée parametres.csv seul (format courant et langue de Prévo).
+        client, instance = self.lancer()
+        self.ok(client.post("situation", {"situation": "informaticien"}))
+        self.ok(client.post("portee", {"portee": "atelier", "noms": ["gmao.entreprise.lan"]}))
+        self.ok(client.post("compte", {"prenom": "Nicolas", "nom": "Briand", "mot_de_passe": MOT_DE_PASSE}))
+        self.ok(client.post("certificat", {"mode": "mandataire"}))
+        self.ok(client.post("demarrage", {"demarrage": "aucun", "veille_desactivee": False}))
+        self.ok(client.post("sauvegardes", {"dossier": ""}))
+        self.ok(client.post("terminer", {"base": "vide", "langue_defaut": "en"}))
+        donnees = Path(instance.config.dossier_donnees)
+        self.assertEqual(sorted(p.name for p in donnees.glob("*.csv")), ["parametres.csv"])
+        self.assertEqual(lire_csv(donnees / "parametres.csv"), (["cle", "valeur"], [["version_schema", "3"],
+                                                                                     ["langue_defaut", "en"]]))
+
+    def test_langue_non_declaree_400_et_rien_d_ecrit(self):
+        # T296 : langue_defaut n'est acceptée que si js/i18n/langues.js la déclare ; message par code (T246).
+        self.assertEqual(serveur.langues_declarees(), langues_declarees(RACINE))
+        self.assertEqual(serveur.langues_declarees()[:2], ["fr", "en"])
+        client, instance = self.lancer()
+        self.solo_ce_pc_jusqu_au_recapitulatif(client, "Nicolas", "Briand")
+        donnees = Path(instance.config.dossier_donnees)
+        avant = {p.name: p.read_bytes() for p in donnees.glob("*.csv")}
+        for valeur in ("xx", "EN", "", None, 3, ["en"]):
+            with self.subTest(valeur=valeur):
+                reponse = client.post("terminer", {"base": "vide", "langue_defaut": valeur})
+                self.assertEqual(reponse.statut, 400, reponse.octets)
+                corps = reponse.json()
+                self.assertEqual(corps["erreur_code"], "installation.langue_inconnue")
+                self.assertEqual(corps["erreur_valeurs"], {"langues": serveur.langues_declarees()})
+                self.assertIn("fr, en", corps["erreur"])
+        self.assertEqual({p.name: p.read_bytes() for p in donnees.glob("*.csv")}, avant)
+        self.assertFalse(Path(instance.config.reglages["_fichier"]).exists())
+        self.assertTrue((donnees / "installation.json").exists())
+        self.assertEqual(self.enregistreur.relances, [])
+        self.ok(client.post("terminer", {"base": "vide", "langue_defaut": "en"}))
+        self.assertEqual(parametres_de(donnees)["langue_defaut"], "en")
 
     def test_jeu_de_demo_illisible_500_et_rien_d_ecrit(self):
         client, instance = self.lancer()

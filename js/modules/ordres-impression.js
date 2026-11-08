@@ -6,7 +6,7 @@
 Object.assign(Ordres, (() => {
 
   // Constantes, outils et écrans des fichiers précédents (ordres-regles.js à ordres-pieces.js).
-  const { RAPPEL_CONSIGNATION, nomTechnicien } = Ordres;
+  const { nomTechnicien } = Ordres;
   const { texte, nombre, equipementDe, cheminLocalisation, lignesDeLOt, operationsDe,
     afficherListe, afficherNouveau, afficherFiche } = Ordres.interne;
 
@@ -39,60 +39,58 @@ Object.assign(Ordres, (() => {
     return UI.html`<article class="bon-travail">
       <header class="bt-entete">
         <div>
-          <div class="bt-entreprise">${entreprise ? entreprise + ' — ' : ''}Prévo</div>
-          <h1>Bon de travail</h1>
-          <div class="bt-numero">${ot.id} <span class="bt-priorite">${ot.priorite}</span></div>
-          <div class="bt-meta"><span>Type : <b>${ot.type}</b></span><span>Statut : <b>${ot.statut}</b></span>
-            <span>Prévu le : <b>${UI.dateFr(ot.date_prevue) || '—'}</b></span><span>Technicien : <b>${nomTechnicien(ot.technicien_id) || '—'}</b></span>
-            <span>Temps prévu : <b>${ot.temps_prevu_h ? UI.heures(ot.temps_prevu_h) : '—'}</b></span></div>
+          <div class="bt-entreprise">${entreprise ? I18n.t('ordres.bon_de_travail.entreprise_prevo', { entreprise }) : I18n.t('ordres.bon_de_travail.prevo')}</div>
+          <h1>${I18n.t('ordres.bon_de_travail.bon_travail')}</h1>
+          <div class="bt-numero">${ot.id} <span class="bt-priorite">${Schema.libelleValeur('ordres_travail', 'priorite', ot.priorite)}</span></div>
+          <div class="bt-meta">${I18n.html('ordres.bon_de_travail.type_statut_prevu_technicien', { otType: Schema.libelleValeur('ordres_travail', 'type', ot.type), otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut), datePrevue: UI.dateFr(ot.date_prevue) || '—', technicien: nomTechnicien(ot.technicien_id) || '—', tempsPrevu: ot.temps_prevu_h ? UI.heures(ot.temps_prevu_h) : '—' })}</div>
         </div>
         <div class="bt-qr">${qrBon(equipementDe(ot))}</div>
       </header>
       <div class="bt-colonnes">
-        <section class="bt-equipement"><h2>Équipement</h2>
-          <dl class="valeurs"><dt>Repère</dt><dd>${equipement.repere || ot.equipement_id}</dd><dt>Désignation</dt><dd>${equipement.designation || ''}</dd>
-            <dt>Localisation</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd><dt>Criticité</dt><dd>${equipement.criticite || ''}</dd>
-            <dt>Habilitation</dt><dd>${equipement.habilitation_requise || 'aucune'}</dd></dl>
+        <section class="bt-equipement"><h2>${I18n.t('commun.champ.equipement')}</h2>
+          <dl class="valeurs"><dt>${I18n.t('commun.champ.repere')}</dt><dd>${equipement.repere || ot.equipement_id}</dd><dt>${I18n.t('commun.champ.designation')}</dt><dd>${equipement.designation || ''}</dd>
+            <dt>${I18n.t('ordres.bon_de_travail.localisation')}</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd><dt>${I18n.t('commun.champ.criticite')}</dt><dd>${Schema.libelleValeur('equipements', 'criticite', equipement.criticite)}</dd>
+            <dt>${I18n.t('ordres.bon_de_travail.habilitation')}</dt><dd>${equipement.habilitation_requise || I18n.t('ordres.equipement.aucune_habilitation')}</dd></dl>
         </section>
-        <section class="bt-travail"><h2>Travail à faire</h2>
+        <section class="bt-travail"><h2>${I18n.t('ordres.bon_de_travail.travail_faire')}</h2>
           <p class="bt-texte">${ot.titre}</p>
           ${ot.travail_a_faire ? UI.html`<p class="bt-texte">${ot.travail_a_faire}</p>` : ''}
-          ${ot.consignes ? UI.html`<p class="bt-texte"><b>Consignes :</b> ${ot.consignes}</p>` : ''}
-          ${di ? UI.html`<p><b>Demande :</b> ${di.id} — ${texte(di.symptome).replace(/[.\s]+$/, '')}${di.impact ? ' (impact : ' + di.impact + ')' : ''}</p>` : ''}
+          ${ot.consignes ? UI.html`<p class="bt-texte">${I18n.html('ordres.bon_de_travail.consignes_consignes', { consignes: ot.consignes })}</p>` : ''}
+          ${di ? UI.html`<p>${I18n.html('ordres.bon_de_travail.demande_di_id', { diId: di.id, symptome: texte(di.symptome).replace(/[.\s]+$/, '') })}${di.impact ? ' ' + I18n.t('ordres.bon_de_travail.impact', { impact: Schema.libelleValeur('demandes', 'impact', di.impact) }) : ''}</p>` : ''}
         </section>
       </div>
-      <section class="bt-consignation"><h2>Consignation</h2>
-        <p class="bt-texte">${texte(equipement.consignation) || 'Aucune procédure renseignée : voir le responsable avant d\'intervenir.'}</p>
-        <p class="bt-rappel">${RAPPEL_CONSIGNATION}</p>
-        <div class="bt-case"><span class="bt-coche"></span>Consignation appliquée par : ______________________</div>
+      <section class="bt-consignation"><h2>${I18n.t('ordres.bon_de_travail.consignation')}</h2>
+        <p class="bt-texte">${texte(equipement.consignation) || I18n.t('ordres.bon_de_travail.aucune_procedure_renseignee_voir')}</p>
+        <p class="bt-rappel">${Ordres.rappelConsignation()}</p>
+        <div class="bt-case"><span class="bt-coche"></span>${I18n.t('ordres.bon_de_travail.consignation_appliquee')}</div>
       </section>
-      <section class="bt-operations"><h2>Opérations</h2>
-        <table class="bt-table"><thead><tr><th class="bt-etroit">N°</th><th>Opération</th><th>Valeur attendue</th><th>Mesure</th><th class="bt-etroit">Fait</th></tr></thead>
+      <section class="bt-operations"><h2>${I18n.t('ordres.bon_de_travail.operations')}</h2>
+        <table class="bt-table"><thead><tr><th class="bt-etroit">${I18n.t('ordres.bon_de_travail.n')}</th><th>${I18n.t('ordres.bon_de_travail.operation')}</th><th>${I18n.t('ordres.bon_de_travail.valeur_attendue')}</th><th>${I18n.t('ordres.bon_de_travail.mesure')}</th><th class="bt-etroit">${I18n.t('ordres.bon_de_travail.fait')}</th></tr></thead>
           <tbody>${operations.length ? operations.map((op) => UI.html`<tr><td class="bt-etroit">${op.ordre}</td><td>${op.operation}</td><td>${op.valeur_attendue}</td><td class="bt-a-remplir"></td><td class="bt-etroit"><span class="bt-coche"></span></td></tr>`)
             : UI.brut(new Array(3).fill('<tr><td class="bt-etroit"></td><td class="bt-a-remplir"></td><td></td><td></td><td class="bt-etroit"><span class="bt-coche"></span></td></tr>').join(''))}</tbody></table>
       </section>
-      <section class="bt-pieces"><h2>Pièces</h2>
-        <table class="bt-table"><thead><tr><th>Référence</th><th>Désignation</th><th>Emplacement</th><th class="bt-etroit">Prévu</th><th class="bt-etroit">Utilisé</th></tr></thead>
+      <section class="bt-pieces"><h2>${I18n.t('ordres.bon_de_travail.pieces')}</h2>
+        <table class="bt-table"><thead><tr><th>${I18n.t('commun.champ.reference')}</th><th>${I18n.t('commun.champ.designation')}</th><th>${I18n.t('ordres.bon_de_travail.emplacement')}</th><th class="bt-etroit">${I18n.t('ordres.bon_de_travail.prevu')}</th><th class="bt-etroit">${I18n.t('ordres.bon_de_travail.utilise')}</th></tr></thead>
           <tbody>${pieces.map((p) => {
             const article = Donnees.trouver('articles', p.article_id) || {};
             return UI.html`<tr><td>${article.reference || p.article_id}</td><td>${article.designation || ''}</td><td>${article.emplacement || ''}</td><td class="bt-etroit">${UI.nombreFr(p.quantite_prevue)}</td><td class="bt-a-remplir"></td></tr>`;
           })}${UI.brut('<tr><td class="bt-a-remplir"></td><td></td><td></td><td></td><td></td></tr>')}</tbody></table>
       </section>
-      <section class="bt-temps"><h2>Temps passés</h2>
-        <table class="bt-table"><thead><tr><th>Date</th><th>Technicien</th><th class="bt-etroit">Heures</th></tr></thead>
+      <section class="bt-temps"><h2>${I18n.t('ordres.bon_de_travail.temps_passes')}</h2>
+        <table class="bt-table"><thead><tr><th>${I18n.t('commun.champ.date')}</th><th>${I18n.t('commun.champ.technicien')}</th><th class="bt-etroit">${I18n.t('ordres.bon_de_travail.heures')}</th></tr></thead>
           <tbody>${UI.brut(new Array(3).fill('<tr><td class="bt-a-remplir"></td><td></td><td></td></tr>').join(''))}</tbody></table>
       </section>
-      <section class="bt-compte-rendu"><h2>Compte rendu</h2>
-        <p>Cause : ________ Remède : ________ Arrêt de production : ☐ oui ☐ non — durée : ______ h</p>
+      <section class="bt-compte-rendu"><h2>${I18n.t('ordres.bon_de_travail.compte_rendu')}</h2>
+        <p>${I18n.t('ordres.bon_de_travail.cause_remede_arret_production')}</p>
         <div class="bt-lignes">${lignesVides(4)}</div>
-        <div class="bt-case"><span class="bt-coche"></span>Équipement remis en service en sécurité</div>
+        <div class="bt-case"><span class="bt-coche"></span>${I18n.t('ordres.bon_de_travail.equipement_remis_service_securite')}</div>
       </section>
       <section class="bt-signatures">
-        <div class="bt-signature"><b>Technicien</b>Nom, date et signature</div>
-        <div class="bt-signature"><b>Production (remise en service)</b>Nom, date et signature</div>
-        <div class="bt-signature"><b>Responsable maintenance</b>Nom, date et signature</div>
+        <div class="bt-signature">${I18n.html('ordres.bon_de_travail.technicien_nom_date_signature')}</div>
+        <div class="bt-signature">${I18n.html('ordres.bon_de_travail.production_remise_service_nom')}</div>
+        <div class="bt-signature">${I18n.html('ordres.bon_de_travail.responsable_maintenance_nom_date')}</div>
       </section>
-      <footer class="bt-pied"><span>Prévo — bon imprimé le ${UI.dateHeureFr(maintenant).replace(' ', ' à ')}</span><span>${ot.id}</span></footer>
+      <footer class="bt-pied">${I18n.html('ordres.bon_de_travail.bon_imprime', { date: UI.dateHeureFr(maintenant).replace(' ', ' ' + I18n.t('ordres.bon_de_travail.a') + ' '), otId: ot.id })}</footer>
     </article>`;
   }
 
@@ -114,20 +112,23 @@ Object.assign(Ordres, (() => {
     const tablesFiche = ['ordres_travail', 'ot_operations', 'ot_pieces', 'ot_temps', 'equipements', 'techniciens',
       'habilitations', 'articles', 'mouvements_stock', 'demandes', 'codes_defaillance'];
     App.ecran({
-      id: 'liste-ot', route: /^#\/ot$/, titre: 'Ordres de travail',
-      menu: { libelle: 'Ordres de travail', court: 'Ordres', icone: 'ordres', ordre: 30 },
+      id: 'liste-ot', route: /^#\/ot$/,
+      get titre() { return I18n.t('ordres.ecran.liste_titre'); },
+      menu: { get libelle() { return I18n.t('ordres.menu.libelle'); }, get court() { return I18n.t('ordres.menu.court'); }, icone: 'ordres', ordre: 30 },
       profils: ['technicien', 'responsable'], tables: ['ordres_travail', 'equipements', 'techniciens'],
       afficher: afficherListe,
     });
     // « #/ot/nouveau » avant « #/ot/<id> » : la première route qui correspond gagne ; la route
     // fiche exclut en plus « nouveau » (ARCHITECTURE.md §14.2).
     App.ecran({
-      id: 'nouvel-ot', route: /^#\/ot\/nouveau$/, titre: 'Nouvel OT', parent: 'liste-ot',
+      id: 'nouvel-ot', route: /^#\/ot\/nouveau$/, parent: 'liste-ot',
+      get titre() { return I18n.t('ordres.ecran.nouveau_titre'); },
       profils: ['responsable'], tables: [],
       afficher: afficherNouveau,
     });
     App.ecran({
-      id: 'fiche-ot', route: /^#\/ot\/(?!nouveau$)(?<id>[^/?]+)$/, titre: 'Ordre de travail', parent: 'liste-ot',
+      id: 'fiche-ot', route: /^#\/ot\/(?!nouveau$)(?<id>[^/?]+)$/, parent: 'liste-ot',
+      get titre() { return I18n.t('ordres.ecran.fiche_titre'); },
       profils: ['technicien', 'responsable'], tables: tablesFiche,
       afficher: afficherFiche,
     });

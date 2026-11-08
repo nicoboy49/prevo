@@ -6,7 +6,7 @@
 Object.assign(Parc, (() => {
 
   // Outils de parc-regles.js.
-  const { estActif, comparerTextes, parRepere, remonteSurSoi, badgesEquipement } = Parc.interne;
+  const { estActif, comparerLibelles, parRepere, remonteSurSoi, badgesEquipement } = Parc.interne;
 
   // Fenêtre de localisation : dans parc-formulaires.js, chargé APRÈS ce fichier ; elle est
   // cherchée au moment de l'appel, pas au chargement.
@@ -82,7 +82,7 @@ Object.assign(Parc, (() => {
     const localisationsParId = new Map(localisations.map((l) => [l.id, l]));
     const sousLocalisations = new Map();
     const racinesLocalisations = [];
-    localisations.slice().sort((a, b) => comparerTextes(a.libelle, b.libelle)).forEach((localisation) => {
+    localisations.slice().sort((a, b) => comparerLibelles(a.libelle, b.libelle)).forEach((localisation) => {
       const parent = localisationsParId.get(localisation.parent_id);
       if (parent && !remonteSurSoi(localisation.id, localisationsParId)) {
         if (!sousLocalisations.has(parent.id)) sousLocalisations.set(parent.id, []);
@@ -104,11 +104,11 @@ Object.assign(Parc, (() => {
           <details open>
             <summary>
               <b>${localisation.libelle || localisation.id}</b>
-              <span class="type" title="${nombre} équipement${nombre > 1 ? 's' : ''}"><span class="parc-type-loc">${localisation.type || ''} · </span><span class="parc-nombre">${nombre}</span><span class="parc-mot-equip"> équipement${nombre > 1 ? 's' : ''}</span></span>
+              <span class="type" title="${I18n.t('parc.construire_arbre.n_equipements', { n: nombre })}">${I18n.html('parc.construire_arbre.v1_n_equipements', { n: nombre, type: Schema.libelleValeur('localisations', 'type', localisation.type) })}</span>
               ${responsable ? UI.html`<button type="button" class="btn btn-fantome parc-modifier-localisation" data-localisation="${localisation.id}"
-                aria-label="Modifier la localisation ${localisation.libelle}">${UI.icone('cle')}<span class="parc-libelle-bouton">Modifier</span></button>` : ''}
+                aria-label="${I18n.t('parc.construire_arbre.modifier_localisation', { localisationLibelle: localisation.libelle })}">${UI.icone('cle')}<span class="parc-libelle-bouton">${I18n.t('commun.bouton.modifier')}</span></button>` : ''}
             </summary>
-            ${sous.length || racines.length ? UI.html`<ul>${sous.map((noeud) => noeud.html)}${racines.map(ligneEquipement)}</ul>` : UI.html`<p class="note parc-vide-loc">Aucun équipement ici.</p>`}
+            ${sous.length || racines.length ? UI.html`<ul>${sous.map((noeud) => noeud.html)}${racines.map(ligneEquipement)}</ul>` : UI.html`<p class="note parc-vide-loc">${I18n.t('parc.construire_arbre.aucun_equipement_ici')}</p>`}
           </details>
         </li>`,
       };
@@ -122,7 +122,7 @@ Object.assign(Parc, (() => {
       const nombre = sansLocalisation.reduce((somme, equipement) => somme + nombreAvecEnfants(equipement), 0);
       nombreTotal += nombre;
       blocSansLocalisation = UI.html`<li><details open>
-        <summary><b>Sans localisation</b><span class="type">${nombre} équipement${nombre > 1 ? 's' : ''}</span></summary>
+        <summary>${I18n.html('parc.construire_arbre.sans_localisation_equipements', { n: nombre })}</summary>
         <ul>${sansLocalisation.map(ligneEquipement)}</ul></details></li>`;
     }
     return {
@@ -140,22 +140,21 @@ Object.assign(Parc, (() => {
       <div class="parc">
         <div class="entete-page">
           <div>
-            <h1>Parc</h1>
-            <p>${actifs} équipement${actifs > 1 ? 's' : ''} actif${actifs > 1 ? 's' : ''} dans ${Donnees.lignes('localisations').length} localisations.
-              Touchez un équipement pour ouvrir sa fiche.</p>
+            <h1>${I18n.t('parc.liste.parc')}</h1>
+            <p>${I18n.t('parc.liste.equipements_actifs_localisations_touchez', { n: actifs, localisations: I18n.t('parc.liste.n_localisations', { n: Donnees.lignes('localisations').length }) })}</p>
           </div>
           ${responsable ? UI.html`<div class="actions">
-            <a class="btn btn-primaire" href="#/equipement/nouveau">${UI.icone('ajouter')}Nouvel équipement</a>
-            <button type="button" class="btn btn-secondaire" id="parc-nouvelle-localisation">${UI.icone('ajouter')}Nouvelle localisation</button>
-            <a class="btn btn-secondaire" href="#/parc/etiquettes">${UI.icone('qr')}Imprimer des étiquettes</a>
+            <a class="btn btn-primaire" href="#/equipement/nouveau">${UI.icone('ajouter')}${I18n.t('parc.liste.nouvel_equipement')}</a>
+            <button type="button" class="btn btn-secondaire" id="parc-nouvelle-localisation">${UI.icone('ajouter')}${I18n.t('parc.liste.nouvelle_localisation')}</button>
+            <a class="btn btn-secondaire" href="#/parc/etiquettes">${UI.icone('qr')}${I18n.t('parc.liste.imprimer_etiquettes')}</a>
           </div>` : ''}
         </div>
         <div class="filtres parc-filtres" data-hors-saisie>
-          <label class="visuellement-cache" for="parc-recherche">Rechercher un équipement</label>
+          <label class="visuellement-cache" for="parc-recherche">${I18n.t('parc.liste.rechercher_equipement')}</label>
           <input type="search" id="parc-recherche" autocomplete="off" enterkeyhint="search"
-            placeholder="Repère, désignation ou marque">
-          <label class="case" for="parc-inactifs"><input type="checkbox" id="parc-inactifs">Afficher les inactifs${inactifs ? ' (' + inactifs + ')' : ''}</label>
-          <button type="button" class="btn btn-fantome" id="parc-replier" data-etat="ouvert">Tout replier</button>
+            placeholder="${I18n.t('parc.liste.repere_designation_marque')}">
+          <label class="case" for="parc-inactifs"><input type="checkbox" id="parc-inactifs">${inactifs ? I18n.t('parc.liste.afficher_inactifs_nombre', { nombre: inactifs }) : I18n.t('parc.liste.afficher_inactifs')}</label>
+          <button type="button" class="btn btn-fantome" id="parc-replier" data-etat="ouvert">${I18n.t('parc.liste.tout_replier')}</button>
         </div>
         <p class="note parc-resultat" role="status" aria-live="polite"></p>
         <article class="carte parc-arbre" id="parc-arbre"></article>
@@ -172,18 +171,17 @@ Object.assign(Parc, (() => {
     function dessinerArbre() {
       const arbre = construireArbre();
       boutonReplier.dataset.etat = 'ouvert';
-      boutonReplier.textContent = 'Tout replier';
+      boutonReplier.textContent = I18n.t('parc.liste.tout_replier');
       if (arbre.nbEquipements === 0) {
         UI.remplir(zoneArbre, etatListe.terme.trim()
-          ? UI.vide('Aucun équipement trouvé', 'Aucun équipement ne correspond à « ' + etatListe.terme.trim() + ' ». Essayez un autre mot, ou cochez « Afficher les inactifs ».', 'recherche')
-          : UI.vide('Le parc est vide', responsable ? 'Commencez par créer vos localisations, puis vos équipements.' : 'Le responsable n\'a pas encore saisi d\'équipement.', 'parc'));
+          ? UI.vide(I18n.t('parc.liste.aucun_equipement_trouve'), I18n.t('parc.liste.aucun_equipement_correspond_essayez', { terme: etatListe.terme.trim() }), 'recherche')
+          : UI.vide(I18n.t('parc.liste.parc_vide'), responsable ? I18n.t('parc.liste.commencez_creer_localisations_puis') : I18n.t('parc.liste.responsable_pas_encore_saisi'), 'parc'));
         zoneResultat.textContent = '';
         return;
       }
       UI.remplir(zoneArbre, arbre.html);
       zoneResultat.textContent = etatListe.terme.trim()
-        ? arbre.nbCorrespondances + ' équipement' + (arbre.nbCorrespondances > 1 ? 's' : '') + ' trouvé' + (arbre.nbCorrespondances > 1 ? 's' : '')
-          + ' pour « ' + etatListe.terme.trim() + ' ».'
+        ? I18n.t('parc.liste.equipements_trouves_pour', { n: arbre.nbCorrespondances, terme: etatListe.terme.trim() })
         : '';
     }
 
@@ -193,7 +191,7 @@ Object.assign(Parc, (() => {
       const ouvrir = boutonReplier.dataset.etat !== 'ouvert';
       UI.$$('details', zoneArbre).forEach((detail) => { detail.open = ouvrir; });
       boutonReplier.dataset.etat = ouvrir ? 'ouvert' : 'ferme';
-      boutonReplier.textContent = ouvrir ? 'Tout replier' : 'Tout déplier';
+      boutonReplier.textContent = ouvrir ? I18n.t('parc.liste.tout_replier') : I18n.t('parc.liste.tout_deplier');
     });
     zoneArbre.addEventListener('click', (evenement) => {
       const bouton = evenement.target.closest('.parc-modifier-localisation');

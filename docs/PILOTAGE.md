@@ -499,8 +499,9 @@ part une fois, mesures ci-dessus). Les bibliothèques de `js/lib/` sont celles d
 
 ### La publication
 
-Le dépôt privé `nicoboy49/prevo` a été créé par Nicolas ; l'historique a été réécrit avant le premier
-envoi pour porter son adresse professionnelle (contenu identique, vérifié, sauvegarde gardée). Les
+Le dépôt privé a été créé par Nicolas, sous le nom qu'avait alors le projet (`nicoboy49/rouage` ; le
+logiciel a pris le nom Prévo le 24 octobre, avec un nouveau dépôt, voir §12) ; l'historique a été réécrit avant le
+premier envoi pour porter son adresse professionnelle (contenu identique, vérifié, sauvegarde gardée). Les
 étiquettes `lot-1` à `lot-3-bis` y sont ; `lot-4` et `v1.0.0` sont envoyées à la clôture.
 
 ### Gel de l'interface avant le lancement (2026-10-22)
@@ -914,9 +915,14 @@ d'abord une vague de correction.
 ### La publication
 
 La branche principale a été envoyée sur le dépôt privé le 28 octobre, avec l'accord de Nicolas, jusqu'à
-l'arbitrage sur l'assistant IA. La suite, avec les étiquettes `lot-7` et `v2.0.0`, part après la recette
-réelle et avec son accord ; le zip de la release, Python et mkcert compris, se joint à la release GitHub
-de `v2.0.0` (`docs/RELEASE.md`).
+l'arbitrage sur l'assistant IA. Le zip de la release, Python et mkcert compris, se joint à la release GitHub
+(`docs/RELEASE.md`).
+
+*Mise à jour du 07/11/2026 (constat B10 du Lot 0).* Le dépôt `nicoboy49/prevo` est **public**. La version publiée le
+28 octobre sous le numéro 2.0.0 a été renommée **2.0.0 bêta 1** le 4 novembre (pré-version), avant que la recette
+réelle soit faite ; la version stable est restée la 1.2.x (1.2.1, correctif publié le 4 novembre), et la **2.0.0
+bêta 2** a été publiée le 5 novembre. La 2.0.0 finale (français et anglais) suit le chantier multilingue, puis la
+2.1.0 (turc, italien, portugais).
 
 ## 14. À retenir pour piloter une IA
 

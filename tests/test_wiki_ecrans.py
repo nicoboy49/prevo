@@ -2425,9 +2425,9 @@ class TestRecherche(CasWiki):
         """Ajouts hors du wiki (interface gelée) : une ligne dans l'onglet Préparation, deux dans la saisie d'une DI,
         une dans la fiche équipement."""
         attendus = {
-            "ordres-onglets.js": ["Wiki.champRecherche({ equipementId: ot.equipement_id, texteInitial: ot.titre, titre: 'Chercher dans l\\'historique', montres: 3 })"],
+            "ordres-onglets.js": ["Wiki.champRecherche({ equipementId: ot.equipement_id, texteInitial: ot.titre, titre: I18n.t('ordres.preparation.chercher_historique'), montres: 3 })"],
             "demandes-signaler.js": ["Wiki.poserRechercheDemande(champSymptome, selecteur.valeur());"] * 2,
-            "parc-fiche.js": ['<a id="lien-wiki-equipement" href="#/wiki/${idUrl}">${UI.icone(\'wiki\')}Wiki de cet équipement</a>'],
+            "parc-fiche.js": ['<a id="lien-wiki-equipement" href="#/wiki/${idUrl}">${UI.icone(\'wiki\')}${I18n.t(\'parc.fiche.wiki_equipement\')}</a>'],
         }
         for fichier, morceaux in attendus.items():
             with self.subTest(fichier=fichier):

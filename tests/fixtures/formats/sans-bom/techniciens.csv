@@ -1,0 +1,5 @@
+id;nom;prenom;metier;taux_horaire;capacite_h_semaine;actif
+TEC-0001;Moreau;Julien;Électricien;44;35;1
+TEC-0002;Benali;Karim;Mécanicien;42;35;1
+TEC-0003;Lambert;Sophie;Automaticien;48;35;1
+TEC-0004;Garnier;Thomas;Polyvalent;38;35;1

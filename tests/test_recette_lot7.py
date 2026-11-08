@@ -841,7 +841,8 @@ class TestParcoursIntranet(CasRecetteLot7):
                 with self.subTest(chemin=chemin):
                     etranger = requete(reel.url, chemin, entetes=dict(forges, **{"X-Forwarded-Host": "pirate.example"}))
                     self.assertEqual(etranger.statut, 403)
-                    self.assertEqual(etranger.json(), {"erreur": serveur.MESSAGE_HOTE_ORIGINE_REFUSE})
+                    self.assertEqual(etranger.json(), {"erreur": serveur.MESSAGE_HOTE_ORIGINE_REFUSE,
+                                                     "erreur_code": "requete.hote_origine_refuse"})
             sans_session = requete(reel.url, "/api/csv/demandes", entetes=dict(forges, **{"X-Forwarded-Host": NOM_INTRANET}))
             self.assertEqual(sans_session.statut, 401)
             self.assertNotIn(numero.encode("utf-8"), sans_session.octets)

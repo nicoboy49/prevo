@@ -264,13 +264,15 @@ la maintenance préventive, le magasin de pièces, le planning, les contrôles r
 ses habilitations, les indicateurs et un rapport mensuel.</p>
 <ul>
   <li><b>Vos données restent chez vous.</b> Ce sont 24 fichiers CSV, lisibles dans Excel, rangés dans un
-    dossier de votre choix. Prévo n'appelle aucun service sur Internet, sauf trois options que vous
-    choisissez&nbsp;: l'assistant IA en ligne (si le responsable l'autorise), la dictée vocale (la voix est
-    transcrite par Google ou Microsoft) et le signalement des nouvelles versions.</li>
+    dossier de votre choix. La seule connexion que Prévo ouvre de lui-même vers Internet est la lecture, une fois
+    par jour, du fichier public des versions (<a href="#mise-a-jour">2.9</a>, désactivable)&nbsp;; s'y ajoutent,
+    seulement si vous les utilisez, l'assistant IA en ligne (si le responsable l'autorise) et la dictée vocale (la
+    voix est transcrite par Google ou Microsoft).</li>
   <li><b>Rien à installer</b>&nbsp;: Python est livré dans le zip. Un double-clic lance Prévo et son assistant
     d'installation, qui règle l'accès des postes et des téléphones en trois questions. Pour seulement regarder,
     Chrome ou Edge suffit (démo, mode dossier).</li>
-  <li><b>Tout est en français</b>, et chaque écran s'adapte au rôle de la personne&nbsp;: demandeur,
+  <li><b>En français ou en anglais</b>, au choix de chacun, et chaque écran s'adapte au rôle de la personne&nbsp;:
+    demandeur,
     technicien ou responsable. Au-delà du PC qui héberge Prévo, chaque personne a son compte et tout passe en
     https&nbsp;; les téléphones des demandeurs se reconnaissent par un QR d'invitation, sans mot de passe.</li>
 </ul>
@@ -404,7 +406,7 @@ conseillé à un atelier.</p>
 le VPN de l'entreprise, avec son propre certificat&nbsp;; chaque personne, demandeurs compris, a un compte. Après la
 première question, l'assistant lui montre toutes les étapes sur une page, sans rien d'automatique. Le détail
 (configuration, mandataires nginx, Caddy, IIS, Cloudflare Tunnel, services, comptes, journal, sauvegardes) est dans
-<code>docs/INSTALLATION.md</code>.</p>
+<code>docs/INSTALLATION.fr.md</code>.</p>
 
 <h3 id="pare-feu">2.6 Le pare-feu de Windows</h3>
 <p>Pour que les postes et les téléphones joignent le PC serveur, Windows doit laisser passer Prévo. Quand Prévo
@@ -454,11 +456,17 @@ ce PC dans la box</b>, sinon les étiquettes ne mènent plus nulle part le jour 
 </table></div>
 
 <h3 id="mise-a-jour">2.9 Être prévenu des nouvelles versions</h3>
-<p>Prévo ne se met pas à jour tout seul et n'appelle jamais Internet sans votre accord. Le responsable peut lui
-demander de signaler les nouvelles versions&nbsp;: Paramètres, section «&nbsp;Mises à jour&nbsp;», case
-«&nbsp;Me signaler les nouvelles versions de Prévo&nbsp;» (désactivée par défaut). Prévo lit alors le fichier
+<p>Prévo ne se met pas à jour tout seul. Pour vous signaler les nouvelles versions, il lit le fichier public
 <code>https://prevo.pro/version.json</code> au plus une fois par jour et par poste, sur le poste du responsable
-seulement. Si une version plus récente existe, un bandeau sous l'en-tête de l'accueil du responsable le dit, avec sa
+seulement. Cette vérification est active par défaut&nbsp;; elle se coupe dans Paramètres, section «&nbsp;Mises à
+jour&nbsp;», case «&nbsp;Me signaler les nouvelles versions de Prévo&nbsp;». Tant que le responsable ne l'a pas
+réglée, un bandeau le lui dit une fois sur son accueil (<span class="bouton">Compris</span> le retire).</p>
+<p><b>Ce qui part.</b> Rien d'autre que la demande du fichier&nbsp;: ni identifiant, ni numéro d'installation, ni
+statistique, ni cookie. Comme lors de toute visite d'un site, prevo.pro voit l'adresse internet publique de
+l'atelier, le nom du navigateur et l'adresse par laquelle Prévo est ouvert sur votre réseau, que le navigateur
+ajoute lui-même&nbsp;; son hébergeur peut les garder dans
+ses journaux. La seule connexion que Prévo ouvre de lui-même vers Internet est cette lecture de version.json ; s'y ajoutent, seulement si vous les utilisez, l'assistant IA en ligne et la dictée vocale.</p>
+<p>Si une version plus récente existe, un bandeau sous l'en-tête de l'accueil du responsable le dit, avec sa
 date et ses nouveautés&nbsp;: <span class="bouton">Télécharger</span> ouvre la page de la version,
 <span class="bouton">Ignorer cette version</span> retire le bandeau jusqu'à la version suivante. La ligne
 «&nbsp;Mise à jour&nbsp;» de l'écran «&nbsp;À propos&nbsp;» donne le même état. Rien ne s'installe tout seul&nbsp;: vous
@@ -740,7 +748,7 @@ Avec l'assistant IA, un commentaire peut être proposé avant de figer (voir <a 
 
 <h3 id="ce-poste">4.15 Ce poste</h3>
 <p>Écran ouvert à tous les profils. Ses réglages ne valent <b>que pour ce navigateur</b>&nbsp;: ils ne changent
-rien sur les autres postes.</p>
+rien sur les autres postes (sauf la langue choisie «&nbsp;pour mon compte&nbsp;», ci-dessous).</p>
 <ul>
   <li><b>Identité</b>&nbsp;: nom du poste, profil, stockage, et <span class="bouton">Changer de profil ou de nom de poste…</span>&nbsp;;</li>
   <li><b>Assistant IA</b>&nbsp;: activer ou non, modèle, délai de réponse, <span class="bouton">Tester la
@@ -749,7 +757,11 @@ rien sur les autres postes.</p>
     <a href="#ia-activer">chapitre 5</a>)&nbsp;;</li>
   <li><b>Dictée vocale</b>&nbsp;: la proposer ou non sur ce poste, et l'état détecté (voir <a href="#dictee">chapitre 6</a>)&nbsp;;</li>
   <li><b>Affichage</b>&nbsp;: thème sombre (par défaut) ou clair, pour une pièce lumineuse ou le plein jour.
-    L'impression reste en noir sur blanc&nbsp;;</li>
+    L'impression reste en noir sur blanc. Langue de l'écran&nbsp;: avec un compte (mode serveur, comptes exigés), deux
+    choix&nbsp;: <b>«&nbsp;Pour mon compte&nbsp;»</b>, la langue est enregistrée dans votre compte et vous suit sur
+    tous les postes où vous vous connectez&nbsp;; <b>«&nbsp;Pour ce poste seulement&nbsp;»</b>, elle reste dans ce
+    navigateur (et votre compte n'impose plus la sienne). À la déconnexion, l'écran revient à la langue du poste ou de
+    l'installation, pour la personne suivante. Sans compte, la langue vaut pour ce poste&nbsp;;</li>
   <li><b>Aide à l'écran</b>&nbsp;: la case «&nbsp;Afficher l'explication à la première visite de chaque écran&nbsp;» (cochée
     par défaut) et <span class="bouton">Revoir toutes les explications</span>, qui les fait revenir une fois sur chaque
     écran.</li>
@@ -760,6 +772,11 @@ rien sur les autres postes.</p>
 </figure>
 <p class="note">L'écran «&nbsp;À propos&nbsp;» donne la version, les modes de stockage, les licences des
 bibliothèques embarquées et les limites de sécurité.</p>
+<p class="note">Le lien «&nbsp;Suggérer une amélioration&nbsp;» (dans «&nbsp;À propos&nbsp;» et en bas du menu, pour tous
+les profils) ouvre GitHub dans un nouvel onglet, sur un formulaire déjà rempli avec la seule version de Prévo, la langue
+et votre navigateur (nom, version, système, par exemple «&nbsp;Chrome 130, Windows&nbsp;»). Rien ne part avant votre clic,
+aucune donnée de votre atelier, aucun nom ni compte ; vous relisez et modifiez tout avant d'envoyer, et il faut un compte
+GitHub. Sans compte&nbsp;: le lien «&nbsp;par e-mail&nbsp;» écrit à contact@prevo.pro avec le même contenu.</p>
 <a class="haut" href="#sommaire">Retour au sommaire</a>
 </section>
 
@@ -1182,6 +1199,14 @@ compte.</p>
   <li><b>«&nbsp;Rester connecté sur cet appareil&nbsp;».</b> Cochée, la session dure 30 jours sur ce téléphone ou ce
     poste&nbsp;; sinon 12 heures sans activité, puis Prévo redemande le mot de passe. Les deux durées (session, et
     «&nbsp;rester connecté&nbsp;») se règlent dans Paramètres › Accès et installation.</li>
+  <li><b>Session terminée pendant une saisie.</b> Prévo affiche l'écran de connexion sans rien effacer&nbsp;: en vous
+    reconnectant avec le même compte, vous retrouvez l'écran tel que vous l'avez laissé, saisie comprise, et il reste
+    à enregistrer. Si quelqu'un d'autre se connecte sur ce poste, votre saisie ne lui est pas montrée.</li>
+  <li><b>Brouillons.</b> La déclaration d'un problème et le compte rendu d'un OT sont gardés au fur et à mesure dans le
+    navigateur de l'appareil, pour votre compte seulement&nbsp;: si le téléphone se met en veille et que la page se
+    recharge, ils reviennent avec le bandeau «&nbsp;Brouillon repris&nbsp;». Rien n'est envoyé au serveur avant
+    l'enregistrement&nbsp;; le brouillon est effacé à l'enregistrement, ou au bout de 7 jours (la photo d'une
+    déclaration n'y est pas gardée).</li>
   <li><b>Mauvais mot de passe.</b> Le message est le même quel que soit le cas («&nbsp;Identifiant ou mot de passe
     incorrect&nbsp;»). À partir du cinquième échec de suite, Prévo fait attendre quelques secondes&nbsp;; au dixième,
     le compte est bloqué 15 minutes, et l'écran affiche le temps restant.</li>
@@ -1203,7 +1228,8 @@ compte.</p>
 Trois onglets&nbsp;:</p>
 <ul>
   <li><b>Comptes</b>&nbsp;: <span class="bouton">Créer un compte</span> (prénom, nom, rôle&nbsp;; un technicien est lié à
-    sa fiche de l'équipe), puis par ligne <span class="bouton">Modifier…</span>, <span class="bouton">Réinitialiser…</span>
+    sa fiche de l'équipe&nbsp;; la langue de la personne, «&nbsp;Langue de l'installation&nbsp;» par défaut, qu'elle
+    peut aussi choisir elle-même dans <a href="#ce-poste">Ce poste</a>), puis par ligne <span class="bouton">Modifier…</span>, <span class="bouton">Réinitialiser…</span>
     (nouveau mot de passe provisoire), <span class="bouton">Désactiver</span> ou <span class="bouton">Activer</span>.
     Le mot de passe provisoire s'affiche une seule fois, dans une fenêtre&nbsp;: notez-le pour la personne, il n'est
     écrit nulle part. Il reste toujours au moins un responsable actif, et un compte désactivé perd ses sessions
@@ -1214,7 +1240,8 @@ Trois onglets&nbsp;:</p>
     <span class="bouton">Révoquer</span> le coupe dès sa requête suivante, et il revoit la page d'invitation. Si
     chaque demandeur a un compte (réglage de l'informaticien), l'enrôlement d'appareils est désactivé.</li>
   <li><b>Journal des connexions</b>&nbsp;: qui s'est connecté, quand, depuis quelle adresse, avec quel navigateur&nbsp;;
-    les échecs, les blocages, les invitations, les révocations, les comptes créés ou réinitialisés. Le journal
+    les échecs, les blocages, les invitations, les révocations, les comptes créés, modifiés ou réinitialisés, les
+    changements de langue («&nbsp;Langue changée (fr → en)&nbsp;»). Le journal
     garde 12 mois et s'exporte en CSV (voir <a href="#rgpd">8.9</a>).</li>
 </ul>
 <figure class="capture">
@@ -1250,7 +1277,7 @@ remplacées par de vraies photos d'écran après la recette sur un Android et un
 porte sert sous le nom <code>prevo-ca.crt</code>). Vous pouvez à la place fournir votre propre certificat (deux
 fichiers PEM&nbsp;: étape «&nbsp;Certificat&nbsp;» de l'assistant, ou options <code>--certificat</code> et
 <code>--cle</code>)&nbsp;: les téléphones n'ont alors rien à reconnaître&nbsp;; ou laisser le https au mandataire
-inverse de l'entreprise (<code>docs/INSTALLATION.md</code>). Ne donnez jamais le fichier <code>rootCA-key.pem</code>&nbsp;:
+inverse de l'entreprise (<code>docs/INSTALLATION.fr.md</code>). Ne donnez jamais le fichier <code>rootCA-key.pem</code>&nbsp;:
 avec lui, quelqu'un pourrait fabriquer des certificats que vos appareils croiraient. Prévo ne le lit ni ne le sert.</p>
 
 <h3 id="confiance-android">8.4 Sur un téléphone Android</h3>
@@ -1397,8 +1424,11 @@ traitements.</p>
     poste&nbsp;; l'informaticien suit la politique de l'entreprise sur les données des salariés.</li>
   <li><b>La dictée</b> envoie la voix à Google ou Microsoft (<a href="#dictee">chapitre 6</a>), poste par poste, avec
     un avertissement à la première utilisation.</li>
-  <li><b>Les nouvelles versions</b>&nbsp;: sur accord du responsable seulement, Prévo lit un fichier sur prevo.pro,
-    sans envoyer aucune donnée (<a href="#mise-a-jour">2.9</a>).</li>
+  <li><b>Les nouvelles versions</b>&nbsp;: une fois par jour, sur le poste du responsable, Prévo lit un fichier public
+    sur prevo.pro, sans identifiant, numéro d'installation ni statistique&nbsp;; prevo.pro voit, comme pour toute
+    visite, l'adresse internet publique de l'atelier, le navigateur et l'adresse locale de Prévo. Désactivable dans
+    Paramètres (<a href="#mise-a-jour">2.9</a>). C'est la seule connexion que Prévo ouvre de lui-même vers
+    Internet.</li>
 </ul>
 
 <h3 id="annuaire">8.10 L'annuaire de l'entreprise</h3>
@@ -1410,7 +1440,7 @@ Python et doit rester installable par un atelier sans informaticien. Ce qui exis
     si vous le réglez ainsi)&nbsp;;</li>
   <li>l'<b>export du journal des connexions</b>, pour votre suivi&nbsp;;</li>
   <li>le <b>mandataire inverse</b> et le <b>VPN de l'entreprise</b>, pour mettre Prévo derrière vos propres contrôles
-    d'accès (<code>docs/INSTALLATION.md</code>).</li>
+    d'accès (<code>docs/INSTALLATION.fr.md</code>).</li>
 </ul>
 <p>Si un annuaire est indispensable chez vous, dites-le avant de choisir Prévo&nbsp;: ce n'est pas une case à cocher.</p>
 <a class="haut" href="#sommaire">Retour au sommaire</a>

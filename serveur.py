@@ -6,8 +6,9 @@ serveur.py — serveur local de la GMAO « Prévo ».
 Rôle : servir l'application (fichiers HTML/CSS/JS) et une petite API HTTP qui lit et écrit
 les fichiers CSV du dossier de données, les documents (photos, PDF…) et les sauvegardes.
 
-Fichiers servis (liste blanche) : « / » (= index.html), index.html, favicon.svg, GUIDE.html
-s'il existe, et tout ce qui est sous css/ et js/. Tout le reste du dossier (brief, README,
+Fichiers servis (liste blanche) : « / » (= index.html), index.html, favicon.svg, GUIDE.html et
+GUIDE.en.html (guide anglais, T338) s'ils existent, et tout ce qui est sous css/ et js/. Tout le
+reste du dossier (brief, README,
 docs/, tests/, outils/, serveur.py, lanceurs…) répond 404. L'option --servir-tests sert en
 plus tests/fixtures/ (pages utilisées par les tests automatiques).
 
@@ -37,6 +38,7 @@ import http.server
 import io
 import ipaddress
 import json
+import locale
 import os
 import platform
 import re
@@ -68,7 +70,21 @@ VERSION_API = 1
 
 PORT_PAR_DEFAUT = 8080
 NOMBRE_PORTS_SUPPLEMENTAIRES = 20          # 8080 occupé → 8081, … jusqu'à 8100
+# Corps d'une requête (lire_corps, 413 au-delà) : 10 Mo (un document, du JSON ; = LIMITES.document de
+# js/modules/zip-lecture.js, l'import ZIP en mode serveur envoie ainsi chaque document). T208 (Nicolas : tout ce que
+# Prévo exporte, Prévo peut le réimporter) : l'envoi d'une table (ROUTES_CORPS_CSV) suit la limite d'un CSV de l'import
+# ZIP (LIMITES.racine) : à 20 000 OT, ordres_travail.csv dépasse 10 Mo. Les autres routes gardent 10 Mo (audit F2).
+# tests/test_zip_limites.py compare ces valeurs à celles de zip-lecture.js.
 TAILLE_MAX_CORPS = 10 * 1024 * 1024        # 10 Mo
+TAILLE_MAX_CORPS_CSV = 50 * 1024 * 1024    # 50 Mo
+ROUTES_CORPS_CSV = (('PUT', 'csv/<table>'), ('POST', 'csv/<table>/ajout'))
+# T204 (comme le correctif 1.2.1) : une cellule peut dépasser la limite par défaut du module csv (131 072 caractères :
+# page du wiki, compte rendu très long) ; sans cette limite relevée, une fois pour tout ce fichier, un fichier sain
+# serait pris pour un fichier abîmé (raisons_fichier_abime) et son enregistrement refusé. T207 (Nicolas) : relevée à
+# la limite d'un CSV dans l'import ZIP (LIMITES.racine de js/modules/zip-lecture.js, 50 Mo depuis T208), et non sans
+# limite.
+TAILLE_MAX_CELLULE_CSV = 50 * 1024 * 1024
+csv.field_size_limit(TAILLE_MAX_CELLULE_CSV)
 # Audit F2 (§22.12) : requêtes en cours en même temps, tous écouteurs confondus (porte et application) ; une place
 # est prise dès le premier octet d'une requête et rendue avec sa réponse (une requête lente ou laissée à moitié la
 # tient) ; une connexion keep-alive inactive, qui attend la requête suivante, n'en tient aucune (défaut trouvé par
@@ -202,12 +218,15 @@ MOTIF_NOM_DOCUMENT_ENREGISTRE = re.compile(PREFIXE_NOM_DOCUMENT + MOTIF_NOM_DOCU
 #   AAAA-MM-JJ_HHMMSS_avant-restauration     copie de sécurité faite avant une restauration
 #   AAAA-MM-JJ_HHMMSS_avant-format-v<N>      faite juste avant le passage au format N des fichiers
 #   AAAA-MM-JJ_HHMMSS_avant-import           faite juste avant un import de données (lot 5)
+#   AAAA-MM-JJ_HHMMSS_avant-import-zip       faite juste avant un import ZIP, documents/ compris (T187, D170)
+#   AAAA-MM-JJ_HHMMSS_avant-mise-a-jour      faite au premier démarrage d'une autre version de Prévo (T187, D170)
 MOTIF_NOM_SAUVEGARDE = re.compile(
-    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration|_avant-format-v[0-9]+|_avant-import)?)?', re.ASCII)
+    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration|_avant-format-v[0-9]+|_avant-import-zip|_avant-import'
+    r'|_avant-mise-a-jour)?)?', re.ASCII)
 # Motifs acceptés par POST /api/sauvegarde {"motif": "…"} : liste FERMÉE (tout autre motif → 400).
 # Le motif devient la fin du nom de la sauvegarde (« _avant-format-v2 »). Règle générale :
 # « avant-format-v<N> » ; on n'ajoute ici que les versions que Prévo sait vraiment produire.
-MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-import')
+MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-import', 'avant-import-zip', 'avant-mise-a-jour')
 
 # Types MIME des documents acceptés (l'extension décide du type, jamais le contenu ; toute autre extension : 415).
 # Audit F4 (§22.12) : « .doc » et « .xls » (formats binaires à macros) ne sont plus acceptés.
@@ -259,7 +278,7 @@ TYPE_PAR_DEFAUT = 'application/octet-stream'
 # Liste blanche des fichiers statiques (ARCHITECTURE.md §14.7). Tout le reste répond 404.
 # Les noms sont en minuscules : la comparaison ignore la casse, car Windows (NTFS) ne
 # distingue pas « Index.html » de « index.html » ni « CSS/ » de « css/ ».
-FICHIERS_PUBLICS = ('index.html', 'favicon.svg', 'guide.html')     # à la racine seulement
+FICHIERS_PUBLICS = ('index.html', 'favicon.svg', 'guide.html', 'guide.en.html')   # à la racine seulement (T338 : guide anglais)
 DOSSIERS_PUBLICS = (('css',), ('js',), ('acces',))                   # avec tout leur contenu ; acces/ : la porte (§22.6)
 DOSSIER_FIXTURES = ('tests', 'fixtures')                             # seulement avec --servir-tests
 
@@ -282,6 +301,150 @@ SEMAPHORE_CONNEXIONS = threading.BoundedSemaphore(CONNEXIONS_MAX)
 
 
 # ---------------------------------------------------------------------------
+# Messages pour le navigateur (D157, T246)
+# ---------------------------------------------------------------------------
+# Un message que le navigateur peut afficher s'écrit traduisible('<code>', '<français>', nom=valeur…). Le français
+# est la valeur de la clé serveur.<code> de js/i18n/fr.js, au caractère près (« py -X utf8 outils/controler_textes.py
+# --domaine serveur » le vérifie) ; {nom} y est remplacé par la valeur, comme I18n.t. Le résultat est une chaîne
+# (Traduisible, sous-classe de str) : le français d'avant, à l'identique, partout où le message était une chaîne
+# (réponse, tests, console, journal). envoyer_json ajoute à côté de chaque champ qui en porte un « <champ>_code » et
+# « <champ>_valeurs » (avec_codes) ; le navigateur affiche la clé dans sa langue, et le français reçu quand il ne
+# connaît pas le code (StockageServeur.texte, js/stockage-serveur.js). Seules les valeurs écrites dans le français
+# partent avec le code : la réponse n'en dit jamais plus qu'avant.
+# La console et le journal du serveur emploient les mêmes messages (T297) : en anglais, afficher écrit leur clé
+# serveur.<code> de js/i18n/en.js (texte_de_la_console). Hors codes, par règle (outils/textes_serveur.py) : ce qui
+# reste écrit en dur pour la console (aide de la ligne de commande, « --aide », journal des requêtes), les lanceurs
+# (D157), les textes écrits dans les données (D156) et les marqueurs relus par le code.
+# Le nom « traduisible » n'est jamais celui d'une variable locale (le contrôle le vérifie) : « texte » l'est souvent.
+MOTIF_VARIABLE_TEXTE = re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*)\}')     # MOTIF_VARIABLE de js/i18n.js
+SUFFIXES_DU_CODE = ('_code', '_valeurs', '_sans_point')              # champs ajoutés à côté d'un message
+
+
+class Traduisible(str):
+    """Message pour le navigateur : le texte français (la chaîne elle-même), son code (clé serveur.<code>) et ses
+    valeurs. sans_point : point final retiré (forme_sans_point), le navigateur le retire aussi de sa traduction."""
+    code = None
+    valeurs = None
+    sans_point = False
+
+
+def forme_du_pluriel_fr(n):
+    """Catégorie du pluriel en français, celle de Intl.PluralRules('fr') pour one et other (0 et 1 au singulier)."""
+    try:
+        return 'one' if int(abs(float(n))) in (0, 1) else 'other'
+    except (TypeError, ValueError):
+        return 'other'
+
+
+def valeur_gardee(valeur):
+    """Valeur d'un message telle qu'elle part : un Traduisible (traduit à son tour par le navigateur), un entier, une
+    liste (jointe par « , » dans le message) ; sinon sa forme écrite dans le message (str)."""
+    if isinstance(valeur, Traduisible) or (isinstance(valeur, int) and not isinstance(valeur, bool)):
+        return valeur
+    if isinstance(valeur, (list, tuple)):
+        return [element if isinstance(element, Traduisible) else str(element) for element in valeur]
+    return str(valeur)
+
+
+def traduisible(code, modele, **valeurs):
+    """Message « code » : modele (le français, ou un pluriel {'one': …, 'other': …} choisi sur valeurs['n'], gardé
+    pour le navigateur) où chaque {nom} est remplacé par sa valeur ; une variable sans valeur reste écrite, une valeur
+    sans variable n'est pas gardée (elle ne part jamais)."""
+    if isinstance(modele, dict):
+        gabarit = modele.get(forme_du_pluriel_fr(valeurs.get('n')), modele['other'])
+        noms = {nom for forme in modele.values() for nom in MOTIF_VARIABLE_TEXTE.findall(forme)} | {'n'}
+    else:
+        gabarit = modele
+        noms = set(MOTIF_VARIABLE_TEXTE.findall(modele))
+    gardees = {nom: valeur_gardee(valeur) for nom, valeur in valeurs.items() if nom in noms}
+
+    def remplacer(trouve):
+        valeur = gardees.get(trouve.group(1))
+        if valeur is None:
+            return trouve.group(0)
+        return ', '.join(valeur) if isinstance(valeur, list) else str(valeur)
+    resultat = Traduisible(MOTIF_VARIABLE_TEXTE.sub(remplacer, gabarit))
+    resultat.code, resultat.valeurs = code, gardees
+    return resultat
+
+
+def forme_sans_point(message):
+    """Le message sans son point final (une raison mise entre parenthèses) ; un Traduisible garde son code et ses
+    valeurs, marqué sans_point."""
+    if not isinstance(message, Traduisible):
+        return str(message).rstrip('.')
+    resultat = Traduisible(message.rstrip('.'))
+    resultat.code, resultat.valeurs, resultat.sans_point = message.code, message.valeurs, True
+    return resultat
+
+
+def traduisible_de(erreur):
+    """Message d'une exception levée avec un Traduisible (str(erreur) en ferait une chaîne sans code)."""
+    message = erreur.args[0] if erreur.args else None
+    return message if isinstance(message, Traduisible) else str(erreur)
+
+
+def objet_du_message(message):
+    """{"code", "texte" (le français), "valeurs"?, "sans_point"?} : un message dans une valeur ou dans une liste."""
+    objet = {'code': message.code, 'texte': str(message)}
+    if message.valeurs:
+        objet['valeurs'] = valeurs_json(message.valeurs)
+    if message.sans_point:
+        objet['sans_point'] = True
+    return objet
+
+
+def valeurs_json(valeurs):
+    """Valeurs d'un message pour la réponse : chaque Traduisible (seul ou dans une liste) devient objet_du_message."""
+    def convertir(valeur):
+        return objet_du_message(valeur) if isinstance(valeur, Traduisible) else valeur
+    return {nom: [convertir(element) for element in valeur] if isinstance(valeur, list) else convertir(valeur)
+            for nom, valeur in (valeurs or {}).items()}
+
+
+def champs_du_message(champ, message):
+    """{"<champ>_code", "<champ>_valeurs" (s'il en a), "<champ>_sans_point" (si vrai)} d'un Traduisible ; {} sinon."""
+    if not isinstance(message, Traduisible) or not message.code:
+        return {}
+    champs = {champ + '_code': message.code}
+    if message.valeurs:
+        champs[champ + '_valeurs'] = valeurs_json(message.valeurs)
+    if message.sans_point:
+        champs[champ + '_sans_point'] = True
+    return champs
+
+
+def avec_codes(donnees):
+    """Copie de donnees où chaque champ qui porte un Traduisible est suivi de son code et de ses valeurs
+    (champs_du_message) ; une liste qui en porte (« rappels ») reçoit « <champ>_codes », un objet_du_message par
+    élément (null pour une simple chaîne)."""
+    if isinstance(donnees, dict):
+        resultat = {}
+        for cle, valeur in donnees.items():
+            resultat[cle] = avec_codes(valeur)
+            if isinstance(cle, str) and isinstance(valeur, Traduisible):
+                resultat.update(champs_du_message(cle, valeur))
+            elif isinstance(cle, str) and isinstance(valeur, (list, tuple)) \
+                    and any(isinstance(element, Traduisible) for element in valeur):
+                resultat[cle + '_codes'] = [objet_du_message(element) if isinstance(element, Traduisible) else None
+                                            for element in valeur]
+        return resultat
+    if isinstance(donnees, (list, tuple)):
+        return [avec_codes(element) for element in donnees]
+    return donnees
+
+
+def traduisible_relu(message, code, valeurs):
+    """Message relu dans un fichier d'état (copie-externe.json, écrit par avec_codes) : le français, son code et ses
+    valeurs ; le français seul sans code."""
+    if not isinstance(message, str) or not isinstance(code, str) or not code:
+        return message
+    resultat = Traduisible(message)
+    resultat.code, resultat.valeurs = code, valeurs if isinstance(valeurs, dict) else {}
+    return resultat
+
+
+# ---------------------------------------------------------------------------
 # Erreurs HTTP
 # ---------------------------------------------------------------------------
 
@@ -297,14 +460,150 @@ class ErreurHttp(Exception):
         self.champs_supplementaires = champs_supplementaires
 
 
-MESSAGE_FICHIER_VERROUILLE = (
-    'Le fichier est verrouillé par un autre programme (probablement Excel) : '
-    'fermez le fichier dans Excel puis réessayez.')
+# T232 (texte de Nicolas, mêmes mots que js/stockage-dossier.js messageFichierOuvert) : fichier tenu par Excel ou un
+# autre logiciel (423). Le message nomme le fichier ; le repli ne sert que si son nom n'est pas connu.
+def message_fichier_verrouille(chemin):
+    """Message du 423 pour ce fichier : son nom de base (celui que montre la fenêtre d'Excel), ou le repli."""
+    nom = os.path.basename(str(chemin or ''))
+    if nom:
+        return traduisible('fichier.verrouille',
+                           'Le fichier « {nom} » est ouvert dans Excel ou un autre logiciel : fermez-le, puis '
+                           'réessayez.', nom=nom)
+    return traduisible('fichier.verrouille_sans_nom',
+                       'Un fichier du dossier de données est ouvert dans Excel ou un autre logiciel : fermez-le, '
+                       'puis réessayez.')
 
 
 # ---------------------------------------------------------------------------
 # Console
 # ---------------------------------------------------------------------------
+# Langue de la console et du journal du serveur (T297 ; D157, Lot 4) : le français ou l'anglais selon langue_defaut de
+# parametres.csv (le français pour « fr », l'anglais pour toute autre langue déclarée) ; sans réglage (première
+# installation), la langue du système (locale de Python : « fr » si elle commence par fr, sinon « en »). Choisie par main
+# au démarrage (choisir_langue_console). Un message de la console s'écrit traduisible('<code>', '<français>', …), comme
+# un message pour le navigateur ; en anglais, afficher écrit la clé serveur.<code> de js/i18n/en.js, lue une fois par
+# lire_textes_anglais (un petit lecteur de la section serveur, aucun eval), et le français si la clé manque. Le reste
+# (chemin, sortie d'un outil, texte calculé) est écrit tel quel.
+LANGUE_CONSOLE_ANGLAISE = 'en'
+FICHIER_TEXTES_ANGLAIS = os.path.join(DOSSIER_APPLICATION, 'js', 'i18n', 'en.js')
+DEBUT_DE_SECTION_JS = '// ==== section '
+SECTION_SERVEUR_JS = '// ==== section serveur ===='
+MOTIF_ENTREE_SERVEUR_JS = re.compile(r"^  'serveur\.([a-z0-9_.]+)': (.*),$")       # une clé par ligne, comme fr.js
+MOTIF_CHAINE_JS = re.compile(r"'((?:[^'\\\n]|\\.)*)'")
+MOTIF_FORME_JS = re.compile(r"\b(zero|one|two|few|many|other): '((?:[^'\\\n]|\\.)*)'")
+MOTIF_ECHAPPEMENT_JS = re.compile(r"\\(u\{[0-9A-Fa-f]{1,6}\}|u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|.)", re.S)
+ECHAPPEMENTS_JS = {'n': '\n', 'r': '\r', 't': '\t', 'b': '\b', 'f': '\f', 'v': '\v', '0': '\0'}
+CONSOLE = {'langue': 'fr', 'textes': None}       # langue de la console ; textes anglais, lus au premier besoin
+
+
+def langue_du_systeme():
+    """« fr » si la langue du système (locale de Python : celle de Windows, ou LANG) commence par fr, sinon « en »."""
+    try:
+        nom = locale.getlocale()[0] or ''
+    except (ValueError, TypeError, AttributeError):
+        nom = ''
+    return 'fr' if str(nom).lower().startswith('fr') else LANGUE_CONSOLE_ANGLAISE
+
+
+def langue_de_la_console(config=None):
+    """« fr » ou « en » : langue_defaut ramenée à l'une des deux (fr → fr, toute autre langue déclarée → en) ; sans
+    réglage (première installation, parametres.csv absent ou illisible, ou avant la configuration : config None), la
+    langue du système."""
+    code = langue_de_l_installation(config) if config is not None else ''
+    if code:
+        return 'fr' if code.split('-')[0] == 'fr' else LANGUE_CONSOLE_ANGLAISE
+    return langue_du_systeme()
+
+
+def choisir_langue_console(config=None):
+    """Pose la langue de la console (langue_de_la_console) et la rend."""
+    CONSOLE['langue'] = langue_de_la_console(config)
+    return CONSOLE['langue']
+
+
+def chaine_js(brute):
+    """Texte d'une chaîne JavaScript écrite entre apostrophes (sans elles) : \\n, \\', \\u00a0… rendus."""
+    def rendre(trouve):
+        echappe = trouve.group(1)
+        if len(echappe) > 1 and echappe[0] in 'ux':
+            try:
+                return chr(int(echappe[1:].strip('{}'), 16))
+            except ValueError:                  # au-delà de U+10FFFF : laissé tel quel
+                return echappe
+        return ECHAPPEMENTS_JS.get(echappe, echappe)
+    return MOTIF_ECHAPPEMENT_JS.sub(rendre, brute)
+
+
+def lire_textes_anglais(chemin=FICHIER_TEXTES_ANGLAIS):
+    """{code: modèle} de la section serveur de js/i18n/en.js (modèle : texte, ou {catégorie: texte} d'un pluriel),
+    une ligne par clé comme l'écrit le dictionnaire ; {} pour un fichier absent ou illisible."""
+    try:
+        octets = lire_octets(chemin)
+        lignes = octets.decode('utf-8').split('\n') if octets is not None else []
+    except (OSError, UnicodeDecodeError):
+        return {}
+    textes, dans_la_section = {}, False
+    for ligne in lignes:
+        ligne = ligne.rstrip('\r')
+        if ligne.startswith(DEBUT_DE_SECTION_JS):
+            dans_la_section = ligne.strip() == SECTION_SERVEUR_JS
+            continue
+        trouve = MOTIF_ENTREE_SERVEUR_JS.match(ligne) if dans_la_section else None
+        if trouve is None:
+            continue
+        valeur = trouve.group(2)
+        if valeur.startswith('{'):
+            formes = {categorie: chaine_js(texte) for categorie, texte in MOTIF_FORME_JS.findall(valeur)}
+            if 'other' in formes:
+                textes[trouve.group(1)] = formes
+        else:
+            chaine = MOTIF_CHAINE_JS.fullmatch(valeur)
+            if chaine:
+                textes[trouve.group(1)] = chaine_js(chaine.group(1))
+    return textes
+
+
+def forme_du_pluriel_en(n):
+    """Catégorie du pluriel en anglais, celle de Intl.PluralRules('en') pour one et other (1 au singulier)."""
+    try:
+        return 'one' if float(n) == 1 else 'other'
+    except (TypeError, ValueError):
+        return 'other'
+
+
+def texte_en_anglais(message, textes):
+    """Le message (Traduisible) d'après textes (lire_textes_anglais) : son modèle anglais, chaque {nom} remplacé par sa
+    valeur (un Traduisible traduit à son tour, une liste jointe par « , ») ; le français tel quel sans clé anglaise."""
+    modele = textes.get(message.code) if message.code else None
+    if modele is None:
+        return str(message)
+    valeurs = message.valeurs or {}
+    if isinstance(modele, dict):
+        modele = modele.get(forme_du_pluriel_en(valeurs.get('n')), modele['other'])
+
+    def ecrire(valeur):
+        if isinstance(valeur, Traduisible):
+            return texte_en_anglais(valeur, textes)
+        if isinstance(valeur, list):
+            return ', '.join(ecrire(element) for element in valeur)
+        return str(valeur)
+
+    def remplacer(trouve):
+        nom = trouve.group(1)
+        return ecrire(valeurs[nom]) if nom in valeurs else trouve.group(0)
+    texte = MOTIF_VARIABLE_TEXTE.sub(remplacer, modele)
+    return texte.rstrip('.') if message.sans_point else texte
+
+
+def texte_de_la_console(texte):
+    """Ce que la console et le journal du serveur écrivent pour « texte » : un Traduisible dans la langue de la console
+    (en anglais : texte_en_anglais), tout autre texte tel quel."""
+    if CONSOLE['langue'] != LANGUE_CONSOLE_ANGLAISE or not isinstance(texte, Traduisible):
+        return str(texte)
+    if CONSOLE['textes'] is None:
+        CONSOLE['textes'] = lire_textes_anglais()
+    return texte_en_anglais(texte, CONSOLE['textes'])
+
 
 def preparer_console():
     """Évite qu'un caractère non affichable (accent, tiret long…) fasse planter un print."""
@@ -316,7 +615,9 @@ def preparer_console():
 
 
 def afficher(texte):
-    """Affiche une ligne tout de suite (flush) : les tests lisent la console en direct."""
+    """Affiche une ligne tout de suite (flush) : les tests lisent la console en direct. Un Traduisible est écrit dans
+    la langue de la console (texte_de_la_console, T297)."""
+    texte = texte_de_la_console(texte)
     if JOURNAL_SERVEUR is not None:
         JOURNAL_SERVEUR.ecrire(texte)
     if sys.stdout is None:          # lancé sans console (pythonw)
@@ -358,16 +659,28 @@ ECOUTES = ('127.0.0.1', '0.0.0.0')
 # interroge https://<même hôte>:<port_https>/api/ping et conduit le téléphone à l'application en https. Le port https
 # est injecté dans l'attribut data-port-https de la page au moment de la servir : jamais une adresse codée en dur.
 DOSSIER_PORTE = ('acces',)
+DOSSIER_TEXTES = ('js', 'i18n')            # textes de l'interface par langue, servis aussi par la porte (multilingue)
 PAGE_PORTE = os.path.join(DOSSIER_APPLICATION, 'acces', 'porte.html')
 ATTRIBUT_PORT_HTTPS = 'data-port-https=""'
+# Langue de l'installation (T297) : posée de même dans l'attribut data-langue-installation de la porte (langue_defaut,
+# sinon « fr ») et de index.html (seulement quand langue_defaut est réglée : sans elle, la page garde la langue du
+# navigateur, D150, T296) ; js/i18n-chargeur.js la lit avant toute lecture des données. Toujours un code de langue
+# déclaré et bien formé (MOTIF_CODE de js/i18n.js) : rien d'autre ne peut entrer dans la page.
+ATTRIBUT_LANGUE_INSTALLATION = 'data-langue-installation=""'
+PAGE_APPLICATION = ['index.html']
 CHEMIN_CERTIFICAT_AUTORITE = ['acces', 'ca.crt']
 TYPE_CERTIFICAT_AUTORITE = 'application/x-x509-ca-cert'
 NOM_FICHIER_CERTIFICAT_AUTORITE = 'prevo-ca.crt'
 # La politique de la porte n'autorise au dehors que l'origine https du même hôte (le ping de porte.js).
 POLITIQUE_PORTE = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
                    "connect-src 'self' %s; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
-MESSAGE_SANS_AUTORITE = ('Aucune autorité locale sur ce serveur : le certificat a été fourni par votre informaticien, '
-                         'demandez-lui comment le faire reconnaître par le téléphone.')
+MESSAGE_SANS_AUTORITE = traduisible('porte.sans_autorite',
+                                    'Aucune autorité locale sur ce serveur : le certificat a été fourni par votre '
+                                    'informaticien, demandez-lui comment le faire reconnaître par le téléphone.')
+
+# T250 : 4 Go par défaut, comme l'import ZIP (4 Go) : tout ce que Prévo exporte, Prévo peut le réimporter, d'un mode
+# à l'autre (un export du mode dossier, qui n'a pas de plafond, entre dans le dossier des documents du serveur).
+QUOTA_DOCUMENTS_MO_PAR_DEFAUT = 4096
 
 # (clé, type, défaut, texte d'aide) : la même liste sert à lire le fichier, à --aide et au contrat.
 CLES_CONFIGURATION = [
@@ -403,7 +716,8 @@ CLES_CONFIGURATION = [
     ('veille_desactivee', 'booleen', False, "Le PC ne se met plus en veille quand il est sur secteur."),
     ('copie_sauvegardes', 'texte', '',
      "Dossier où la sauvegarde du jour est copiée chaque nuit (clé USB, NAS, dossier synchronisé) ; vide : aucune copie."),
-    ('quota_documents_mo', 'entier', 2048, "Place maximale des documents joints, en mégaoctets."),
+    ('quota_documents_mo', 'entier', QUOTA_DOCUMENTS_MO_PAR_DEFAUT,
+     "Place maximale des documents joints, en mégaoctets."),
     ('ia_fournisseur', 'choix:ollama|openai', 'ollama',
      "Type du service d'IA : ollama (Ollama) ou openai (toute API compatible OpenAI : LM Studio, Mistral…)."),
     ('ia_url', 'texte', 'http://localhost:11434',
@@ -445,7 +759,9 @@ def valeur_valide(cle, genre, valeur):
     elif genre.startswith('choix:'):
         if valeur in genre[len('choix:'):].split('|'):
             return valeur
-    raise ErreurConfiguration('Configuration : la valeur de « %s » est invalide (%r).' % (cle, valeur))
+    raise ErreurConfiguration(traduisible('config.valeur_invalide',
+                                          'Configuration : la valeur de « {cle} » est invalide ({valeur}).',
+                                          cle=cle, valeur=repr(valeur)))
 
 
 def lire_configuration(chemin):
@@ -460,10 +776,14 @@ def lire_configuration(chemin):
         with open(chemin, 'rb') as fichier:
             contenu = json.loads(fichier.read().decode('utf-8-sig'))
     except (OSError, UnicodeDecodeError, ValueError) as erreur:
-        raise ErreurConfiguration('Configuration illisible (%s) : %s. Corrigez le fichier ou supprimez-le pour '
-                                  'repartir des réglages par défaut.' % (chemin, erreur))
+        raise ErreurConfiguration(traduisible('config.illisible',
+                                              'Configuration illisible ({chemin}) : {erreur}. Corrigez le fichier ou '
+                                              'supprimez-le pour repartir des réglages par défaut.',
+                                              chemin=chemin, erreur=erreur))
     if not isinstance(contenu, dict):
-        raise ErreurConfiguration('Configuration illisible (%s) : un objet JSON est attendu.' % chemin)
+        raise ErreurConfiguration(traduisible('config.objet_attendu',
+                                              'Configuration illisible ({chemin}) : un objet JSON est attendu.',
+                                              chemin=chemin))
     genres = {cle: genre for cle, genre, _, _ in CLES_CONFIGURATION}
     for cle, valeur in contenu.items():
         if cle.startswith('_'):
@@ -529,27 +849,35 @@ def verifier_regles_portee(reglages, responsable_existe):
     avertissements = []
     https = bool(reglages.get('certificat') and reglages.get('cle')) or bool(reglages.get('_https_auto'))
     if bool(reglages.get('certificat')) != bool(reglages.get('cle')):
-        raise ErreurConfiguration('Certificat et clé vont ensemble : donnez les deux fichiers PEM, ou aucun.')
+        raise ErreurConfiguration(traduisible('config.certificat_et_cle',
+                                              'Certificat et clé vont ensemble : donnez les deux fichiers PEM, ou '
+                                              'aucun.'))
     if reglages['ecoute'] != '127.0.0.1':
         if not reglages['comptes']:
             raise ErreurConfiguration(
-                'Prévo refuse d\'écouter sur le réseau sans mot de passe. Activez les comptes (« comptes »: true) '
-                'ou revenez à « ecoute »: "127.0.0.1" ; l\'assistant d\'installation fait les deux (ouvrez Prévo sur ce PC).')
+                traduisible('config.reseau_sans_comptes',
+                            'Prévo refuse d\'écouter sur le réseau sans mot de passe. Activez les comptes '
+                            '(« comptes »: true) ou revenez à « ecoute »: "127.0.0.1" ; l\'assistant '
+                            'd\'installation fait les deux (ouvrez Prévo sur ce PC).'))
         if not https and not reglages['mandataire']:
             raise ErreurConfiguration(
-                'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » et « cle »), '
-                'laissez Prévo fabriquer le sien (« certificat_auto ») ou placez-le derrière un mandataire ; '
-                'l\'assistant d\'installation le fait pour vous.')
+                traduisible('config.reseau_sans_https',
+                            'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » '
+                            'et « cle »), laissez Prévo fabriquer le sien (« certificat_auto ») ou placez-le '
+                            'derrière un mandataire ; l\'assistant d\'installation le fait pour vous.'))
     if reglages['mandataire'] and not reglages['comptes']:
         raise ErreurConfiguration(
-            'Derrière un mandataire, les comptes sont obligatoires (« comptes »: true) : le mandataire rend Prévo '
-            'joignable au-delà de ce PC.')
+            traduisible('config.mandataire_sans_comptes',
+                        'Derrière un mandataire, les comptes sont obligatoires (« comptes »: true) : le mandataire '
+                        'rend Prévo joignable au-delà de ce PC.'))
     if reglages['comptes'] and not responsable_existe and reglages['ecoute'] != '127.0.0.1':
         reglages['ecoute'] = '127.0.0.1'
-        avertissements.append('Aucun compte responsable : Prévo n\'écoute que sur ce PC tant que l\'installation '
-                              'n\'est pas terminée.')
+        avertissements.append(traduisible('config.ecoute_ce_pc_sans_responsable',
+                                          'Aucun compte responsable : Prévo n\'écoute que sur ce PC tant que '
+                                          'l\'installation n\'est pas terminée.'))
     for cle in reglages.get('_inconnues', []):
-        avertissements.append('Configuration : clé inconnue « %s » ignorée.' % cle)
+        avertissements.append(traduisible('config.cle_inconnue', 'Configuration : clé inconnue « {cle} » ignorée.',
+                                          cle=cle))
     return avertissements
 
 
@@ -600,7 +928,11 @@ LONGUEUR_PROVISOIRE = 16
 ALPHABET_PROVISOIRE = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # sans 0/O, 1/l/I
 COLONNES_JOURNAL_ACCES = ['date', 'qui', 'adresse', 'agent', 'resultat', 'tailscale']
 RESULTATS_JOURNAL_ACCES = ('connexion', 'echec', 'bloque', 'deconnexion', 'appareil', 'invitation', 'revocation',
-                           'reinitialisation', 'creation', 'modification')
+                           'reinitialisation', 'creation', 'modification', 'langue')
+# T298 : un changement de la langue d'un compte s'écrit « langue:<avant>><après> » dans la colonne resultat
+# (resultat_langue), « installation » pour la langue de l'installation (aucune langue enregistrée dans le compte) :
+# « langue:fr>en », « langue:installation>en ».
+LANGUE_DE_L_INSTALLATION_AU_JOURNAL = 'installation'
 DUREE_JOURNAL_ACCES_JOURS = 366
 # Jamais sauvegardés : une session ne se restaure jamais ; la clé privée du certificat de l'atelier ne quitte pas le PC
 # (copie externe sur une clé USB ou un NAS) et se refabrique au démarrage si elle manque (preparer_certificat_local).
@@ -641,7 +973,8 @@ def hacher_mot_de_passe(mot_de_passe, sel=None, algo=None):
     elif algo == ALGO_PBKDF2:
         empreinte = hashlib.pbkdf2_hmac('sha256', octets, sel, 600000, dklen=32)
     else:
-        raise ErreurCompte('Algorithme de mot de passe inconnu : %s.' % algo)
+        raise ErreurCompte(traduisible('comptes.algorithme_inconnu',
+                                       'Algorithme de mot de passe inconnu : {algo}.', algo=algo))
     return algo, base64.b64encode(sel).decode('ascii'), base64.b64encode(empreinte).decode('ascii')
 
 
@@ -659,10 +992,17 @@ def mot_de_passe_juste(compte, mot_de_passe):
 def verifier_mot_de_passe_choisi(mot_de_passe):
     """12 à 256 caractères, aucune règle de composition (CNIL 2022, ANSSI R21, R22)."""
     if not isinstance(mot_de_passe, str) or len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
-        raise ErreurCompte('Le mot de passe doit faire au moins %d caractères ; une phrase de quelques mots est le '
-                           'plus simple à retenir.' % LONGUEUR_MIN_MOT_DE_PASSE)
+        raise ErreurCompte(traduisible('comptes.mot_de_passe_trop_court',
+                                       {'one': 'Le mot de passe doit faire au moins {n} caractères ; une phrase de '
+                                               'quelques mots est le plus simple à retenir.',
+                                        'other': 'Le mot de passe doit faire au moins {n} caractères ; une phrase '
+                                                 'de quelques mots est le plus simple à retenir.'},
+                                       n=LONGUEUR_MIN_MOT_DE_PASSE))
     if len(mot_de_passe) > LONGUEUR_MAX_MOT_DE_PASSE:
-        raise ErreurCompte('Le mot de passe fait plus de %d caractères.' % LONGUEUR_MAX_MOT_DE_PASSE)
+        raise ErreurCompte(traduisible('comptes.mot_de_passe_trop_long',
+                                       {'one': 'Le mot de passe fait plus de {n} caractères.',
+                                        'other': 'Le mot de passe fait plus de {n} caractères.'},
+                                       n=LONGUEUR_MAX_MOT_DE_PASSE))
 
 
 def mot_de_passe_provisoire():
@@ -689,10 +1029,35 @@ def sans_accents(texte):
     return ''.join(c for c in decompose if not unicodedata.combining(c))
 
 
+# T301 (D164, règle de Nicolas du 06/11 : une même personne n'a jamais deux identifiants, deux personnes jamais le
+# même) : İ, I, ı et i sont une seule lettre pour Prévo (le turc les distingue ; « ı » n'a pas de décomposition).
+PLIAGE_DES_I = str.maketrans({'İ': 'i', 'I': 'i', 'ı': 'i'})
+
+
+def plier_nom(texte):
+    """Nom, prénom ou identifiant ramené à des lettres simples, la seule règle pour les fabriquer et les comparer
+    (T301) : İ, I, ı, i → i ; casse pliée (casefold : ß → ss) ; accents retirés (ş → s, ğ → g, ç → c, ö → o, ü → u,
+    é → e). « Yılmaz » → « yilmaz » ; « IŞIK » et « Işık » → « isik » ; « Élodie » → « elodie »."""
+    return sans_accents((texte or '').translate(PLIAGE_DES_I).casefold())
+
+
+def identifiant_tape(texte):
+    """Identifiant tapé (connexion, réinitialisation, recherche d'un compte) ramené à la forme des identifiants."""
+    return plier_nom((texte or '').strip())
+
+
+def ancienne_forme_identifiant(texte):
+    """L'identifiant que la règle d'avant T301 tirait du texte tapé, segment par segment entre les points (« Işık » →
+    « is-k » : le « ı » devenait un tiret). Les comptes créés avant T301 gardent leur identifiant (jamais renommés)."""
+    return '.'.join(re.sub(r'[^a-z0-9]+', '-', sans_accents(segment).lower()).strip('-')
+                    for segment in (texte or '').strip().split('.'))
+
+
 def identifiant_depuis(prenom, nom, pris):
-    """« Élodie Le Gall » → « elodie.le-gall » ; « .2 », « .3 »… si l'identifiant est déjà pris."""
+    """« Élodie Le Gall » → « elodie.le-gall » ; « Ayşe Işık » → « ayse.isik » (plier_nom, T301) ; « .2 », « .3 »… si
+    l'identifiant est déjà pris."""
     def morceau(texte):
-        texte = re.sub(r'[^a-z0-9]+', '-', sans_accents(texte).lower()).strip('-')
+        texte = re.sub(r'[^a-z0-9]+', '-', plier_nom(texte)).strip('-')
         return texte or 'compte'
     base = morceau(prenom) + '.' + morceau(nom) if nom.strip() else morceau(prenom)
     candidat, numero = base, 2
@@ -701,38 +1066,91 @@ def identifiant_depuis(prenom, nom, pris):
     return candidat
 
 
+def comptes_designes(comptes, identifiant):
+    """Comptes que désigne un identifiant tapé (T301) : celui dont l'identifiant est exactement le texte tapé, s'il
+    existe (l'identifiant exact tranche toujours) ; sinon tous ceux que le texte désigne une fois ramené à des lettres
+    simples (« YILMAZ », « Yılmaz », « YİLMAZ » → yilmaz) ou par la règle d'avant T301 (« Işık » → is-k). Plusieurs :
+    Prévo ne choisit jamais un compte à la place de la personne (règle de Nicolas, 07/11 ; trouver_compte,
+    verifier_tentative)."""
+    tape = (identifiant or '').strip()
+    exact = [compte for compte in comptes if compte['identifiant'] == tape]
+    if exact:
+        return exact[:1]
+    formes = {identifiant_tape(tape), ancienne_forme_identifiant(tape)} - {''}
+    return [compte for compte in comptes if plier_nom(compte['identifiant']) in formes]
+
+
 def trouver_compte(comptes, identifiant):
-    identifiant = (identifiant or '').strip().lower()
-    return next((c for c in comptes if c['identifiant'] == identifiant), None)
+    """Le compte que désigne l'identifiant (comptes_designes), ou None : aucun, ou plusieurs (jamais un choix)."""
+    designes = comptes_designes(comptes, identifiant)
+    return designes[0] if len(designes) == 1 else None
+
+
+def erreur_compte_introuvable(comptes, identifiant):
+    """Compte introuvable, ou plusieurs comptes désignés (T301 : l'identifiant exact est demandé ; la liste est donnée
+    au responsable et en ligne de commande sur le PC serveur, jamais à l'écran de connexion)."""
+    designes = comptes_designes(comptes, identifiant)
+    if len(designes) > 1:
+        return ErreurCompte(traduisible('comptes.plusieurs',
+                                        'Plusieurs comptes correspondent à « {identifiant} » : {identifiants}. Donnez '
+                                        'l\'identifiant exact.', identifiant=identifiant,
+                                        identifiants=', '.join(compte['identifiant'] for compte in designes)))
+    return ErreurCompte(traduisible('comptes.introuvable', 'Compte introuvable : {identifiant}.',
+                                    identifiant=identifiant))
+
+
+def meme_personne(comptes, prenom, nom):
+    """Le compte, actif ou non, au même prénom et au même nom une fois ramenés à des lettres simples (forme_de_nom),
+    ou None (T301 : « Ayşe IŞIK » et « Ayşe Işık » sont la même personne)."""
+    voulu = (forme_de_nom(prenom), forme_de_nom(nom))
+    return next((compte for compte in comptes
+                 if (forme_de_nom(compte.get('prenom', '')), forme_de_nom(compte.get('nom', ''))) == voulu), None)
 
 
 def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_changer=False, identifiant=None,
-                 origine=('', '', '')):
+                 origine=('', '', ''), autre_personne=False, langue=''):
     """Crée un compte (rôle, technicien lié pour un technicien) ; rend le compte créé (sans son empreinte).
-    origine : (adresse, agent, Tailscale) de la ligne du journal (T152 : la requête du responsable), vide sinon."""
+    origine : (adresse, agent, Tailscale) de la ligne du journal (T152 : la requête du responsable), vide sinon.
+    T301 : un compte existe déjà au même prénom et au même nom (meme_personne) → refus (comptes.meme_personne, avec
+    son identifiant), sauf autre_personne (le responsable a coché « C'est une autre personne »).
+    T298 : langue, une langue déclarée (langue_de_compte), écrite seulement si elle est donnée (vide : aucun champ,
+    la langue de l'installation)."""
     prenom, nom = (prenom or '').strip(), (nom or '').strip()
+    langue = langue_de_compte(langue)
     if not prenom:
-        raise ErreurCompte('Le prénom est obligatoire.')
+        raise ErreurCompte(traduisible('comptes.prenom_obligatoire', 'Le prénom est obligatoire.'))
     if role not in ROLES_COMPTES:
-        raise ErreurCompte('Rôle inconnu : %s.' % role)
+        raise ErreurCompte(traduisible('comptes.role_inconnu', 'Rôle inconnu : {role}.', role=role))
     if role == 'technicien' and not technicien_id:
-        raise ErreurCompte('Un compte de technicien est lié à un technicien de l\'équipe.')
+        raise ErreurCompte(traduisible('comptes.technicien_obligatoire',
+                                       'Un compte de technicien est lié à un technicien de l\'équipe.'))
     verifier_mot_de_passe_choisi(mot_de_passe)
     with VERROU_ACCES:
         comptes = lire_comptes(config)
         pris = {c['identifiant'] for c in comptes}
+        meme = None if autre_personne else meme_personne(comptes, prenom, nom)
+        if meme is not None:
+            raise ErreurCompte(traduisible('comptes.meme_personne',
+                                           'Un compte existe déjà pour {personne} : « {identifiant} ». Réactivez-le ou '
+                                           'donnez un autre nom ; si c\'est une autre personne, cochez « C\'est une '
+                                           'autre personne ».', personne=(prenom + ' ' + nom).strip(),
+                                           identifiant=meme['identifiant']))
         if identifiant:
-            identifiant = identifiant.strip().lower()
-            if identifiant in pris:
-                raise ErreurCompte('L\'identifiant « %s » est déjà pris.' % identifiant)
+            identifiant = identifiant_tape(identifiant)
+            if identifiant in {plier_nom(existant) for existant in pris}:
+                raise ErreurCompte(traduisible('comptes.identifiant_pris',
+                                               'L\'identifiant « {identifiant} » est déjà pris.',
+                                               identifiant=identifiant))
         else:
             identifiant = identifiant_depuis(prenom, nom, pris)
         algo, sel, empreinte = hacher_mot_de_passe(mot_de_passe)
         instant = maintenant_iso(config)
         compte = {'identifiant': identifiant, 'prenom': prenom, 'nom': nom, 'role': role,
-                  'technicien_id': technicien_id or '', 'actif': True, 'algo': algo, 'sel': sel,
-                  'empreinte': empreinte, 'a_changer': bool(a_changer), 'cree_le': instant,
-                  'modifie_le': instant, 'mot_de_passe_le': instant}
+                  'technicien_id': technicien_id or ''}
+        if langue:
+            compte['langue'] = langue
+        compte.update({'actif': True, 'algo': algo, 'sel': sel, 'empreinte': empreinte, 'a_changer': bool(a_changer),
+                       'cree_le': instant, 'modifie_le': instant, 'mot_de_passe_le': instant})
         comptes.append(compte)
         ecrire_comptes(config, comptes)
     ecrire_journal_acces(config, identifiant, origine[0], origine[1], 'creation', origine[2])
@@ -744,6 +1162,73 @@ def compte_public(compte):
     return {cle: valeur for cle, valeur in compte.items() if cle not in ('sel', 'empreinte', 'algo')}
 
 
+# Langue d'un compte (T298 ; D148) : champ facultatif « langue » de comptes.json, vide ou absent = la langue de
+# l'installation. Valeur fermée : une langue déclarée par js/i18n/langues.js (langues_declarees), ou vide ; tout le
+# reste est refusé (400 au message comptes.langue_inconnue) et rien n'est écrit. La 2.0.0 bêta 2 relit le fichier sans
+# erreur et garde le champ (elle réécrit chaque compte tel qu'elle l'a lu, champs inconnus compris).
+
+def langue_de_compte(valeur):
+    """La langue reçue pour un compte si elle est acceptée : '' (la langue de l'installation) ou une langue déclarée ;
+    ErreurCompte (comptes.langue_inconnue) pour toute autre valeur, autre type compris."""
+    if valeur == '':
+        return ''
+    declarees = langues_declarees()
+    if not (isinstance(valeur, str) and MOTIF_CODE_LANGUE.fullmatch(valeur) and valeur in declarees):
+        raise ErreurCompte(traduisible('comptes.langue_inconnue',
+                                       'Langue inconnue : « {langue} ». Une langue déclarée ({langues}) est attendue, '
+                                       'ou rien pour la langue de l\'installation.',
+                                       langue=str(valeur)[:20], langues=declarees))
+    return valeur
+
+
+def langue_enregistree(compte):
+    """Langue écrite dans le compte, telle quelle si c'est un texte (20 caractères au plus) ; '' sans elle."""
+    valeur = compte.get('langue', '')
+    return valeur[:20] if isinstance(valeur, str) else ''
+
+
+def langue_publique(valeur):
+    """La langue d'un compte qui part vers le navigateur (session_publique) : une langue déclarée, sinon '' (absente,
+    ou écrite à la main hors de la liste : la langue de l'installation)."""
+    try:
+        return langue_de_compte(valeur)
+    except ErreurCompte:
+        return ''
+
+
+def resultat_langue(avant, apres):
+    """Colonne resultat du journal pour un changement de langue : « langue:fr>en » (installation pour vide)."""
+    return 'langue:%s>%s' % (avant or LANGUE_DE_L_INSTALLATION_AU_JOURNAL, apres or LANGUE_DE_L_INSTALLATION_AU_JOURNAL)
+
+
+def poser_langue(compte, langue):
+    """Écrit la langue dans le compte (vide : le champ est retiré, comme dans un compte qui n'en a jamais eu)."""
+    if langue:
+        compte['langue'] = langue
+    else:
+        compte.pop('langue', None)
+
+
+def changer_langue(config, identifiant, langue, origine=('', '', '')):
+    """Langue du compte connecté, choisie par la personne elle-même (T298 : « Ce poste », pour mon compte) : seul le
+    champ « langue » change, ni le mot de passe, ni les sessions, ni modifie_le (une préférence) ; une ligne
+    « langue:<avant>><après> » au journal quand elle change, aucune écriture sinon. Rend la langue retenue."""
+    langue = langue_de_compte(langue)
+    with VERROU_ACCES:
+        comptes = lire_comptes(config)
+        compte = trouver_compte(comptes, identifiant)
+        if compte is None:
+            raise erreur_compte_introuvable(comptes, identifiant)
+        avant = langue_enregistree(compte)
+        if avant == langue:
+            return langue
+        poser_langue(compte, langue)
+        ecrire_comptes(config, comptes)
+    ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1], resultat_langue(avant, langue),
+                         origine[2])
+    return langue
+
+
 def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal='modification', origine=('', '', '')):
     """Nouveau mot de passe (changé ou réinitialisé) : toutes les sessions du compte sont fermées (§22.3).
     origine : (adresse, agent, Tailscale) de la ligne du journal, vide en ligne de commande."""
@@ -752,7 +1237,7 @@ def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal=
         comptes = lire_comptes(config)
         compte = trouver_compte(comptes, identifiant)
         if compte is None:
-            raise ErreurCompte('Compte introuvable : %s.' % identifiant)
+            raise erreur_compte_introuvable(comptes, identifiant)
         compte['algo'], compte['sel'], compte['empreinte'] = hacher_mot_de_passe(nouveau)
         compte['a_changer'] = bool(a_changer)
         compte['modifie_le'] = compte['mot_de_passe_le'] = maintenant_iso(config)
@@ -764,36 +1249,51 @@ def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal=
 def reinitialiser_compte(config, identifiant, origine=('', '', '')):
     """Mot de passe provisoire (16 caractères, à changer à la première connexion) ; rendu une seule fois."""
     if not os.path.isfile(chemin_comptes(config)):
-        raise ErreurCompte('Aucun compte dans %s : rien à réinitialiser. Terminez d\'abord l\'installation.'
-                           % dossier_acces(config))
+        raise ErreurCompte(traduisible('comptes.aucun_compte',
+                                       'Aucun compte dans {dossier} : rien à réinitialiser. Terminez d\'abord '
+                                       'l\'installation.', dossier=dossier_acces(config)))
     provisoire = mot_de_passe_provisoire()
     changer_mot_de_passe(config, identifiant, provisoire, a_changer=True, journal='reinitialisation', origine=origine)
     return provisoire
 
 
 def modifier_compte(config, identifiant, origine=('', '', ''), **champs):
-    """Prénom, nom, rôle, technicien lié ou actif ; jamais l'identifiant ni le mot de passe par cette voie."""
-    permis = {'prenom', 'nom', 'role', 'technicien_id', 'actif'}
+    """Prénom, nom, rôle, technicien lié, langue (T298 : langue_de_compte ; vide, le champ est retiré) ou actif ;
+    jamais l'identifiant ni le mot de passe par cette voie. Langue changée : une ligne « langue:<avant>><après> » au
+    journal après celle de la modification."""
+    permis = {'prenom', 'nom', 'role', 'technicien_id', 'actif', 'langue'}
+    if 'langue' in champs:
+        champs['langue'] = langue_de_compte(champs['langue'])
     with VERROU_ACCES:
         comptes = lire_comptes(config)
         compte = trouver_compte(comptes, identifiant)
         if compte is None:
-            raise ErreurCompte('Compte introuvable : %s.' % identifiant)
+            raise erreur_compte_introuvable(comptes, identifiant)
+        langue_avant = langue_enregistree(compte)
         for cle, valeur in champs.items():
             if cle not in permis:
-                raise ErreurCompte('Champ non modifiable : %s.' % cle)
+                raise ErreurCompte(traduisible('comptes.champ_non_modifiable',
+                                               'Champ non modifiable : {champ}.', champ=cle))
             if cle == 'role' and valeur not in ROLES_COMPTES:
-                raise ErreurCompte('Rôle inconnu : %s.' % valeur)
-            compte[cle] = bool(valeur) if cle == 'actif' else valeur
+                raise ErreurCompte(traduisible('comptes.role_inconnu', 'Rôle inconnu : {role}.', role=valeur))
+            if cle == 'langue':
+                poser_langue(compte, valeur)
+            else:
+                compte[cle] = bool(valeur) if cle == 'actif' else valeur
         if compte['role'] == 'technicien' and not compte.get('technicien_id'):
-            raise ErreurCompte('Un compte de technicien est lié à un technicien de l\'équipe.')
+            raise ErreurCompte(traduisible('comptes.technicien_obligatoire',
+                                           'Un compte de technicien est lié à un technicien de l\'équipe.'))
         if not any(c['role'] == 'responsable' and c.get('actif') for c in comptes):
-            raise ErreurCompte('Il faut garder au moins un compte responsable actif.')
+            raise ErreurCompte(traduisible('comptes.dernier_responsable',
+                                           'Il faut garder au moins un compte responsable actif.'))
         compte['modifie_le'] = maintenant_iso(config)
         ecrire_comptes(config, comptes)
     if not compte.get('actif'):
         fermer_sessions_apres_changement(config, compte['identifiant'])
     ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1], 'modification', origine[2])
+    if 'langue' in champs and champs['langue'] != langue_avant:
+        ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1],
+                             resultat_langue(langue_avant, champs['langue']), origine[2])
     return compte_public(compte)
 
 
@@ -875,15 +1375,22 @@ TAILLE_MAX_CORPS_JETE = 64 * 1024       # refus avant la lecture du corps : au p
 QUI_INCONNU = '(inconnu)'               # journal : un identifiant sans compte n'est jamais recopié (un mot de passe
                                         # tapé dans la mauvaise case y finirait en clair)
 SEL_FACTICE = bytes(16)                 # empreinte factice d'un identifiant inconnu : même calcul, même durée
-CHAMPS_SESSION = ('identifiant', 'role', 'prenom', 'nom', 'technicien_id', 'a_changer', 'appareil')
-MESSAGE_CONNEXION_REFUSEE = 'Identifiant ou mot de passe incorrect.'
-MESSAGE_SESSION_ABSENTE = 'Connexion nécessaire : votre session est absente ou a expiré.'
-MESSAGE_MOT_DE_PASSE_PROVISOIRE = 'Mot de passe provisoire : choisissez votre mot de passe d\'abord.'
-MESSAGE_ACTUEL_FAUX = 'Mot de passe actuel incorrect.'
-MESSAGE_SANS_COMPTES = ('Les comptes ne sont pas activés sur ce serveur (portée « ce PC ») : aucune connexion '
-                        'n\'est nécessaire.')
-MESSAGE_COMPTES_ILLISIBLES = ('Fichier des comptes illisible (donnees/acces/comptes.json) : remettez-le depuis une '
-                              'sauvegarde.')
+CHAMPS_SESSION = ('identifiant', 'role', 'prenom', 'nom', 'technicien_id', 'a_changer', 'appareil', 'langue')
+MESSAGE_CONNEXION_REFUSEE = traduisible('sessions.connexion_refusee', 'Identifiant ou mot de passe incorrect.')
+MESSAGE_IDENTIFIANT_AMBIGU = traduisible('sessions.identifiant_ambigu',
+                                         'Plusieurs comptes correspondent à cet identifiant : tapez-le exactement, tel '
+                                         'qu\'il vous a été donné.')
+MESSAGE_SESSION_ABSENTE = traduisible('sessions.absente',
+                                      'Connexion nécessaire : votre session est absente ou a expiré.')
+MESSAGE_MOT_DE_PASSE_PROVISOIRE = traduisible('sessions.mot_de_passe_provisoire',
+                                              'Mot de passe provisoire : choisissez votre mot de passe d\'abord.')
+MESSAGE_ACTUEL_FAUX = traduisible('sessions.mot_de_passe_actuel_faux', 'Mot de passe actuel incorrect.')
+MESSAGE_SANS_COMPTES = traduisible('sessions.sans_comptes',
+                                   'Les comptes ne sont pas activés sur ce serveur (portée « ce PC ») : aucune '
+                                   'connexion n\'est nécessaire.')
+MESSAGE_COMPTES_ILLISIBLES = traduisible('comptes.fichier_illisible',
+                                         'Fichier des comptes illisible (donnees/acces/comptes.json) : remettez-le '
+                                         'depuis une sauvegarde.')
 VERROU_SESSIONS = threading.Lock()
 
 
@@ -981,7 +1488,7 @@ def fermer_session(config, cle):
 def fermer_sessions_de(config, identifiant):
     """Supprime toutes les sessions d'un compte (déconnecter partout, mot de passe changé ou réinitialisé, compte
     désactivé) ; rend leur nombre."""
-    identifiant = (identifiant or '').strip().lower()
+    identifiant = identifiant_tape(identifiant)
     with VERROU_SESSIONS:
         sessions = lire_sessions(config)
         restantes = {cle: session for cle, session in sessions.items() if session.get('identifiant') != identifiant}
@@ -1012,12 +1519,18 @@ def identite_du_compte(compte, cle, longue):
     """Ce que le serveur sait de la requête : le compte et sa session (empreinte, « rester »), jamais le jeton."""
     return {'identifiant': compte['identifiant'], 'role': compte.get('role', ''), 'prenom': compte.get('prenom', ''),
             'nom': compte.get('nom', ''), 'technicien_id': compte.get('technicien_id', ''),
-            'a_changer': bool(compte.get('a_changer')), 'appareil': False, 'cle': cle, 'longue': bool(longue)}
+            'a_changer': bool(compte.get('a_changer')), 'appareil': False, 'cle': cle, 'longue': bool(longue),
+            'langue': langue_enregistree(compte)}
 
 
 def session_publique(identite):
-    """L'identité telle que GET /api/session la rend (§22.4), ou None."""
-    return None if identite is None else {champ: identite[champ] for champ in CHAMPS_SESSION}
+    """L'identité telle que GET /api/session la rend (§22.4), ou None. T298 : « langue », celle du compte quand c'est
+    une langue déclarée, sinon '' (langue_publique ; toujours '' pour un appareil enrôlé)."""
+    if identite is None:
+        return None
+    publique = {champ: identite.get(champ, '') for champ in CHAMPS_SESSION}
+    publique['langue'] = langue_publique(publique['langue'])
+    return publique
 
 
 def valeurs_cookie(entete, nom):
@@ -1075,11 +1588,15 @@ LONGUEUR_MAX_LIBELLE_APPAREIL = 80
 OUBLI_APPAREILS_JOURS = 30              # invitations finies, appareils révoqués ou expirés : oubliés après 30 jours
 PREFIXE_INVITATION, PREFIXE_APPAREIL = 'INV-', 'AP-'
 CHEMIN_ENROLEMENT = '/#/enroler/'       # lien d'une invitation : adresse http de la porte + ce chemin + le jeton
-MESSAGE_INVITATION_REFUSEE = 'Invitation inconnue, expirée ou révoquée : demandez-en une nouvelle au responsable.'
-MESSAGE_ENROLEMENT_DESACTIVE = ('Enrôlement d\'appareils désactivé sur ce serveur (demandeurs_avec_compte) : chaque '
-                                'demandeur se connecte avec son compte.')
-MESSAGE_APPAREIL_REFUSE = ('Cet appareil n\'est plus autorisé (révoqué, expiré ou enrôlement désactivé) : demandez '
-                           'une nouvelle invitation au responsable.')
+MESSAGE_INVITATION_REFUSEE = traduisible('appareils.invitation_refusee',
+                                         'Invitation inconnue, expirée ou révoquée : demandez-en une nouvelle au '
+                                         'responsable.')
+MESSAGE_ENROLEMENT_DESACTIVE = traduisible('appareils.enrolement_desactive',
+                                           'Enrôlement d\'appareils désactivé sur ce serveur '
+                                           '(demandeurs_avec_compte) : chaque demandeur se connecte avec son compte.')
+MESSAGE_APPAREIL_REFUSE = traduisible('appareils.refuse',
+                                      'Cet appareil n\'est plus autorisé (révoqué, expiré ou enrôlement désactivé) : '
+                                      'demandez une nouvelle invitation au responsable.')
 VERROU_APPAREILS = threading.Lock()
 
 
@@ -1176,8 +1693,9 @@ def creer_invitation(config, heures=None):
         heures = (getattr(config, 'reglages', None) or {}).get('invitation_heures', 24)
     if (isinstance(heures, bool) or not isinstance(heures, int)
             or not INVITATION_HEURES_MIN <= heures <= INVITATION_HEURES_MAX):
-        raise ErreurHttp(400, '« heures » : un entier de %d à %d est attendu.'
-                         % (INVITATION_HEURES_MIN, INVITATION_HEURES_MAX))
+        raise ErreurHttp(400, traduisible('appareils.invitation_heures',
+                                          '« heures » : un entier de {minimum} à {maximum} est attendu.',
+                                          minimum=INVITATION_HEURES_MIN, maximum=INVITATION_HEURES_MAX))
     jeton = secrets.token_urlsafe(32)
     maintenant = maintenant_s(config)
     with VERROU_APPAREILS:
@@ -1198,7 +1716,10 @@ def enroler_appareil(config, jeton_invitation, nom, agent):
         raise ErreurHttp(403, MESSAGE_ENROLEMENT_DESACTIVE)
     nom = ' '.join(str(nom or '').split())
     if not nom or len(nom) > LONGUEUR_MAX_NOM_DEMANDEUR:
-        raise ErreurHttp(400, 'Votre nom est attendu (%d caractères au plus).' % LONGUEUR_MAX_NOM_DEMANDEUR)
+        raise ErreurHttp(400, traduisible('appareils.nom_attendu',
+                                          {'one': 'Votre nom est attendu ({n} caractères au plus).',
+                                           'other': 'Votre nom est attendu ({n} caractères au plus).'},
+                                          n=LONGUEUR_MAX_NOM_DEMANDEUR))
     if not isinstance(jeton_invitation, str) or not MOTIF_JETON.fullmatch(jeton_invitation):
         raise ErreurHttp(401, MESSAGE_INVITATION_REFUSEE)
     cle = empreinte_jeton(jeton_invitation)
@@ -1222,7 +1743,7 @@ def identite_de_l_appareil(appareil, cle):
     jamais le jeton."""
     return {'identifiant': 'appareil:' + str(appareil.get('id', '')), 'role': 'demandeur', 'prenom': '',
             'nom': str(appareil.get('nom_demandeur', '')), 'technicien_id': '', 'a_changer': False, 'appareil': True,
-            'cle': cle, 'longue': True}
+            'cle': cle, 'longue': True, 'langue': ''}
 
 
 def verifier_appareil(config, entete_cookie):
@@ -1266,7 +1787,8 @@ def revoquer(config, genre, identifiant=None):
                     element[champ] = True
                     revoques.append(str(element.get('id', '')))
         if identifiant is not None and not trouves:
-            raise ErreurHttp(404, 'Introuvable : %s.' % str(identifiant)[:40])
+            raise ErreurHttp(404, traduisible('appareils.introuvable',
+                                              'Introuvable : {identifiant}.', identifiant=str(identifiant)[:40]))
         if revoques:
             ecrire_appareils(config, contenu)
     return revoques
@@ -1356,8 +1878,12 @@ def empreinte_factice(mot_de_passe):
 def erreur_blocage(reste):
     """429 avec le temps restant : champ « attente_secondes » et en-tête Retry-After."""
     secondes = max(1, int(-(-reste // 1)))
-    erreur = ErreurHttp(429, 'Trop d\'essais : la connexion est bloquée pour cet identifiant. Réessayez dans %d min.'
-                        % -(-secondes // 60), attente_secondes=secondes)
+    erreur = ErreurHttp(429, traduisible('sessions.trop_d_essais',
+                                         {'one': 'Trop d\'essais : la connexion est bloquée pour cet identifiant. '
+                                                 'Réessayez dans {n} min.',
+                                          'other': 'Trop d\'essais : la connexion est bloquée pour cet '
+                                                   'identifiant. Réessayez dans {n} min.'},
+                                         n=-(-secondes // 60)), attente_secondes=secondes)
     erreur.entetes = {'Retry-After': str(secondes)}
     return erreur
 
@@ -1370,17 +1896,25 @@ def verifier_tentative(config, identifiant, mot_de_passe, origine, refus, journa
     plus par tentative. Chaque tentative va au journal des connexions, jamais le mot de passe.
     origine : (adresse, agent, Tailscale)."""
     adresse, agent, tailscale = origine
-    cle = (identifiant or '').strip().lower()[:LONGUEUR_MAX_IDENTIFIANT]
+    tape = (identifiant or '').strip()[:LONGUEUR_MAX_IDENTIFIANT]
     echecs = config.echecs
     if echecs.adresse_ralentie(adresse, maintenant_s(config)):
         config.dormir(ATTENTE_ADRESSE_S)
-    compte = trouver_compte(comptes_du_serveur(config), cle)
+    designes = comptes_designes(comptes_du_serveur(config), tape)
+    compte = designes[0] if len(designes) == 1 else None
+    # T301 : les essais comptent par compte désigné (« YILMAZ » et « yilmaz » ensemble), sinon par texte ramené.
+    cle = compte['identifiant'] if compte is not None else identifiant_tape(tape)[:LONGUEUR_MAX_IDENTIFIANT]
     qui = compte['identifiant'] if compte is not None else QUI_INCONNU
     reste = echecs.reserver(cle, maintenant_s(config))
     if reste:
         ecrire_journal_acces(config, qui, adresse, agent, 'bloque', tailscale)
         raise erreur_blocage(reste)
-    if compte is not None and compte.get('actif'):
+    if len(designes) > 1:
+        # T301 (règle de Nicolas, 07/11) : plusieurs comptes désignés (anciens comptes nés de « IŞIK » et « Işık ») :
+        # refus sans vérifier aucun mot de passe, l'identifiant exact est demandé ; l'essai compte comme un échec.
+        juste = empreinte_factice(mot_de_passe)              # même attente qu'un mot de passe vérifié ; toujours faux
+        refus = ErreurHttp(refus.statut, MESSAGE_IDENTIFIANT_AMBIGU)
+    elif compte is not None and compte.get('actif'):
         juste = mot_de_passe_juste(compte, mot_de_passe)
     else:
         juste = empreinte_factice(mot_de_passe)
@@ -1444,11 +1978,14 @@ def empreinte_fichier(chemin):
 def verifier_empreinte(chemin, attendue):
     """ErreurConfiguration si le fichier manque ou si son SHA-256 n'est pas celui attendu (rien n'est exécuté)."""
     if not os.path.isfile(chemin):
-        raise ErreurConfiguration('Outil introuvable : %s.' % chemin)
+        raise ErreurConfiguration(traduisible('mkcert.outil_introuvable',
+                                              'Outil introuvable : {chemin}.', chemin=chemin))
     obtenue = empreinte_fichier(chemin)
     if not hmac.compare_digest(obtenue, (attendue or '').lower()):
-        raise ErreurConfiguration('Empreinte inattendue pour %s : le fichier a été modifié ou n\'est pas celui livré '
-                                  'avec Prévo. Il n\'a pas été exécuté.' % os.path.basename(chemin))
+        raise ErreurConfiguration(traduisible('mkcert.empreinte_inattendue',
+                                              'Empreinte inattendue pour {fichier} : le fichier a été modifié ou '
+                                              'n\'est pas celui livré avec Prévo. Il n\'a pas été exécuté.',
+                                              fichier=os.path.basename(chemin)))
 
 
 def trouver_mkcert(empreintes=None, dossier=None, nom=None):
@@ -1457,7 +1994,8 @@ def trouver_mkcert(empreintes=None, dossier=None, nom=None):
     nom = nom or nom_binaire_mkcert(empreintes['mkcert']['version'])
     fiche = empreintes['mkcert']['fichiers'].get(nom)
     if fiche is None:
-        raise ErreurConfiguration('Aucun mkcert prévu pour ce système (%s).' % nom)
+        raise ErreurConfiguration(traduisible('mkcert.systeme_non_prevu',
+                                              'Aucun mkcert prévu pour ce système ({systeme}).', systeme=nom))
     chemin = os.path.join(dossier or DOSSIER_OUTILS_TIERS, nom)
     verifier_empreinte(chemin, fiche['sha256'])
     return chemin
@@ -1471,36 +2009,10 @@ def executable_mkcert():
     if variable:
         if os.path.isfile(variable):
             return variable
-        raise ErreurConfiguration('mkcert introuvable (%s = %s).' % (VARIABLE_MKCERT, variable))
+        raise ErreurConfiguration(traduisible('mkcert.introuvable',
+                                              'mkcert introuvable ({variable} = {chemin}).',
+                                              variable=VARIABLE_MKCERT, chemin=variable))
     return trouver_mkcert()
-
-
-def telecharger_mkcert(empreintes=None, dossier=None, nom=None, adresse=None):
-    """Téléchargement de secours depuis la page des releases ; l'empreinte est vérifiée avant de garder le fichier."""
-    empreintes = empreintes or lire_empreintes_tiers()
-    nom = nom or nom_binaire_mkcert(empreintes['mkcert']['version'])
-    fiche = empreintes['mkcert']['fichiers'].get(nom)
-    if fiche is None:
-        raise ErreurConfiguration('Aucun mkcert prévu pour ce système (%s).' % nom)
-    dossier = dossier or DOSSIER_OUTILS_TIERS
-    os.makedirs(dossier, exist_ok=True)
-    cible = os.path.join(dossier, nom)
-    temporaire = cible + '.telechargement'
-    adresse = adresse or (empreintes['mkcert']['source'] + nom)
-    try:
-        with urllib.request.urlopen(adresse, timeout=60) as reponse, open(temporaire, 'wb') as fichier:
-            shutil.copyfileobj(reponse, fichier)
-        verifier_empreinte(temporaire, fiche['sha256'])
-        os.replace(temporaire, cible)
-    except (OSError, urllib.error.URLError) as erreur:
-        raise ErreurConfiguration('Téléchargement de mkcert impossible (%s) : vérifiez la connexion à Internet, ou '
-                                  'utilisez le zip de Prévo qui le contient.' % erreur)
-    finally:
-        if os.path.exists(temporaire):
-            os.remove(temporaire)
-    if not nom.endswith('.exe'):
-        os.chmod(cible, 0o755)
-    return cible
 
 
 def dossier_autorite(config):
@@ -1528,10 +2040,12 @@ def lancer_mkcert(executable, arguments, autorite):
     try:
         resultat = subprocess.run(commande, capture_output=True, timeout=DELAI_MKCERT_S, env=environnement)
     except (OSError, subprocess.TimeoutExpired) as erreur:
-        raise ErreurConfiguration('mkcert n\'a pas pu être lancé (%s).' % erreur)
+        raise ErreurConfiguration(traduisible('mkcert.lancement_impossible',
+                                              'mkcert n\'a pas pu être lancé ({erreur}).', erreur=erreur))
     sortie = (resultat.stdout + resultat.stderr).decode('utf-8', 'replace')
     if resultat.returncode != 0:
-        raise ErreurConfiguration('mkcert a échoué : %s' % sortie.strip()[-400:])
+        raise ErreurConfiguration(traduisible('mkcert.echec',
+                                              'mkcert a échoué : {sortie}', sortie=sortie.strip()[-400:]))
     return sortie
 
 
@@ -1556,7 +2070,8 @@ def preparer_certificat_local(config, executable, adresses=None, forcer=False, n
             pass
     lancer_mkcert(executable, ['-cert-file', certificat, '-key-file', cle] + noms, autorite)
     if not (os.path.isfile(certificat) and os.path.isfile(cle)):
-        raise ErreurConfiguration('mkcert n\'a pas produit le certificat attendu.')
+        raise ErreurConfiguration(traduisible('mkcert.certificat_absent',
+                                              'mkcert n\'a pas produit le certificat attendu.'))
     ecrire_atomique(fiche, json.dumps({'noms': noms, 'cree_le': maintenant_iso(config)}, ensure_ascii=False).encode('utf-8'))
     return certificat, cle, noms
 
@@ -1572,16 +2087,18 @@ def certificat_du_serveur(config, reglages, mkcert=None):
     if reglages['ecoute'] == '127.0.0.1':
         return None, None
     if not reglages.get('certificat_auto'):
-        raise ErreurConfiguration(
+        raise ErreurConfiguration(traduisible(
+            'config.reseau_sans_certificat',
             'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » et « cle ») ou '
-            'laissez Prévo fabriquer le sien (« certificat_auto »: true).')
+            'laissez Prévo fabriquer le sien (« certificat_auto »: true).'))
     try:
         certificat, cle, _ = preparer_certificat_local(config, mkcert or executable_mkcert())
     except ErreurConfiguration as erreur:
-        raise ErreurConfiguration(
-            'Certificat de l\'atelier impossible (%s). Prévo n\'écoute pas sur le réseau sans https : remettez mkcert '
-            'dans le dossier outils-tiers/ (il est dans le zip de Prévo), ou donnez « certificat » et « cle » dans %s.'
-            % (str(erreur).rstrip('.'), NOM_FICHIER_CONFIGURATION))
+        raise ErreurConfiguration(traduisible(
+            'config.certificat_atelier_impossible',
+            'Certificat de l\'atelier impossible ({erreur}). Prévo n\'écoute pas sur le réseau sans https : remettez '
+            'mkcert dans le dossier outils-tiers/ (il est dans le zip de Prévo), ou donnez « certificat » et « cle » '
+            'dans {fichier}.', erreur=forme_sans_point(traduisible_de(erreur)), fichier=NOM_FICHIER_CONFIGURATION))
     return certificat, cle
 
 
@@ -1808,19 +2325,33 @@ def lancer_script_powershell(script, eleve=True):
     l'assistant) ou Demarrage_session.ps1 sans eux ; rend {"ok", "code", "message"}. Jamais appelée par les tests
     (config.lancer_eleve y est remplacée) : elle demande l'élévation et change le système."""
     if not sys.platform.startswith('win'):
-        return {'ok': False, 'code': None, 'message': 'Scripts PowerShell : Windows seulement.'}
+        return {'ok': False, 'code': None,
+                'message': traduisible('powershell.windows_seulement', 'Scripts PowerShell : Windows seulement.')}
     try:
         resultat = subprocess.run(commande_powershell(script, eleve), capture_output=True, timeout=DELAI_ELEVATION_S)
     except (OSError, subprocess.TimeoutExpired) as erreur:
-        return {'ok': False, 'code': None, 'message': 'PowerShell n\'a pas pu lancer %s (%s).'
-                                                     % (os.path.basename(script), erreur)}
+        return {'ok': False, 'code': None,
+                'message': traduisible('powershell.lancement_impossible',
+                                       'PowerShell n\'a pas pu lancer {script} ({erreur}).',
+                                       script=os.path.basename(script), erreur=erreur)}
     sortie = (resultat.stdout + resultat.stderr).decode('utf-8', 'replace').strip()
     if resultat.returncode != 0:
-        return {'ok': False, 'code': resultat.returncode,
-                'message': ('Élévation refusée ou script en échec (%s, code %d) : rien n\'a été installé. Vous pouvez '
-                            'relancer, ou choisir « à l\'ouverture de session » (sans droits d\'administrateur).'
-                            % (os.path.basename(script), resultat.returncode)) + ('\n' + sortie[-300:] if sortie else '')}
-    return {'ok': True, 'code': 0, 'message': sortie[-300:] or 'Script exécuté.'}
+        if sortie:
+            message = traduisible('powershell.echec_sortie',
+                                  'Élévation refusée ou script en échec ({script}, code {code}) : rien n\'a été '
+                                  'installé. Vous pouvez relancer, ou choisir « à l\'ouverture de session » (sans '
+                                  'droits d\'administrateur).\n{sortie}',
+                                  script=os.path.basename(script), code=resultat.returncode, sortie=sortie[-300:])
+        else:
+            message = traduisible('powershell.echec',
+                                  'Élévation refusée ou script en échec ({script}, code {code}) : rien n\'a été '
+                                  'installé. Vous pouvez relancer, ou choisir « à l\'ouverture de session » (sans '
+                                  'droits d\'administrateur).',
+                                  script=os.path.basename(script), code=resultat.returncode)
+        return {'ok': False, 'code': resultat.returncode, 'message': message}
+    # La sortie du script (Write-Output du lanceur, D157 : Lot 4) est rendue telle quelle.
+    return {'ok': True, 'code': 0,
+            'message': sortie[-300:] or traduisible('powershell.script_execute', 'Script exécuté.')}
 
 
 def certificat_de_l_autorite(config):
@@ -1861,10 +2392,13 @@ CHEMINS_TAILSCALE = {
 COMMANDES_TAILSCALE_INTERDITES = ('up', 'down', 'login', 'logout', 'install', 'update')   # jamais lancées par Prévo
 VERROU_TAILSCALE = threading.Lock()     # une détection à la fois ; config.tailscale lu et posé sous ce verrou
 RAPPELS_TAILSCALE = (
-    'Désactivez l\'expiration de clé de ce PC dans la console Tailscale (%s : Machines › ce PC › Disable key expiry) ; '
-    'sinon, au bout de quelques mois, les téléphones ne joignent plus Prévo.' % CONSOLE_TAILSCALE,
-    'Empêchez la veille du PC serveur (Démarrer avec la machine, D130) : un PC en veille ne répond plus, Tailscale '
-    'ou pas.',
+    traduisible('tailscale.rappel_expiration',
+                'Désactivez l\'expiration de clé de ce PC dans la console Tailscale ({adresse} : Machines › ce PC › '
+                'Disable key expiry) ; sinon, au bout de quelques mois, les téléphones ne joignent plus Prévo.',
+                adresse=CONSOLE_TAILSCALE),
+    traduisible('tailscale.rappel_veille',
+                'Empêchez la veille du PC serveur (Démarrer avec la machine, D130) : un PC en veille ne répond plus, '
+                'Tailscale ou pas.'),
 )
 
 
@@ -1894,19 +2428,28 @@ def lancer_tailscale(executable, arguments, delai=DELAI_TAILSCALE_S):
     délai ou rend un code non nul."""
     arguments = [str(argument) for argument in arguments]
     if not arguments or arguments[0] in COMMANDES_TAILSCALE_INTERDITES:
-        raise ErreurTailscale('Prévo ne lance jamais « tailscale %s » : c\'est à vous de le faire.' % ' '.join(arguments))
+        raise ErreurTailscale(traduisible('tailscale.commande_interdite',
+                                          'Prévo ne lance jamais « tailscale {commande} » : c\'est à vous de le '
+                                          'faire.', commande=' '.join(arguments)))
     commande = ([sys.executable, executable] if executable.endswith('.py') else [executable]) + arguments
     options = {'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}
     try:
         resultat = subprocess.run(commande, capture_output=True, timeout=delai, **options)
     except subprocess.TimeoutExpired:
-        raise ErreurTailscale('tailscale %s ne répond pas (délai de %s s dépassé).' % (arguments[0], delai))
+        raise ErreurTailscale(traduisible('tailscale.delai_depasse',
+                                          {'one': 'tailscale {commande} ne répond pas (délai de {n} s dépassé).',
+                                           'other': 'tailscale {commande} ne répond pas (délai de {n} s dépassé).'},
+                                          commande=arguments[0], n=delai))
     except OSError as erreur:
-        raise ErreurTailscale('tailscale n\'a pas pu être lancé (%s).' % erreur)
+        raise ErreurTailscale(traduisible('tailscale.lancement_impossible',
+                                          'tailscale n\'a pas pu être lancé ({erreur}).', erreur=erreur))
     if resultat.returncode != 0:
         sortie = (resultat.stderr or resultat.stdout).decode('utf-8', 'replace').strip()
-        raise ErreurTailscale('tailscale %s a échoué : %s' % (' '.join(arguments),
-                                                              sortie[-300:] or 'code %d' % resultat.returncode))
+        if sortie:
+            raise ErreurTailscale(traduisible('tailscale.echec', 'tailscale {commande} a échoué : {sortie}',
+                                              commande=' '.join(arguments), sortie=sortie[-300:]))
+        raise ErreurTailscale(traduisible('tailscale.echec_code', 'tailscale {commande} a échoué : code {code}',
+                                          commande=' '.join(arguments), code=resultat.returncode))
     return resultat.stdout.decode('utf-8', 'replace')
 
 
@@ -1952,17 +2495,19 @@ def detecter_tailscale(executable=None, delai=DELAI_TAILSCALE_S, maintenant=None
     try:
         chemin = executable_tailscale(executable)
         if not chemin:
-            return {'present': False, 'raison': 'Tailscale introuvable sur ce PC'}
+            return {'present': False,
+                    'raison': traduisible('tailscale.raison_introuvable', 'Tailscale introuvable sur ce PC')}
         version = lancer_tailscale(chemin, ['version'], delai).strip().splitlines()
         resultat = {'present': True, 'version': version[0].strip() if version else '', 'connecte': False, 'nom': None,
                     'expiration_cle': None, 'jours_avant_expiration': None, 'serve': None, 'raison': None}
         try:
             etat = lire_json_tailscale(lancer_tailscale(chemin, ['status', '--json'], delai))
         except ErreurTailscale as erreur:
-            resultat['raison'] = str(erreur)
+            resultat['raison'] = traduisible_de(erreur)
             return resultat
         if etat is None:
-            resultat['raison'] = 'tailscale status --json : réponse illisible'
+            resultat['raison'] = traduisible('tailscale.raison_status_illisible',
+                                             'tailscale status --json : réponse illisible')
             return resultat
         soi = etat.get('Self') if isinstance(etat.get('Self'), dict) else {}
         nom = soi.get('DNSName') if isinstance(soi.get('DNSName'), str) else ''
@@ -1976,9 +2521,10 @@ def detecter_tailscale(executable=None, delai=DELAI_TAILSCALE_S, maintenant=None
             resultat['serve'] = None
         return resultat
     except ErreurTailscale as erreur:
-        return {'present': False, 'raison': str(erreur).rstrip('.')}
+        return {'present': False, 'raison': forme_sans_point(traduisible_de(erreur))}
     except Exception as erreur:         # jamais d'exception vers l'appelant
-        return {'present': False, 'raison': 'détection impossible (%s)' % erreur}
+        return {'present': False, 'raison': traduisible('tailscale.raison_detection_impossible',
+                                                        'détection impossible ({erreur})', erreur=erreur)}
 
 
 def tailscale_attendu(reglages):
@@ -2015,16 +2561,22 @@ def resume_tailscale(detection):
     """Ligne de la console : « prevo.tail1234.ts.net, connecté, clé valable 83 jours », ou « non détecté (raison) »."""
     if not detection or not detection.get('present'):
         raison = (detection or {}).get('raison')
-        return 'non détecté' + (' (%s)' % raison if raison else '')
-    morceaux = [detection.get('nom') or 'sans nom', 'connecté' if detection.get('connecte') else 'déconnecté']
+        if raison:
+            return traduisible('console.tailscale.non_detecte_raison', 'non détecté ({raison})', raison=raison)
+        return traduisible('console.tailscale.non_detecte', 'non détecté')
+    etat = (traduisible('console.tailscale.connecte', 'connecté') if detection.get('connecte')
+            else traduisible('console.tailscale.deconnecte', 'déconnecté'))
     jours = detection.get('jours_avant_expiration')
     if jours is None:
-        morceaux.append('clé sans expiration')
+        cle = traduisible('console.tailscale.cle_sans_expiration', 'clé sans expiration')
     elif jours < 0:
-        morceaux.append('clé expirée')
+        cle = traduisible('console.tailscale.cle_expiree', 'clé expirée')
     else:
-        morceaux.append('clé valable %d jour%s' % (jours, '' if jours == 1 else 's'))
-    return ', '.join(morceaux)
+        cle = traduisible('console.tailscale.cle_valable', {'one': 'clé valable {n} jour', 'other': 'clé valable {n} jours'},
+                          n=jours)
+    return traduisible('console.tailscale.resume', '{nom}, {etat}, {cle}',
+                       nom=detection.get('nom') or traduisible('console.tailscale.sans_nom', 'sans nom'), etat=etat,
+                       cle=cle)
 
 
 def commande_serve_tailscale(port_http):
@@ -2086,33 +2638,45 @@ def appliquer_tailscale(config, executable=None, delai=DELAI_TAILSCALE_S, reglag
     refus = {'ok': False, 'serve': None, 'nom': detection.get('nom'), 'adresse': proposition.get('adresse'),
              'noms': proposition.get('noms')}
     if not proposition['present']:
-        return dict(refus, message='Tailscale non détecté (%s) : installez-le et connectez-vous, puis réessayez.'
-                    % (detection.get('raison') or 'inconnu'))
+        if detection.get('raison'):
+            return dict(refus, message=traduisible('tailscale.non_detecte',
+                                                   'Tailscale non détecté ({raison}) : installez-le et '
+                                                   'connectez-vous, puis réessayez.', raison=detection['raison']))
+        return dict(refus, message=traduisible('tailscale.non_detecte_inconnu',
+                                               'Tailscale non détecté (inconnu) : installez-le et connectez-vous, '
+                                               'puis réessayez.'))
     if not detection.get('nom') or not detection.get('connecte'):
-        return dict(refus, message='Tailscale n\'est pas connecté sur ce PC : ouvrez Tailscale, connectez-vous, puis '
-                                   'réessayez.')
+        return dict(refus, message=traduisible('tailscale.non_connecte',
+                                               'Tailscale n\'est pas connecté sur ce PC : ouvrez Tailscale, '
+                                               'connectez-vous, puis réessayez.'))
     if ecrire:
         chemin = config.reglages.get('_fichier') or os.path.join(DOSSIER_APPLICATION, NOM_FICHIER_CONFIGURATION)
         try:
             modifier_configuration(chemin, {'noms': proposition['noms'], 'mandataire': True})
         except (OSError, ValueError) as erreur:
-            return dict(refus, message='Configuration non écrite (%s) : rien n\'a été lancé.' % erreur)
+            return dict(refus, message=traduisible('tailscale.configuration_non_ecrite',
+                                                   'Configuration non écrite ({erreur}) : rien n\'a été lancé.',
+                                                   erreur=erreur))
     port_http = reglages.get('port_http', PORT_PAR_DEFAUT)
     chemin_tailscale = executable_tailscale(executable)
     try:
         lancer_tailscale(chemin_tailscale, proposition['arguments_serve'], delai)
         serve = lire_json_tailscale(lancer_tailscale(chemin_tailscale, ['serve', 'status', '--json'], delai))
     except ErreurTailscale as erreur:
-        return dict(refus, message=str(erreur))
+        return dict(refus, message=traduisible_de(erreur))
     detection['serve'] = serve
     with VERROU_TAILSCALE:
         config.tailscale, config.tailscale_lu_a = detection, maintenant_s(config)
     resultat = dict(refus, serve=serve)
     if cible_serve_tailscale(serve, port_http) is None:
-        return dict(resultat, message='« tailscale serve status » ne montre pas http://127.0.0.1:%d : vérifiez la '
-                                      'commande « %s » sur ce PC.' % (port_http, proposition['serve']))
-    return dict(resultat, ok=True, message='Tailscale relaie %s vers http://127.0.0.1:%d ; la configuration vaut au '
-                                           'prochain démarrage de Prévo.' % (proposition['adresse'], port_http))
+        return dict(resultat, message=traduisible('tailscale.serve_absent',
+                                                  '« tailscale serve status » ne montre pas http://127.0.0.1:{port} : '
+                                                  'vérifiez la commande « {commande} » sur ce PC.',
+                                                  port=port_http, commande=proposition['serve']))
+    return dict(resultat, ok=True, message=traduisible('tailscale.relais_en_place',
+                                                       'Tailscale relaie {adresse} vers http://127.0.0.1:{port} ; la '
+                                                       'configuration vaut au prochain démarrage de Prévo.',
+                                                       adresse=proposition['adresse'], port=port_http))
 
 
 def activer_unattended(executable=None, delai=DELAI_TAILSCALE_S):
@@ -2120,12 +2684,14 @@ def activer_unattended(executable=None, delai=DELAI_TAILSCALE_S):
     sur ce clic explicite de l'assistant, jamais par appliquer_tailscale. Rend {"ok", "message"}."""
     chemin = executable_tailscale(executable)
     if not chemin:
-        return {'ok': False, 'message': 'Tailscale introuvable sur ce PC.'}
+        return {'ok': False, 'message': traduisible('tailscale.introuvable', 'Tailscale introuvable sur ce PC.')}
     try:
         lancer_tailscale(chemin, ['set', '--unattended=true'], delai)
     except ErreurTailscale as erreur:
-        return {'ok': False, 'message': str(erreur)}
-    return {'ok': True, 'message': 'Tailscale reste connecté même sans session Windows ouverte (« Run unattended »).'}
+        return {'ok': False, 'message': traduisible_de(erreur)}
+    return {'ok': True, 'message': traduisible('tailscale.unattended',
+                                               'Tailscale reste connecté même sans session Windows ouverte (« Run '
+                                               'unattended »).')}
 
 
 # ---------------------------------------------------------------------------
@@ -2164,7 +2730,8 @@ NOM_SCRIPT_REINITIALISATION = 'Reinitialiser_mot_de_passe.bat'
 VERSION_SCHEMA_CSV = 3                  # « version » de js/schema.js (§14.1) : posée dans un parametres.csv créé ici
 DELAI_RELANCE_S = 2                     # le serveur s'arrête 2 s après la réponse de « terminer » ou « deplacer »
 ATTENTE_AVANT_RELANCE_S = 3             # le lanceur repart 3 s plus tard, une fois le port rendu
-# « terminer » sur une base absente au départ (T171) : rien de plus (« vide »), ou le jeu de démo, lu dans
+# « terminer » sur une base absente au départ (T171) : rien de plus (« vide » : parametres.csv seul, avec version_schema
+# et langue_defaut, T296), ou le jeu de démo, lu dans
 # js/demo-donnees.js — le seul jeu livré (§22.14 : le zip n'a pas de dossier donnees/), produit par
 # outils/generer_demo.py : une ligne par table (chaîne JSON, ou morceaux recollés pour le wiki) et la date de référence.
 BASES_AU_DEPART = ('vide', 'demo')
@@ -2173,9 +2740,20 @@ MOTIF_TABLE_DU_JEU_DE_DEMO = re.compile(r'^    ([a-z_]+): ')
 MOTIF_DATE_DU_JEU_DE_DEMO = re.compile(r'^  dateReference: "([0-9]{4}-[0-9]{2}-[0-9]{2})",?$')
 PREFIXE_MORCEAUX_DU_JEU_DE_DEMO = "((m, s) => s.map((r) => m[r]).join(''))("
 MOTIF_DEBUT_DE_DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')     # comme MOTIF_DATE de js/stockage-demo.js
-MESSAGE_JEU_DE_DEMO_ILLISIBLE = 'Jeu de démo illisible (js/demo-donnees.js) : commencez vide, ou remettez le fichier du zip.'
-MESSAGE_ADRESSE_INCONNUE = 'Adresse inconnue dans l\'API.'
-MESSAGE_SANS_BROUILLON = 'Commencez par dire qui utilise Prévo (étape « situation »).'
+# Langue de Prévo d'une base neuve (T296 ; D149, D165) : « terminer » reçoit langue_defaut, une langue déclarée par
+# js/i18n/langues.js (une ligne « I18n.declarer({ code: 'xx', … }) » par langue, la même liste que le navigateur), le
+# français sans elle.
+FICHIER_LANGUES = os.path.join(DOSSIER_APPLICATION, 'js', 'i18n', 'langues.js')
+MOTIF_LANGUE_DECLAREE = re.compile(r"^I18n\.declarer\(\{\s*code:\s*'([^'\\]+)'", re.MULTILINE)
+LANGUE_PAR_DEFAUT = 'fr'
+PARAMETRE_LANGUE = 'langue_defaut'                                 # ligne de parametres.csv (D149, T295)
+MOTIF_CODE_LANGUE = re.compile(r'[a-z]{2,3}(-[A-Za-z0-9]{2,8})*')   # MOTIF_CODE de js/i18n.js (fr, en, pt-PT…)
+MESSAGE_JEU_DE_DEMO_ILLISIBLE = traduisible('installation.demo_illisible',
+                                            'Jeu de démo illisible (js/demo-donnees.js) : commencez vide, ou remettez '
+                                            'le fichier du zip.')
+MESSAGE_ADRESSE_INCONNUE = traduisible('requete.adresse_inconnue', 'Adresse inconnue dans l\'API.')
+MESSAGE_SANS_BROUILLON = traduisible('installation.sans_brouillon',
+                                     'Commencez par dire qui utilise Prévo (étape « situation »).')
 # Clés du brouillon = celles de la configuration, sauf la clé du fournisseur d'IA (un secret : jamais ici).
 CLES_DU_BROUILLON = tuple(cle for cle, _, _, _ in CLES_CONFIGURATION if cle != 'ia_cle')
 VERROU_INSTALLATION = threading.Lock()  # une étape à la fois (mkcert, Tailscale, copie : le brouillon reste cohérent)
@@ -2348,7 +2926,10 @@ def valeur_du_brouillon(cle, valeur):
         return valeur_valide(cle, genres[cle], valeur)
     except ErreurConfiguration as erreur:
         bornes = BORNES_ENTIERS.get(cle)
-        raise ErreurHttp(400, str(erreur) + (' Bornes : %d à %d.' % bornes if bornes else ''))
+        if not bornes:
+            raise ErreurHttp(400, traduisible_de(erreur))
+        raise ErreurHttp(400, traduisible('config.valeur_invalide_bornes', '{erreur} Bornes : {minimum} à {maximum}.',
+                                          erreur=traduisible_de(erreur), minimum=bornes[0], maximum=bornes[1]))
 
 
 def mkcert_disponible():
@@ -2462,14 +3043,17 @@ def fiche_acces(config):
 
 
 def forme_de_nom(texte):
-    """Nom ou prénom réduit pour une comparaison : accents, casse et espaces multiples ignorés."""
-    return ' '.join(sans_accents(texte or '').lower().split())
+    """Nom ou prénom réduit pour une comparaison : lettres simples (plier_nom, T301 : İ/ı, casse, accents) et espaces
+    multiples ignorés."""
+    return ' '.join(plier_nom(texte).split())
 
 
 def ecrire_table(config, table, entete, lignes):
-    """Réécrit un CSV entier au format de Prévo, la sauvegarde du jour faite d'abord ; en tenant VERROU_ECRITURE."""
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin_table(config, table), ecrire_tableau_csv(entete, lignes))
+    """Réécrit un CSV entier au format de Prévo, la sauvegarde du jour faite d'abord ; en tenant VERROU_ECRITURE.
+    409 en lecture seule (T185, données plus récentes) ; 409 « fichier_abime » si le fichier en place est abîmé
+    (T200, ecrire_fichier_de_donnees : rien n'est écrit)."""
+    verifier_ecriture_permise(config)
+    ecrire_fichier_de_donnees(config, table, ecrire_tableau_csv(entete, lignes), sauvegarde_du_jour=True)
 
 
 def technicien_moi(config, prenom, nom):
@@ -2484,7 +3068,9 @@ def technicien_moi(config, prenom, nom):
     colonnes = {}
     for nom_colonne in ('id', 'nom', 'prenom', 'actif'):
         if nom_colonne not in cles:
-            raise ErreurHttp(500, 'techniciens.csv sans colonne « %s » : impossible d\'y ajouter votre fiche.' % nom_colonne)
+            raise ErreurHttp(500, traduisible('technicien.colonne_absente',
+                                              'techniciens.csv sans colonne « {colonne} » : impossible d\'y ajouter '
+                                              'votre fiche.', colonne=nom_colonne))
         colonnes[nom_colonne] = cles.index(nom_colonne)
     voulu = (forme_de_nom(nom), forme_de_nom(prenom))
     numero = 0
@@ -2506,23 +3092,69 @@ def technicien_moi(config, prenom, nom):
     return identifiant
 
 
+def langues_declarees():
+    """Codes des langues déclarées par js/i18n/langues.js, dans l'ordre, relus à chaque appel (T296) ; fichier absent
+    ou illisible : le français seul."""
+    octets = lire_octets(FICHIER_LANGUES)
+    try:
+        codes = MOTIF_LANGUE_DECLAREE.findall(octets.decode('utf-8')) if octets is not None else []
+    except UnicodeDecodeError:
+        codes = []
+    return codes or [LANGUE_PAR_DEFAUT]
+
+
+def langue_de_l_installation(config):
+    """langue_defaut de parametres.csv (D149) quand c'est une langue déclarée et un code bien formé (MOTIF_CODE_LANGUE) ;
+    '' sinon : sans réglage, fichier absent, illisible ou tenu par un autre logiciel. Jamais d'exception : la porte et
+    index.html sont servis quoi qu'il arrive (T297), et la console choisit sa langue avec (langue_de_la_console)."""
+    try:
+        code = valeur_parametre_csv(config, PARAMETRE_LANGUE)
+    except Exception:                       # parametres.csv illisible, tenu par Excel… : comme sans réglage
+        return ''
+    return code if MOTIF_CODE_LANGUE.fullmatch(code) and code in langues_declarees() else ''
+
+
+def poser_langue_de_l_installation(octets, code):
+    """La page (octets) avec « code » dans son attribut data-langue-installation vide (T297) ; inchangée sans code ou
+    pour un code mal formé (jamais posé tel quel dans la page)."""
+    if not code or not MOTIF_CODE_LANGUE.fullmatch(code):
+        return octets
+    attribut = 'data-langue-installation="%s"' % code
+    return octets.replace(ATTRIBUT_LANGUE_INSTALLATION.encode('ascii'), attribut.encode('ascii'), 1)
+
+
+def valeurs_du_mode_solo(technicien_id=''):
+    """Lignes de parametres.csv du mode Solo (D132, §22.11) : mode_solo = 1, cloture_une_etape = 1 et, s'il existe,
+    solo_technicien_id."""
+    valeurs = {'mode_solo': '1', 'cloture_une_etape': '1'}
+    if technicien_id:
+        valeurs['solo_technicien_id'] = technicien_id
+    return valeurs
+
+
 def poser_mode_solo(config, technicien_id=''):
-    """mode_solo = 1, cloture_une_etape = 1 et, s'il existe, solo_technicien_id dans parametres.csv (D132, §22.11), par
-    une écriture de table normale (sauvegarde du jour d'abord) ; le fichier est créé avec version_schema s'il manque
-    (le premier démarrage ne propose alors plus « démo ou vide » : la base existe). En tenant VERROU_ECRITURE."""
+    """Le mode Solo posé dans parametres.csv (valeurs_du_mode_solo, poser_parametres). En tenant VERROU_ECRITURE."""
+    poser_parametres(config, valeurs_du_mode_solo(technicien_id))
+
+
+def poser_parametres(config, valeurs):
+    """Lignes « valeurs » ({cle: texte}) de parametres.csv ajoutées ou remplacées, toutes les autres gardées (mode Solo,
+    D132 ; langue d'une base neuve, T296), par une écriture de table normale (sauvegarde du jour d'abord) ; le fichier
+    est créé avec version_schema s'il manque (le premier démarrage ne propose alors plus « démo ou vide » : la base
+    existe). En tenant VERROU_ECRITURE."""
+    valeurs = dict(valeurs)
     octets = lire_octets(chemin_table(config, 'parametres'))
     entete, lignes = lire_tableau('parametres', octets)
     if not entete:
         entete, lignes = list(COLONNES_PAR_TABLE['parametres']), []
     cles = [cle_entete(colonne) for colonne in entete]
     if 'cle' not in cles or 'valeur' not in cles:
-        raise ErreurHttp(500, 'parametres.csv sans colonnes « cle » et « valeur » : mode Solo non posé.')
+        raise ErreurHttp(500, traduisible('parametres.colonnes_absentes',
+                                          'parametres.csv sans colonnes « cle » et « valeur » : réglages de '
+                                          'l\'installation non posés.'))
     position_cle, position_valeur = cles.index('cle'), cles.index('valeur')
-    valeurs = {'mode_solo': '1', 'cloture_une_etape': '1'}
-    if technicien_id:
-        valeurs['solo_technicien_id'] = technicien_id
     if octets is None:
-        valeurs['version_schema'] = str(VERSION_SCHEMA_CSV)
+        valeurs = dict({'version_schema': str(VERSION_SCHEMA_CSV)}, **valeurs)      # en tête du fichier créé
     for ligne in lignes:
         while len(ligne) < len(entete):
             ligne.append('')
@@ -2543,17 +3175,21 @@ def verifier_dossier_de_copie(config, dossier):
     chemin = os.path.abspath(os.path.expanduser(dossier.strip()))
     nom = nom_du_dossier(chemin)
     if not os.path.isdir(chemin):
-        raise ErreurHttp(400, 'Dossier de copie « %s » introuvable : branchez la clé ou créez le dossier, puis '
-                              'réessayez.' % nom)
+        raise ErreurHttp(400, traduisible('copie.dossier_introuvable_branchez',
+                                          'Dossier de copie « {nom} » introuvable : branchez la clé ou créez le '
+                                          'dossier, puis réessayez.', nom=nom))
     if est_sous_dossier(os.path.realpath(chemin), config.dossier_donnees):
-        raise ErreurHttp(400, 'Le dossier de copie ne peut pas être dans le dossier des données de Prévo : une panne '
-                              'du disque emporterait les données et leur copie.')
+        raise ErreurHttp(400, traduisible('copie.dossier_dans_donnees',
+                                          'Le dossier de copie ne peut pas être dans le dossier des données de '
+                                          'Prévo : une panne du disque emporterait les données et leur copie.'))
     try:
         descripteur, temoin = tempfile.mkstemp(prefix='.prevo-temoin-', dir=chemin)
         os.close(descripteur)
         os.remove(temoin)
     except OSError as erreur:
-        raise ErreurHttp(400, 'Dossier de copie « %s » : écriture impossible (%s).' % (nom, erreur.strerror or erreur))
+        raise ErreurHttp(400, traduisible('copie.ecriture_impossible',
+                                          'Dossier de copie « {nom} » : écriture impossible ({erreur}).',
+                                          nom=nom, erreur=erreur.strerror or erreur))
     return chemin
 
 
@@ -2561,15 +3197,20 @@ def verifier_dossier_cible(source, cible):
     """Cible de « deplacer » : un chemin absolu qui n'est ni le dossier de Prévo, ni dedans, ni au-dessus, et qui
     n'existe pas encore ou est vide ; 400 sinon."""
     if not os.path.isabs(cible):
-        raise ErreurHttp(400, 'Donnez un chemin complet (par exemple %s).' % DOSSIER_CONSEILLE_WINDOWS)
+        raise ErreurHttp(400, traduisible('deplacement.chemin_complet',
+                                          'Donnez un chemin complet (par exemple {exemple}).',
+                                          exemple=DOSSIER_CONSEILLE_WINDOWS))
     source_reelle, cible_reelle = os.path.realpath(source), os.path.realpath(cible)
     if chemins_egaux(source_reelle, cible_reelle):
-        raise ErreurHttp(400, 'Prévo est déjà dans ce dossier.')
+        raise ErreurHttp(400, traduisible('deplacement.deja_dans_ce_dossier', 'Prévo est déjà dans ce dossier.'))
     if est_sous_dossier(cible_reelle, source_reelle) or est_sous_dossier(source_reelle, cible_reelle):
-        raise ErreurHttp(400, 'Le dossier de destination ne peut être ni dans le dossier de Prévo ni au-dessus.')
+        raise ErreurHttp(400, traduisible('deplacement.dossier_interdit',
+                                          'Le dossier de destination ne peut être ni dans le dossier de Prévo ni '
+                                          'au-dessus.'))
     if os.path.exists(cible) and (not os.path.isdir(cible) or os.listdir(cible)):
-        raise ErreurHttp(400, 'Le dossier « %s » existe déjà et n\'est pas vide : choisissez un dossier vide ou '
-                              'nouveau.' % cible)
+        raise ErreurHttp(400, traduisible('deplacement.dossier_non_vide',
+                                          'Le dossier « {dossier} » existe déjà et n\'est pas vide : choisissez un '
+                                          'dossier vide ou nouveau.', dossier=cible))
 
 
 def copier_prevo(source, cible):
@@ -2590,13 +3231,17 @@ def copier_prevo(source, cible):
                 shutil.copy2(origine, copie)
                 if (os.path.getsize(origine) != os.path.getsize(copie)
                         or empreinte_fichier(origine) != empreinte_fichier(copie)):
-                    raise ErreurHttp(500, 'Copie incomplète (%s) : l\'ancien dossier est intact, rien n\'a été relancé.'
-                                     % os.path.relpath(origine, source))
+                    raise ErreurHttp(500, traduisible('deplacement.copie_incomplete',
+                                                      'Copie incomplète ({fichier}) : l\'ancien dossier est intact, '
+                                                      'rien n\'a été relancé.',
+                                                      fichier=os.path.relpath(origine, source)))
                 nombre += 1
     except OSError as erreur:
         if cree:
             shutil.rmtree(cible, ignore_errors=True)
-        raise ErreurHttp(500, 'Copie impossible (%s) : l\'ancien dossier est intact, rien n\'a été relancé.' % erreur)
+        raise ErreurHttp(500, traduisible('deplacement.copie_impossible',
+                                          'Copie impossible ({erreur}) : l\'ancien dossier est intact, rien n\'a '
+                                          'été relancé.', erreur=erreur))
     except ErreurHttp:
         if cree:
             shutil.rmtree(cible, ignore_errors=True)
@@ -2632,12 +3277,14 @@ def relancer_prevo(config, dossier=None):
         subprocess.Popen([sys.executable, '-c', code], cwd=dossier, stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, **detache)
     except OSError as erreur:
-        afficher('Relance impossible (%s) : relancez Prévo à la main par %s.' % (erreur, os.path.basename(lanceur)))
+        afficher(traduisible('console.relance.impossible',
+                             'Relance impossible ({erreur}) : relancez Prévo à la main par {lanceur}.',
+                             erreur=erreur, lanceur=os.path.basename(lanceur)))
         return False
 
     def arreter():
         time.sleep(DELAI_RELANCE_S)
-        afficher('Prévo se relance depuis %s.' % dossier)
+        afficher(traduisible('console.relance.depuis', 'Prévo se relance depuis {dossier}.', dossier=dossier))
         os._exit(0)
 
     threading.Thread(target=arreter, name='relance', daemon=True).start()
@@ -2653,8 +3300,9 @@ def deplacer_installation(config, cible, brouillon=None):
     n'est jamais supprimé : l'utilisateur l'efface à la main ensuite."""
     source = os.path.abspath(config.dossier_application)
     if not est_sous_dossier(os.path.realpath(config.dossier_donnees), source):
-        raise ErreurHttp(400, 'Le dossier des données n\'est pas dans le dossier de Prévo (option --donnees) : '
-                              'déplacez Prévo à la main.')
+        raise ErreurHttp(400, traduisible('deplacement.donnees_hors_prevo',
+                                          'Le dossier des données n\'est pas dans le dossier de Prévo (option '
+                                          '--donnees) : déplacez Prévo à la main.'))
     verifier_dossier_cible(source, cible)               # chemin complet exigé : jamais résolu depuis le dossier courant
     cible = os.path.abspath(cible)
     nombre = copier_prevo(source, cible)
@@ -2723,15 +3371,22 @@ def installer_jeu_de_demo(config, brouillon, origine=('', '', '')):
     le dossier des données, dates décalées du nombre de semaines entières écoulées depuis la date de référence
     (comme « Partir des données de démo » du navigateur, §11), sauvegarde du jour d'abord. En Solo, le technicien
     « moi » créé à l'étape « compte » est recréé dans la table de la démo (technicien_moi : même prénom et nom), le
-    brouillon et le compte responsable lié suivent son nouvel identifiant. En tenant VERROU_ECRITURE."""
+    brouillon et le compte responsable lié suivent son nouvel identifiant. En tenant VERROU_ECRITURE. T200 : un
+    fichier en place abîmé (techniciens.csv de l'étape « compte ») arrête tout avant la moindre écriture dans les
+    tables (409 « fichier_abime ») ; T206 : la sauvegarde du jour est faite avant ces gardes."""
+    verifier_ecriture_permise(config)
     date_reference, textes = lire_jeu_de_demo()
     ancien = brouillon.get('solo_technicien_id', '')
     moi = technicien_par_id(config, ancien) if ancien else None
     aujourd_hui = datetime.date.fromtimestamp(maintenant_s(config))
     jours = int((aujourd_hui - datetime.date.fromisoformat(date_reference)).days / 7) * 7
     faire_sauvegarde_quotidienne(config)
+    actuels = {table: lire_octets(chemin_table(config, table)) for table in TABLES}
     for table in TABLES:
-        ecrire_atomique(chemin_table(config, table), decaler_texte_csv(textes[table], jours))
+        verifier_fichier_en_place(table, actuels[table])
+    for table in TABLES:
+        ecrire_fichier_de_donnees(config, table, decaler_texte_csv(textes[table], jours), actuels[table],
+                                  sauvegarde_du_jour=False)
     if moi is not None:
         nouveau = technicien_moi(config, moi.get('prenom', ''), moi.get('nom', ''))
         brouillon['solo_technicien_id'] = nouveau
@@ -2784,6 +3439,9 @@ class Configuration:
         self.systeme = sys.platform
         self.lancer_eleve = lancer_script_powershell
         self.relancer = lambda dossier=None: relancer_prevo(self, dossier)
+        # T185 (D168, D169) : état du format des données, posé par migrer_donnees_au_demarrage (main, avant les
+        # écouteurs) ; rendu par GET /api/info, lu par verifier_ecriture_permise (lecture seule). None hors de main.
+        self.format_donnees = None
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
         self.dossiers_interdits_statique = [
@@ -2836,10 +3494,14 @@ RESEAUX_ATELIER = tuple(ipaddress.ip_network(reseau) for reseau in (
     '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16',      # adresses privées IPv4
     'fc00::/7', 'fe80::/10'))                                               # adresses privées IPv6
 MOTIF_NOM_LOCAL = re.compile(r'[a-z0-9_-]+(\.[a-z0-9_-]+)*\.local', re.ASCII)     # mDNS : pc-atelier.local
-MESSAGE_DISTANT_REFUSE = 'Les fournisseurs d\'IA en ligne ne sont pas autorisés sur le PC serveur.'
-MESSAGE_REGLE_SUR_LE_SERVEUR = ('Demande refusée : seuls « chemin », « methode » et « corps » sont acceptés ; '
-                                'l\'adresse et la clé du fournisseur sont réglées sur le PC serveur.')
-LIBELLES_FOURNISSEURS_IA = {'ollama': 'Ollama', 'openai': 'API compatible OpenAI'}
+MESSAGE_DISTANT_REFUSE = traduisible('ia.en_ligne_refuse',
+                                     'Les fournisseurs d\'IA en ligne ne sont pas autorisés sur le PC serveur.')
+MESSAGE_REGLE_SUR_LE_SERVEUR = traduisible('ia.demande_refusee',
+                                           'Demande refusée : seuls « chemin », « methode » et « corps » sont '
+                                           'acceptés ; l\'adresse et la clé du fournisseur sont réglées sur le PC '
+                                           'serveur.')
+LIBELLES_FOURNISSEURS_IA = {'ollama': 'Ollama',
+                            'openai': traduisible('console.ia.openai', 'API compatible OpenAI')}   # console (resume_ia)
 
 
 def adresse_fournisseur(url):
@@ -2847,19 +3509,22 @@ def adresse_fournisseur(url):
     paramètres, ni fragment, ni espace ou caractère de contrôle. ErreurHttp(400) sinon (le message
     ne reprend jamais l'adresse)."""
     if not isinstance(url, str) or not url.strip():
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA manquante.')
+        raise ErreurHttp(400, traduisible('ia.adresse_manquante', 'Adresse du fournisseur d\'IA manquante.'))
     texte = url.strip()
     if any(caractere.isspace() or ord(caractere) < 0x20 or ord(caractere) == 0x7f for caractere in texte):
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (espace ou caractère de contrôle).')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide_espace',
+                                          'Adresse du fournisseur d\'IA invalide (espace ou caractère de contrôle).'))
     try:
         morceaux = urlsplit(texte)
         morceaux.port                               # lève ValueError si le port est illisible
     except ValueError:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide', 'Adresse du fournisseur d\'IA invalide.'))
     if morceaux.scheme not in ('http', 'https') or not morceaux.hostname:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (http:// ou https:// attendu).')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide_protocole',
+                                          'Adresse du fournisseur d\'IA invalide (http:// ou https:// attendu).'))
     if '@' in morceaux.netloc or morceaux.query or morceaux.fragment or '?' in texte or '#' in texte:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (ni identifiant, ni paramètres).')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide_parametres',
+                                          'Adresse du fournisseur d\'IA invalide (ni identifiant, ni paramètres).'))
     return texte.rstrip('/')
 
 
@@ -2884,17 +3549,19 @@ def lire_demande_ia(corps, reglages):
     try:
         demande = json.loads(corps.decode('utf-8'))
     except (UnicodeDecodeError, ValueError):
-        raise ErreurHttp(400, 'Demande illisible (JSON attendu).')
+        raise ErreurHttp(400, traduisible('ia.demande_illisible', 'Demande illisible (JSON attendu).'))
     if not isinstance(demande, dict):
-        raise ErreurHttp(400, 'Demande illisible (objet JSON attendu).')
+        raise ErreurHttp(400, traduisible('ia.demande_pas_un_objet', 'Demande illisible (objet JSON attendu).'))
     if any(nom not in CLES_DEMANDE_IA for nom in demande):
         raise ErreurHttp(400, MESSAGE_REGLE_SUR_LE_SERVEUR)
     chemin = demande.get('chemin')
     if chemin not in CHEMINS_IA:
-        raise ErreurHttp(400, 'Chemin non autorisé pour l\'IA (' + ', '.join(CHEMINS_IA) + ').')
+        raise ErreurHttp(400, traduisible('ia.chemin_non_autorise', 'Chemin non autorisé pour l\'IA ({chemins}).',
+                                          chemins=', '.join(CHEMINS_IA)))
     methode = demande.get('methode', 'POST')
     if methode not in ('GET', 'POST'):
-        raise ErreurHttp(400, 'Méthode non autorisée pour l\'IA (GET ou POST).')
+        raise ErreurHttp(400, traduisible('ia.methode_non_autorisee',
+                                          'Méthode non autorisée pour l\'IA (GET ou POST).'))
     entetes = {'Accept': 'application/json'}
     octets = None
     if methode == 'POST':
@@ -2903,7 +3570,9 @@ def lire_demande_ia(corps, reglages):
     cle = cle_ia(reglages)
     if cle:
         if not cle_ia_lisible(cle):
-            raise ErreurHttp(400, 'Clé du fournisseur d\'IA illisible (réglage du PC serveur : caractères ASCII seulement).')
+            raise ErreurHttp(400, traduisible('ia.cle_illisible',
+                                              'Clé du fournisseur d\'IA illisible (réglage du PC serveur : '
+                                              'caractères ASCII seulement).'))
         entetes['Authorization'] = 'Bearer ' + cle
     return {'cible': adresse_fournisseur(reglages.get('ia_url')) + '/' + chemin, 'methode': methode, 'octets': octets,
             'entetes': entetes, 'delai': DELAI_IA_S}
@@ -2980,11 +3649,17 @@ def resume_ia(config):
     reglages = config.reglages
     url = adresse_ia_configuree(reglages)
     cle = cle_ia(reglages)
-    etat_cle = ('clé illisible (caractères ASCII attendus)' if cle and not cle_ia_lisible(cle)
-                else 'clé réglée' if cle else 'sans clé')
-    return '%s, %s ; %s ; fournisseurs en ligne %s.' % (
-        LIBELLES_FOURNISSEURS_IA.get(reglages.get('ia_fournisseur'), 'Ollama'),
-        url or 'adresse invalide (« ia_url »)', etat_cle, 'autorisés' if distant_autorise(config) else 'refusés')
+    if cle and not cle_ia_lisible(cle):
+        etat_cle = traduisible('console.ia.cle_illisible', 'clé illisible (caractères ASCII attendus)')
+    else:
+        etat_cle = traduisible('console.ia.cle_reglee', 'clé réglée') if cle else traduisible('console.ia.sans_cle',
+                                                                                              'sans clé')
+    en_ligne = (traduisible('console.ia.autorises', 'autorisés') if distant_autorise(config)
+                else traduisible('console.ia.refuses', 'refusés'))
+    return traduisible('console.ia.resume', '{fournisseur}, {adresse} ; {cle} ; fournisseurs en ligne {en_ligne}.',
+                       fournisseur=LIBELLES_FOURNISSEURS_IA.get(reglages.get('ia_fournisseur'), 'Ollama'),
+                       adresse=url or traduisible('console.ia.adresse_invalide', 'adresse invalide (« ia_url »)'),
+                       cle=etat_cle, en_ligne=en_ligne)
 
 
 def lire_reponse_fournisseur(reponse):
@@ -3019,18 +3694,20 @@ def appeler_fournisseur(demande):
             reponse.close()
     except urllib.error.URLError as erreur:
         if isinstance(erreur.reason, (socket.timeout, TimeoutError)):
-            raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
-        raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+            raise ErreurHttp(504, traduisible('ia.delai_depasse',
+                                              'Le fournisseur d\'IA n\'a pas répondu dans le délai.'))
+        raise ErreurHttp(502, traduisible('ia.injoignable', 'Fournisseur d\'IA injoignable.'))
     except (socket.timeout, TimeoutError):
-        raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
+        raise ErreurHttp(504, traduisible('ia.delai_depasse', 'Le fournisseur d\'IA n\'a pas répondu dans le délai.'))
     except OSError:
-        raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+        raise ErreurHttp(502, traduisible('ia.injoignable', 'Fournisseur d\'IA injoignable.'))
     except http.client.InvalidURL:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide', 'Adresse du fournisseur d\'IA invalide.'))
     except http.client.HTTPException:                   # IncompleteRead, BadStatusLine, LineTooLong…
-        raise ErreurHttp(502, 'Réponse du fournisseur d\'IA incomplète ou illisible.')
+        raise ErreurHttp(502, traduisible('ia.reponse_illisible',
+                                          'Réponse du fournisseur d\'IA incomplète ou illisible.'))
     except ValueError:          # adresse que le réseau ne sait pas écrire (nom vide « a..b », non ASCII…)
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide', 'Adresse du fournisseur d\'IA invalide.'))
     return statut, octets
 
 
@@ -3050,8 +3727,9 @@ def creer_contexte_ssl(certificat, cle):
     try:
         contexte.load_cert_chain(certfile=certificat, keyfile=cle)
     except (OSError, ssl.SSLError, ValueError) as erreur:
-        raise SystemExit('Certificat ou clé illisible (%s) : vérifiez les deux fichiers PEM '
-                         'passés à --certificat et --cle.' % erreur)
+        raise SystemExit(texte_de_la_console(traduisible('certificat.illisible',
+                                                         'Certificat ou clé illisible ({erreur}) : vérifiez les deux '
+                                                         'fichiers PEM passés à --certificat et --cle.', erreur=erreur)))
     return contexte
 
 
@@ -3158,8 +3836,9 @@ def hote_autorise(valeur_host, config):
 
 ADRESSES_DE_CE_PC = ('127.0.0.1', '::1')
 PROTOCOLES_MANDATES = ('http', 'https')
-MESSAGE_HOTE_ORIGINE_REFUSE = ('Nom d\'hôte d\'origine refusé (X-Forwarded-Host) : ajoutez-le aux noms acceptés '
-                               '(« noms » de la configuration).')
+MESSAGE_HOTE_ORIGINE_REFUSE = traduisible('requete.hote_origine_refuse',
+                                          'Nom d\'hôte d\'origine refusé (X-Forwarded-Host) : ajoutez-le aux noms '
+                                          'acceptés (« noms » de la configuration).')
 
 
 def origine_mandatee(gestionnaire):
@@ -3206,20 +3885,20 @@ def analyser_chemin(chemin_brut):
     """
     chemin_brut = chemin_brut.split('?', 1)[0].split('#', 1)[0]
     if not chemin_brut.startswith('/'):
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     if '\\' in chemin_brut or '%5c' in chemin_brut.lower():
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     chemin_decode = unquote(chemin_brut)
     # « % » restant = double encodage (« %252e ») : refusé par prudence.
     if '\\' in chemin_decode or '%' in chemin_decode:
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     for chemin in (chemin_brut, chemin_decode):
         morceaux = chemin[1:].split('/')
         if morceaux == ['']:
             continue                     # « / » tout seul : la page d'accueil
         for morceau in morceaux:
             if morceau == '' or segment_dangereux(morceau):
-                raise ErreurHttp(400, 'Chemin refusé.')
+                raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     return chemin_decode[1:].split('/')
 
 
@@ -3242,15 +3921,15 @@ def chemin_sous(dossier, *morceaux):
     base = os.path.realpath(dossier)
     chemin = os.path.realpath(os.path.join(base, *morceaux))
     if chemins_egaux(chemin, base) or not est_sous_dossier(chemin, base):
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     # Après résolution (raccourcis Windows « GIT~1 », liens…), aucun morceau caché.
     try:
         relatif = os.path.relpath(chemin, base)
     except ValueError:                  # « nul », « con »… : périphériques Windows, autre « lecteur »
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     for morceau in relatif.split(os.sep):
         if morceau.startswith('.'):
-            raise ErreurHttp(400, 'Chemin refusé.')
+            raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     return chemin
 
 
@@ -3276,11 +3955,13 @@ def chemin_public(morceaux, servir_tests):
 
 def fichier_de_la_porte(minuscules):
     """Vrai si la porte sert ce chemin (minuscules) tel quel à un client du réseau (§22.6) : ses fichiers sous acces/
-    (sauf porte.html, toujours rendue avec son port https), le favicon et les polices de la charte. Rien d'autre : ni
-    index.html, ni js/, ni css/ hors polices — aucune donnée, aucun écran de l'application."""
-    if minuscules == ['favicon.svg']:
+    (sauf porte.html, toujours rendue avec son port https), le favicon, les polices de la charte, les textes de
+    l'interface (js/i18n.js et js/i18n/, chantier multilingue : textes publics, aucune donnée) et le chargeur de la
+    langue (js/i18n-chargeur.js, T297 : texte public, il ne lit que le stockage du téléphone). Rien d'autre : ni
+    index.html, ni le reste de js/, ni css/ hors polices — aucune donnée, aucun écran de l'application."""
+    if minuscules in (['favicon.svg'], ['js', 'i18n.js'], ['js', 'i18n-chargeur.js']):
         return True
-    if commence_par(minuscules, ('css', 'polices')):
+    if commence_par(minuscules, ('css', 'polices')) or commence_par(minuscules, DOSSIER_TEXTES):
         return True
     return commence_par(minuscules, DOSSIER_PORTE) and minuscules != ['acces', 'porte.html']
 
@@ -3297,7 +3978,7 @@ def morceaux_resolus(chemin, dossier):
 def chemin_table(config, table):
     """Chemin du CSV d'une table ; 404 si la table n'est pas une des 24 du schéma."""
     if table not in TABLES:
-        raise ErreurHttp(404, 'Table inconnue : %s.' % table)
+        raise ErreurHttp(404, traduisible('csv.table_inconnue', 'Table inconnue : {table}.', table=table))
     return chemin_sous(config.dossier_donnees, table + '.csv')
 
 
@@ -3311,12 +3992,14 @@ def verifier_nom_document(nom, demande=False):
     d'horodatage facultatif que le serveur impose depuis le lot 7 (MOTIF_NOM_DOCUMENT_ENREGISTRE)."""
     motif = MOTIF_NOM_DOCUMENT if demande else MOTIF_NOM_DOCUMENT_ENREGISTRE
     if not motif.fullmatch(nom) or '..' in nom:
-        raise ErreurHttp(400, 'Nom de document refusé : lettres, chiffres, « . », « _ » ou « - ».')
+        raise ErreurHttp(400, traduisible('documents.nom_refuse',
+                                          'Nom de document refusé : lettres, chiffres, « . », « _ » ou « - ».'))
     if extension(nom) not in TYPES_DOCUMENTS:
-        raise ErreurHttp(415, 'Type de document refusé. Types acceptés : %s.'
-                         % ', '.join(sorted(TYPES_DOCUMENTS)))
+        raise ErreurHttp(415, traduisible('documents.type_refuse',
+                                          'Type de document refusé. Types acceptés : {types}.',
+                                          types=', '.join(sorted(TYPES_DOCUMENTS))))
     if nom.split('.', 1)[0].lower() in NOMS_RESERVES_WINDOWS:
-        raise ErreurHttp(400, 'Nom de document réservé par Windows.')
+        raise ErreurHttp(400, traduisible('documents.nom_reserve_windows', 'Nom de document réservé par Windows.'))
 
 
 def verifier_signature_image(nom, octets):
@@ -3330,12 +4013,13 @@ def verifier_signature_image(nom, octets):
     if type_image == 'webp':
         reconnue = reconnue and octets[8:12] == b'WEBP'
     if not reconnue:
-        raise ErreurHttp(400, "Le contenu n'est pas une image %s." % type_image)
+        raise ErreurHttp(400, traduisible('documents.pas_une_image',
+                                          'Le contenu n\'est pas une image {format}.', format=type_image))
 
 
 def verifier_nom_sauvegarde(nom):
     if not isinstance(nom, str) or not MOTIF_NOM_SAUVEGARDE.fullmatch(nom):
-        raise ErreurHttp(400, 'Nom de sauvegarde invalide.')
+        raise ErreurHttp(400, traduisible('sauvegardes.nom_invalide', 'Nom de sauvegarde invalide.'))
 
 
 def lire_objet_json(corps):
@@ -3347,9 +4031,9 @@ def lire_objet_json(corps):
     try:
         demande = json.loads(corps.decode('utf-8'))
     except (UnicodeDecodeError, ValueError, RecursionError):
-        raise ErreurHttp(400, 'Corps JSON invalide.')
+        raise ErreurHttp(400, traduisible('requete.json_invalide', 'Corps JSON invalide.'))
     if not isinstance(demande, dict):
-        raise ErreurHttp(400, 'Corps JSON invalide.')
+        raise ErreurHttp(400, traduisible('requete.json_invalide', 'Corps JSON invalide.'))
     return demande
 
 
@@ -3367,8 +4051,9 @@ def lire_motif_sauvegarde(corps):
     if motif is None:
         return None
     if not isinstance(motif, str) or motif not in MOTIFS_SAUVEGARDE:
-        raise ErreurHttp(400, 'Motif de sauvegarde refusé. Motifs acceptés : %s.'
-                         % ', '.join(MOTIFS_SAUVEGARDE))
+        raise ErreurHttp(400, traduisible('sauvegardes.motif_refuse',
+                                          'Motif de sauvegarde refusé. Motifs acceptés : {motifs}.',
+                                          motifs=', '.join(MOTIFS_SAUVEGARDE)))
     return motif
 
 
@@ -3405,7 +4090,7 @@ def remplacer_avec_essais(source, cible):
             return
         except PermissionError:
             if numero_essai == ESSAIS_SI_VERROUILLE:
-                raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
+                raise ErreurHttp(423, message_fichier_verrouille(cible))
             time.sleep(PAUSE_ENTRE_ESSAIS_S)
 
 
@@ -3449,6 +4134,322 @@ def est_utf8(octets):
 
 
 # ---------------------------------------------------------------------------
+# Formats des données (miroir de js/formats.js, T184)
+# ---------------------------------------------------------------------------
+
+# Registre des formats des fichiers de données, mêmes règles que js/formats.js (décisions D167 et D168 ;
+# ARCHITECTURE.md §5.6, §14.1, §20.2) : colonnes et tables de chaque format, format d'un fichier d'après son en-tête,
+# format d'une base (parametres.version_schema), étapes de passage pures et idempotentes, une ligne de journal par
+# étape. Le format est un entier, distinct de la version de l'application ; le format courant est VERSION_SCHEMA_CSV,
+# ses colonnes sont COLONNES_PAR_TABLE et ses tables TABLES. Rien ici ne lit ni n'écrit de fichier ; le passage au
+# format courant au démarrage du serveur (T185, migrer_donnees_au_demarrage) s'en sert, aucune route.
+# Une base a la forme {<table>: {'entete': [noms…], 'lignes': [{<colonne>: '<cellule>'}]}} : les cellules sont celles
+# du fichier, telles que lire_csv_tolerant les rend (apostrophe de protection comprise), pour être réécrites telles
+# quelles par ecrire_tableau_csv. C'est la seule différence avec la base en mémoire de js/formats.js (valeurs relues
+# sans l'apostrophe) : version_de_base retire l'apostrophe avant de lire le nombre (Donnees.csv.relireValeur), et
+# l'étape écrit version_schema comme Prévo l'écrit dans le fichier (« '3 », Donnees.csv.ecrireValeur). Les tests
+# tests/test_formats_serveur.py comparent ces fonctions à js/formats.js et à Donnees.csv, octet pour octet.
+
+PREMIER_FORMAT = 1
+CLE_VERSION_SCHEMA = 'version_schema'
+VERSION_SCHEMA_PAR_DEFAUT = 1           # version_schema absent ou illisible : fichiers du lot 1 (format 1)
+# Premier format des tables et des colonnes apparues après le format 1 (depuisVersion de js/schema.js), toujours en fin
+# de table pour les colonnes ; les autres existent depuis le format 1. RENVOI CROISÉ : cohérence avec js/schema.js et
+# avec COLONNES_DES_FORMATS_SUIVANTS vérifiée par tests/test_formats_serveur.py.
+PREMIER_FORMAT_DES_TABLES = {'wiki_pages': 3, 'wiki_journal': 3}
+PREMIER_FORMAT_DES_COLONNES = {
+    'equipements': {'valeur_remplacement': 2},
+    'demandes': {'symptome_code': 2, 'ot_origine_id': 2},
+    'ordres_travail': {'anomalie_constatee': 2, 'astuce': 3},
+}
+# Valeur par défaut des champs qui en ont une (« defaut » de js/schema.js ; les autres : ''), mise par une étape dans
+# chaque ligne d'une colonne qu'elle ajoute. Aucun de ces champs n'est un texte : la cellule écrite est la valeur même,
+# sans apostrophe. RENVOI CROISÉ : cohérence avec js/schema.js vérifiée par tests/test_formats_serveur.py.
+DEFAUTS_DES_CHAMPS = {
+    'equipements': {'criticite': 'B', 'statut': 'en service', 'actif': '1'},
+    'demandes': {'statut': 'Nouvelle'},
+    'ordres_travail': {'statut': 'Créé', 'arret_production': '0', 'remise_service': '0', 'anomalie_constatee': '0'},
+    'ot_operations': {'fait': '0'},
+    'gammes': {'declencheur': 'date', 'actif': '1'},
+    'articles': {'critique': '0', 'actif': '1'},
+    'techniciens': {'actif': '1'},
+    'controles_reglementaires': {'observations_levees': '0'},
+    'achats': {'statut': 'demandée'},
+    'wiki_pages': {'version': '0', 'statut': 'active'},
+    'wiki_journal': {'anterieure': '0', 'essais': '0'},
+}
+# Blancs de JavaScript (\s et trim : espaces Unicode, fins de ligne, BOM), pour lire les noms de colonne et les nombres
+# comme le navigateur ; codes en clair, jamais de caractère invisible dans ce fichier.
+BLANCS_JS = frozenset(chr(code) for code in (0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F,
+                                             0x205F, 0x3000, 0xFEFF) + tuple(range(0x2000, 0x200B)))
+CARACTERE_BOM = chr(0xFEFF)
+PREMIERE_MARQUE_D_ACCENT, DERNIERE_MARQUE_D_ACCENT = 0x0300, 0x036F     # MOTIF_ACCENTS de js/formats.js
+# Protection par apostrophe d'un champ texte (Donnees.csv, §3.2) : début de formule, ou valeur qu'Excel prendrait pour
+# un nombre, une date, une fraction, une heure ou un pourcentage (motifs recopiés de js/donnees.js).
+MOTIF_DEBUT_DANGEREUX_JS = re.compile(r'[=+\-@\t\r]')
+MOTIFS_NOMBRE_DATE_FRACTION_JS = tuple(re.compile(motif) for motif in (
+    r'[0-9]+([.,][0-9]+)?',
+    r'[0-9]+([.,][0-9]+)?[eE][+-]?[0-9]+',
+    r'[0-9]{1,4}[/.-][0-9]{1,2}([/.-][0-9]{1,4})?',
+    r'[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?',
+    r'[0-9]+([.,][0-9]+)?[' + ''.join(re.escape(blanc) for blanc in sorted(BLANCS_JS)) + ']?%',
+))
+MOTIF_NOMBRE_JS = re.compile(r'([+-]?)([0-9]*)(?:\.([0-9]*))?')      # Donnees.nombre, après retrait des blancs
+
+
+def sans_blancs_js_aux_bords(texte):
+    """texte.trim() de JavaScript : blancs JS (BLANCS_JS) retirés aux deux bords."""
+    debut, fin = 0, len(texte)
+    while debut < fin and texte[debut] in BLANCS_JS:
+        debut += 1
+    while fin > debut and texte[fin - 1] in BLANCS_JS:
+        fin -= 1
+    return texte[debut:fin]
+
+
+def cle_de_colonne(nom):
+    """Clé de comparaison d'un nom de colonne, celle de Formats.formatDuFichier (js/formats.js, cleDeColonne) : BOM et
+    blancs de bord retirés, accents retirés, minuscules, blancs et soulignés ignorés. None → ''."""
+    texte = '' if nom is None else str(nom)
+    if texte.startswith(CARACTERE_BOM):
+        texte = texte[1:]
+    texte = unicodedata.normalize('NFD', sans_blancs_js_aux_bords(texte))
+    texte = ''.join(caractere for caractere in texte
+                    if not PREMIERE_MARQUE_D_ACCENT <= ord(caractere) <= DERNIERE_MARQUE_D_ACCENT).lower()
+    return ''.join(caractere for caractere in texte if caractere not in BLANCS_JS and caractere != '_')
+
+
+def premier_format_de_table(table):
+    """Premier format où la table existe : 1 pour les tables du brief, 3 pour celles du wiki."""
+    return PREMIER_FORMAT_DES_TABLES.get(table, PREMIER_FORMAT)
+
+
+def colonnes_du_format(table, format=None):
+    """Noms des colonnes de la table dans ce format (None : le format courant), dans l'ordre du schéma ; [] si la table
+    n'existe pas encore dans ce format ou n'est pas dans le schéma (Formats.colonnes)."""
+    voulu = VERSION_SCHEMA_CSV if format is None else format
+    if not isinstance(table, str) or table not in COLONNES_PAR_TABLE or premier_format_de_table(table) > voulu:
+        return []
+    depuis = PREMIER_FORMAT_DES_COLONNES.get(table, {})
+    return [colonne for colonne in COLONNES_PAR_TABLE[table] if depuis.get(colonne, PREMIER_FORMAT) <= voulu]
+
+
+def tables_du_format(format=None):
+    """Noms des tables qui existent dans ce format (None : le format courant), dans l'ordre du schéma
+    (Formats.tables)."""
+    voulu = VERSION_SCHEMA_CSV if format is None else format
+    return [table for table in TABLES if premier_format_de_table(table) <= voulu]
+
+
+def format_du_fichier(table, entete):
+    """Format d'un fichier d'après son en-tête (liste de noms, ordre indifférent), comme Formats.formatDuFichier : le
+    plus grand format N, du premier format de la table au format courant, dont toutes les colonnes sont dans l'en-tête
+    (noms comparés par cle_de_colonne) ; 0 si même les colonnes du premier format manquent (fichier abîmé, en-tête vide
+    ou illisible) ; None pour une table inconnue du schéma. Ne lève jamais d'exception."""
+    if not isinstance(table, str) or table not in COLONNES_PAR_TABLE:
+        return None
+    try:
+        presentes = {cle_de_colonne(nom) for nom in (entete if isinstance(entete, (list, tuple)) else [])}
+        trouve = 0
+        for format in range(premier_format_de_table(table), VERSION_SCHEMA_CSV + 1):
+            if not all(cle_de_colonne(nom) in presentes for nom in colonnes_du_format(table, format)):
+                break                       # les colonnes d'un format contiennent celles des formats précédents
+            trouve = format
+        return trouve
+    except Exception:                       # nom de colonne qui refuse d'être converti en texte
+        return 0
+
+
+def ressemble_nombre_date_fraction_js(valeur):
+    """ressembleNombreDateFraction de js/donnees.js : après retrait de [ \\t\\r\\n] aux deux bords."""
+    sans_espaces_aux_bords = valeur.strip(' \t\r\n')
+    return any(motif.fullmatch(sans_espaces_aux_bords) for motif in MOTIFS_NOMBRE_DATE_FRACTION_JS)
+
+
+def a_proteger_texte(valeur):
+    """Donnees.csv.aProteger pour un champ texte non « protege » (parametres.valeur, colonne inconnue)."""
+    return valeur != '' and (MOTIF_DEBUT_DANGEREUX_JS.match(valeur) is not None or valeur.startswith("'")
+                             or ressemble_nombre_date_fraction_js(valeur))
+
+
+def relire_valeur_texte(cellule):
+    """Cellule d'un champ texte non « protege » → valeur en mémoire, apostrophe de protection retirée
+    (Donnees.csv.relireValeur). None → ''."""
+    texte = '' if cellule is None else str(cellule)
+    return texte[1:] if texte.startswith("'") and a_proteger_texte(texte[1:]) else texte
+
+
+def ecrire_valeur_texte(valeur):
+    """Valeur en mémoire d'un champ texte non « protege » → cellule écrite, apostrophe ajoutée si besoin
+    (Donnees.csv.ecrireValeur). None → ''."""
+    texte = '' if valeur is None else str(valeur)
+    return "'" + texte if a_proteger_texte(texte) else texte
+
+
+def nombre_js(valeur):
+    """Copie de Donnees.nombre (js/donnees.js) : valeur → nombre (int s'il est entier), ou None si vide ou illisible ;
+    virgule décimale et blancs (insécables compris) acceptés."""
+    if isinstance(valeur, bool):
+        valeur = 'true' if valeur else 'false'
+    elif isinstance(valeur, (int, float)):
+        return valeur if valeur == valeur and abs(valeur) != float('inf') else None
+    texte = sans_blancs_js_aux_bords('' if valeur is None else str(valeur))
+    if texte == '':
+        return None
+    compact = ''.join(caractere for caractere in texte if caractere not in BLANCS_JS).replace(',', '.', 1)
+    morceaux = MOTIF_NOMBRE_JS.fullmatch(compact)
+    if not morceaux or (morceaux.group(2) == '' and not morceaux.group(3)):
+        return None
+    signe = '-' if morceaux.group(1) == '-' else ''
+    partie_decimale = '.' + morceaux.group(3) if morceaux.group(3) else ''
+    converti = float(signe + (morceaux.group(2) or '0') + partie_decimale)
+    if abs(converti) == float('inf'):
+        return None
+    return int(converti) if converti.is_integer() else converti
+
+
+def colonne_de_champ(noms, champ):
+    """Premier nom de « noms » (en-tête, ou clés d'une ligne) qui désigne ce champ (cle_de_colonne) ; None sinon."""
+    if champ in noms:
+        return champ
+    cle = cle_de_colonne(champ)
+    return next((nom for nom in noms if cle_de_colonne(nom) == cle), None)
+
+
+def cle_de_parametre(ligne):
+    """Clé d'une ligne de parametres, lue comme Donnees.csv.analyser lit un identifiant (blancs de bord retirés)."""
+    colonne = colonne_de_champ(list(ligne), 'cle')
+    return sans_blancs_js_aux_bords('' if colonne is None or ligne[colonne] is None else str(ligne[colonne]))
+
+
+def version_de_base(lignes_parametres):
+    """Format d'une base d'après les lignes de parametres.csv ([{colonne: cellule}], cellules du fichier) : même règle
+    que Formats.versionDeBase, sur les valeurs relues sans l'apostrophe de protection (« '3 » → 3) : version_schema de
+    la première ligne qui porte cette clé, lu comme Donnees.nombre ; absent, vide ou illisible → 1."""
+    lignes = lignes_parametres if isinstance(lignes_parametres, (list, tuple)) else []
+    for ligne in lignes:
+        if isinstance(ligne, dict) and cle_de_parametre(ligne) == CLE_VERSION_SCHEMA:
+            colonne = colonne_de_champ(list(ligne), 'valeur')
+            lue = nombre_js(relire_valeur_texte(None if colonne is None else ligne[colonne]))
+            return VERSION_SCHEMA_PAR_DEFAUT if lue is None else lue
+    return VERSION_SCHEMA_PAR_DEFAUT
+
+
+def copier_table_de_base(table):
+    """Copie d'une table de la base : en-tête et lignes copiés (les autres clés de la table sont gardées)."""
+    source = table if isinstance(table, dict) else {}
+    copie = dict(source)
+    entete, lignes = source.get('entete'), source.get('lignes')
+    copie['entete'] = list(entete) if isinstance(entete, (list, tuple)) else []
+    copie['lignes'] = ([dict(ligne) if isinstance(ligne, dict) else {} for ligne in lignes]
+                       if isinstance(lignes, (list, tuple)) else [])
+    return copie
+
+
+def completer_colonnes(table, contenu, format):
+    """Ajoute en fin d'en-tête les colonnes du format absentes de la table (comparées par cle_de_colonne), avec la
+    valeur par défaut du champ (sinon '') dans chaque ligne qui n'a pas déjà cette colonne. Les colonnes inconnues
+    restent à leur place, avec leurs valeurs. Modifie la COPIE reçue."""
+    presentes = {cle_de_colonne(nom) for nom in contenu['entete']}
+    defauts = DEFAUTS_DES_CHAMPS.get(table, {})
+    for colonne in colonnes_du_format(table, format):
+        if cle_de_colonne(colonne) in presentes:
+            continue
+        contenu['entete'].append(colonne)
+        presentes.add(cle_de_colonne(colonne))
+        for ligne in contenu['lignes']:
+            if colonne not in ligne:
+                ligne[colonne] = defauts.get(colonne, '')
+
+
+def poser_version_de_base(parametres, format):
+    """parametres.version_schema = format, écrit comme Prévo l'écrit (« '3 ») : la première ligne qui porte la clé,
+    sinon une ligne ajoutée en fin (ses autres colonnes à ''). Modifie la COPIE reçue (colonnes cle et valeur
+    présentes : completer_colonnes est passé avant)."""
+    colonne_cle = colonne_de_champ(parametres['entete'], 'cle')
+    colonne_valeur = colonne_de_champ(parametres['entete'], 'valeur')
+    cellule = ecrire_valeur_texte(str(format))
+    for ligne in parametres['lignes']:
+        if cle_de_parametre(ligne) == CLE_VERSION_SCHEMA:
+            ligne[colonne_valeur] = cellule
+            return
+    nouvelle = {colonne: '' for colonne in parametres['entete']}
+    nouvelle[colonne_cle] = CLE_VERSION_SCHEMA
+    nouvelle[colonne_valeur] = cellule
+    parametres['lignes'].append(nouvelle)
+
+
+def passer_au_format(base, format):
+    """Passage d'une base au format « format » (étape additive, §14.1 et §20.2), comme passerAuFormat de
+    js/formats.js. Rend une NOUVELLE base où chaque table du format absente est créée vide (en-tête = ses colonnes),
+    chaque colonne du format absente d'une table est ajoutée en fin d'en-tête avec sa valeur par défaut, les colonnes
+    et tables inconnues sont gardées telles quelles, et parametres.version_schema vaut le format. La base reçue n'est
+    pas modifiée ; appliquée deux fois, l'étape donne le même résultat qu'une fois."""
+    source = base if isinstance(base, dict) else {}
+    nouvelle = {table: copier_table_de_base(contenu) for table, contenu in source.items()}
+    for table in tables_du_format(format):
+        if table not in nouvelle:
+            nouvelle[table] = {'entete': [], 'lignes': []}
+        completer_colonnes(table, nouvelle[table], format)
+    poser_version_de_base(nouvelle['parametres'], format)
+    return nouvelle
+
+
+class EtapeDeFormat:
+    """Une étape du registre : de N à N+1, sa description, et appliquer(base) → nouvelle base (pure, idempotente)."""
+
+    __slots__ = ('de', 'vers', 'description')
+
+    def __init__(self, de, vers, description):
+        self.de, self.vers, self.description = de, vers, description
+
+    def appliquer(self, base):
+        return passer_au_format(base, self.vers)
+
+
+# Le registre, dans l'ordre, mêmes étapes et mêmes descriptions que Formats.ETAPES. Un format futur ajoute son étape
+# ici ET dans js/formats.js (et VERSION_SCHEMA_CSV) : tests/test_formats_serveur.py compare les deux registres.
+ETAPES_FORMAT = (
+    EtapeDeFormat(1, 2, 'Format 2 (versions 1.0 et 1.1, §14.1) : colonnes equipements.valeur_remplacement, '
+                        'demandes.symptome_code, demandes.ot_origine_id et ordres_travail.anomalie_constatee '
+                        '(défaut 0), en fin de table.'),
+    EtapeDeFormat(2, 3, 'Format 3 (versions 1.2 et 2.0, §20.2) : colonne ordres_travail.astuce en fin de table, '
+                        'tables wiki_pages et wiki_journal (vides).'),
+)
+
+
+def ligne_de_journal_de_format(format):
+    """Ligne de journal d'une étape, texte exact de js/formats.js (relu par la suggestion S4 : ne pas le changer)."""
+    return 'passage au format %d du fichier' % format
+
+
+def migrer_tables(base, de, vers):
+    """Enchaîne les étapes de « de » à « vers », comme Formats.migrer → (base, journal, etapes) :
+    base au format « vers » (nouvel objet ; la base reçue n'est pas modifiée), une ligne de journal « passage au format
+    N du fichier » par étape appliquée, et les étapes appliquées ([{'de', 'vers', 'description'}]). « de » est le
+    format actuel (version_de_base) ; de >= vers (base déjà au format, ou plus récente) : base rendue telle quelle,
+    journal et étapes vides. « vers » : un format entier de 1 au format courant (ValueError sinon) ; « de » illisible :
+    TypeError."""
+    entier = not isinstance(vers, bool) and (isinstance(vers, int) or (isinstance(vers, float) and vers.is_integer()))
+    if not entier or not PREMIER_FORMAT <= vers <= VERSION_SCHEMA_CSV:
+        raise ValueError('migrer_tables : format cible inconnu (%s) ; formats connus : %d à %d.'
+                         % (vers, PREMIER_FORMAT, VERSION_SCHEMA_CSV))
+    if isinstance(de, bool) or not isinstance(de, (int, float)) or de != de:
+        raise TypeError('migrer_tables : format de départ illisible (%s).' % (de,))
+    vers = int(vers)
+    if de >= vers:
+        return base, [], []
+    courante, journal, etapes = base, [], []
+    for etape in ETAPES_FORMAT:
+        if etape.vers <= de or etape.vers > vers:
+            continue
+        courante = etape.appliquer(courante)
+        journal.append(ligne_de_journal_de_format(etape.vers))
+        etapes.append({'de': etape.de, 'vers': etape.vers, 'description': etape.description})
+    return courante, journal, etapes
+
+
+# ---------------------------------------------------------------------------
 # Sauvegardes
 # ---------------------------------------------------------------------------
 
@@ -3465,7 +4466,23 @@ HEURE_COPIE_EXTERNE = 2                 # la copie de la nuit part à la premiè
 ESSAIS_NOM_HORODATE = 25                # nom pris : la seconde suivante est attendue (5 s au plus)
 NOM_ETAT_COPIE_EXTERNE = 'copie-externe.json'
 PREFIXE_COPIE_EN_COURS = '.prevo-copie-en-cours-'
-MESSAGE_PLAFOND_MANUELLES = 'Une sauvegarde manuelle par minute au plus : réessayez dans %d s.'
+# T187 (D170, docs/FORMAT.md §8 et §9) : quotidiennes de plus de 30 jours supprimées à chaque nouvelle quotidienne
+# (« avant-… » jamais) ; manifeste.json dans chaque sauvegarde ; documents/ dans la seule « avant-import-zip » ;
+# sauvegarde « avant-mise-a-jour » au premier démarrage d'une autre version (donnees/derniere-version.json).
+QUOTIDIENNES_GARDEES_JOURS = 30
+# T206 : les 7 quotidiennes les plus récentes sans fichier abîmé ne sont jamais supprimées, quel que soit leur âge.
+QUOTIDIENNES_SAINES_GARDEES = 7
+MARQUE_ABIME = 'abime'                          # "abime": true sur l'entrée d'un CSV abîmé du manifeste (T206)
+NOM_FICHIERS_ABIMES = 'fichiers-abimes.json'
+MOTIF_QUOTIDIENNE = 'quotidienne'               # « motif » du manifeste d'une sauvegarde AAAA-MM-JJ
+MOTIF_MANUELLE = 'manuelle'                     # … et d'une sauvegarde AAAA-MM-JJ_HHMMSS
+MOTIF_AVANT_MISE_A_JOUR = 'avant-mise-a-jour'
+MOTIFS_AVEC_DOCUMENTS = ('avant-import-zip',)
+NOM_MANIFESTE = 'manifeste.json'
+MODE_DU_MANIFESTE = 'serveur'
+TAILLE_MORCEAU_EMPREINTE = 1024 * 1024
+NOM_DERNIERE_VERSION = 'derniere-version.json'
+VERSION_INCONNUE = 'inconnue'                   # « de » du manifeste quand derniere-version.json manque ou est illisible
 # Colonnes ajoutées par un format après le premier (depuisVersion de js/schema.js), toujours en fin de table : une
 # sauvegarde faite avant ce format ne les a pas, sans être abîmée (« Tester une sauvegarde »). RENVOI CROISÉ : cohérence
 # avec js/schema.js vérifiée par tests/test_sauvegardes_lot7.py.
@@ -3487,11 +4504,96 @@ def tables_presentes(dossier):
     return [table for table in TABLES if os.path.isfile(os.path.join(dossier, table + '.csv'))]
 
 
-def copier_tables_dans_sauvegarde(config, nom_sauvegarde):
+def motif_du_nom_de_sauvegarde(nom):
+    """« motif » du manifeste d'après le nom : « quotidienne » (AAAA-MM-JJ), « manuelle » (AAAA-MM-JJ_HHMMSS), sinon
+    la fin du nom (« avant-format-v3 », « avant-restauration », « avant-import-zip »…)."""
+    if MOTIF_NOM_QUOTIDIENNE.fullmatch(nom):
+        return MOTIF_QUOTIDIENNE
+    if MOTIF_NOM_MANUELLE.fullmatch(nom):
+        return MOTIF_MANUELLE
+    return nom[len('AAAA-MM-JJ_HHMMSS_'):]
+
+
+def format_des_tables_copiees(dossier):
+    """Format des données d'une sauvegarde : version_schema de son parametres.csv (version_de_base, même règle que
+    Formats.versionDeBase) ; 1 sans parametres.csv, comme etat_des_fichiers."""
+    octets = lire_octets(os.path.join(dossier, 'parametres.csv'))
+    if octets is None:
+        return VERSION_SCHEMA_PAR_DEFAUT
+    return version_de_base(lignes_en_dictionnaires(lire_fichier_de_donnees(octets)))
+
+
+def est_un_csv_de_table(relatif):
+    """Vrai pour « <table>.csv » à la racine d'une sauvegarde (table du schéma)."""
+    return relatif.endswith('.csv') and relatif[:-len('.csv')] in TABLES
+
+
+def fichiers_du_manifeste(dossier):
+    """[{"nom", "octets", "sha256"}] de chaque fichier du dossier (chemin relatif en « / », triés par nom), sans le
+    manifeste lui-même ; empreinte SHA-256 complète, lue par morceaux (documents volumineux). T206 : l'entrée d'un CSV
+    de table abîmé (raisons_fichier_abime, le critère de la garde) porte aussi "abime": true, absente sinon."""
+    fichiers = []
+    for racine, _, noms in os.walk(dossier):
+        for nom in noms:
+            chemin = os.path.join(racine, nom)
+            relatif = os.path.relpath(chemin, dossier).replace(os.sep, '/')
+            if relatif == NOM_MANIFESTE:
+                continue
+            hachage, taille = hashlib.sha256(), 0
+            with open(chemin, 'rb') as fichier:
+                for morceau in iter(lambda: fichier.read(TAILLE_MORCEAU_EMPREINTE), b''):
+                    hachage.update(morceau)
+                    taille += len(morceau)
+            decrit = {'nom': relatif, 'octets': taille, 'sha256': hachage.hexdigest()}
+            if est_un_csv_de_table(relatif) and raisons_fichier_abime(lire_octets(chemin)):
+                decrit[MARQUE_ABIME] = True
+            fichiers.append(decrit)
+    fichiers.sort(key=lambda decrit: decrit['nom'])
+    return fichiers
+
+
+def ecrire_manifeste(config, dossier, nom_sauvegarde, complement=None):
+    """manifeste.json d'une sauvegarde (FORMAT.md §9 ; mêmes champs, dans le même ordre, que Formats.manifeste de
+    js/formats.js) : {"application", "version_appli", "format", "date", "motif", "mode": "serveur", …complement,
+    "fichiers"}. Écrit en dernier, dans le dossier temporaire, avant son renommage."""
+    manifeste = {'application': NOM_APPLICATION, 'version_appli': VERSION_APPLICATION,
+                 'format': format_des_tables_copiees(dossier), 'date': maintenant_iso(config),
+                 'motif': motif_du_nom_de_sauvegarde(nom_sauvegarde), 'mode': MODE_DU_MANIFESTE}
+    manifeste.update(complement or {})
+    manifeste['fichiers'] = fichiers_du_manifeste(dossier)
+    with open(os.path.join(dossier, NOM_MANIFESTE), 'wb') as fichier:
+        fichier.write((json.dumps(manifeste, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+    return manifeste
+
+
+def copier_documents_dans_sauvegarde(config, dossier_sauvegarde):
+    """Copie les fichiers de donnees/documents/ (ni sous-dossier, ni fichier caché ou temporaire) dans documents/ de la
+    sauvegarde : sauvegarde « avant-import-zip » seulement (T187, D170). Rend le nombre de fichiers copiés."""
+    if not os.path.isdir(config.dossier_documents):
+        return 0
+    cible = os.path.join(dossier_sauvegarde, 'documents')
+    os.makedirs(cible, exist_ok=True)
+    copies = 0
+    for nom in sorted(os.listdir(config.dossier_documents)):
+        chemin = os.path.join(config.dossier_documents, nom)
+        if nom.startswith('.') or not os.path.isfile(chemin) or est_un_lien(chemin):
+            continue
+        try:
+            shutil.copy2(chemin, os.path.join(cible, nom))
+        except PermissionError:
+            raise ErreurHttp(423, message_fichier_verrouille(nom))
+        copies += 1
+    return copies
+
+
+def copier_tables_dans_sauvegarde(config, nom_sauvegarde, complement=None):
     """Copie tous les CSV présents dans sauvegardes/<nom>/ et renvoie la liste des tables.
 
     La copie se fait dans un dossier temporaire renommé à la fin : une sauvegarde
     interrompue (panne, disque plein) ne laisse jamais un dossier à moitié rempli.
+    T187 (D170) : acces/ (sans sessions.json ni cle.pem), documents/ pour le motif « avant-import-zip » seulement,
+    puis manifeste.json en dernier (complement : champs ajoutés au manifeste, ex. « de » et « vers »).
+    T206 : la sauvegarde faite, fichiers-abimes.json suit les marques « abime » de son manifeste.
     """
     tables = tables_presentes(config.dossier_donnees)
     dossier_final = os.path.join(config.dossier_sauvegardes, nom_sauvegarde)
@@ -3503,12 +4605,17 @@ def copier_tables_dans_sauvegarde(config, nom_sauvegarde):
                 shutil.copy2(os.path.join(config.dossier_donnees, nom_fichier),
                              os.path.join(dossier_temporaire, nom_fichier))
             except PermissionError:
-                raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
+                raise ErreurHttp(423, message_fichier_verrouille(nom_fichier))
         copier_acces_dans_sauvegarde(config, dossier_temporaire)      # lot 7 : comptes, appareils, journal
+        if motif_du_nom_de_sauvegarde(nom_sauvegarde) in MOTIFS_AVEC_DOCUMENTS:
+            copier_documents_dans_sauvegarde(config, dossier_temporaire)
+        manifeste = ecrire_manifeste(config, dossier_temporaire, nom_sauvegarde, complement)
         os.rename(dossier_temporaire, dossier_final)
     finally:
         if os.path.isdir(dossier_temporaire):
             shutil.rmtree(dossier_temporaire, ignore_errors=True)
+    noter_fichiers_abimes(config, [decrit['nom'][:-len('.csv')] for decrit in manifeste['fichiers']
+                                   if decrit.get(MARQUE_ABIME) and est_un_csv_de_table(decrit['nom'])])
     return tables
 
 
@@ -3521,18 +4628,171 @@ def sauvegarde_complete(dossier):
     return os.path.isdir(dossier) and not os.path.exists(os.path.join(dossier, MARQUE_SAUVEGARDE_EN_COURS))
 
 
-def faire_sauvegarde_quotidienne(config):
-    """Avant chaque écriture CSV : copie dans sauvegardes/AAAA-MM-JJ/ si la sauvegarde du jour manque (rien s'il n'y
-    a encore aucun CSV), puis, à la première écriture après 2 h du matin, la copie externe du jour, lancée dans son
-    propre fil (D133). Le jour est celui de l'horloge du serveur. À appeler en tenant VERROU_ECRITURE.
-    """
+def faire_sauvegarde_du_jour(config):
+    """Copie dans sauvegardes/AAAA-MM-JJ/ si la sauvegarde du jour manque (rien s'il n'y a encore aucun CSV) ; chaque
+    nouvelle quotidienne supprime celles de plus de 30 jours (T187), sauf les 7 plus récentes sans fichier abîmé
+    (T206, purger_sauvegardes_quotidiennes). Le jour est celui de l'horloge du serveur. Rend
+    le nom de la sauvegarde faite, ou None. À appeler en tenant VERROU_ECRITURE."""
     nom_du_jour = instant_local(config).strftime('%Y-%m-%d')
     dossier_du_jour = os.path.join(config.dossier_sauvegardes, nom_du_jour)
-    if not sauvegarde_complete(dossier_du_jour):
-        if os.path.isdir(dossier_du_jour):      # sauvegarde du jour laissée incomplète : on la refait
-            shutil.rmtree(dossier_du_jour, ignore_errors=True)
-        if tables_presentes(config.dossier_donnees):
-            copier_tables_dans_sauvegarde(config, nom_du_jour)
+    if sauvegarde_complete(dossier_du_jour):
+        return None
+    if os.path.isdir(dossier_du_jour):          # sauvegarde du jour laissée incomplète : on la refait
+        shutil.rmtree(dossier_du_jour, ignore_errors=True)
+    if not tables_presentes(config.dossier_donnees):
+        return None
+    copier_tables_dans_sauvegarde(config, nom_du_jour)
+    purger_sauvegardes_quotidiennes(config)
+    return nom_du_jour
+
+
+def marques_du_manifeste(dossier):
+    """Noms des fichiers que manifeste.json de la sauvegarde marque « abime » (T206) ; [] s'il n'en marque aucun, ou
+    s'il manque ou est illisible. Ne modifie rien."""
+    try:
+        with open(os.path.join(dossier, NOM_MANIFESTE), 'rb') as fichier:
+            fichiers = json.loads(fichier.read().decode('utf-8-sig'))['fichiers']
+        return [decrit['nom'] for decrit in fichiers if decrit.get(MARQUE_ABIME) is True]
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError, KeyError, TypeError, AttributeError):
+        return []
+
+
+def tables_abimees_de_la_sauvegarde(dossier):
+    """Tables dont le CSV de la sauvegarde est abîmé (raisons_fichier_abime), lues sans rien y écrire."""
+    return [table for table in TABLES if raisons_fichier_abime(lire_octets(os.path.join(dossier, table + '.csv')))]
+
+
+def quotidienne_saine(dossier, analyser):
+    """Vrai pour une quotidienne sans fichier abîmé (T206). Au moins une marque « abime » au manifeste : abîmée, sans
+    analyse ; incomplète (MARQUE_SAUVEGARDE_EN_COURS) : pas saine. Sans marque (manifeste sain d'après T206, manifeste
+    plus ancien, ou pas de manifeste : rien ne les distingue), ses CSV sont analysés si « analyser » (la rotation se
+    demande si elle compte parmi les 7 saines : candidate à la suppression), même critère que la garde, résultat
+    jamais écrit dans la sauvegarde ; sinon elle compte comme saine."""
+    if not sauvegarde_complete(dossier) or marques_du_manifeste(dossier):
+        return False
+    if not analyser:
+        return True
+    try:
+        return not tables_abimees_de_la_sauvegarde(dossier)
+    except OSError:                                     # illisible : pas une bonne sauvegarde
+        return False
+
+
+def purger_sauvegardes_quotidiennes(config):
+    """Supprime les sauvegardes quotidiennes de plus de 30 jours (D170) : dossiers dont le nom est exactement une vraie
+    date AAAA-MM-JJ, plus vieux de 31 jours ou davantage que le jour de l'horloge du serveur. Jamais un autre nom
+    (manuelles, « …_avant-… »), un fichier, un lien ni une jonction. T206 : jamais non plus l'une des 7 quotidiennes
+    les plus récentes sans fichier abîmé (QUOTIDIENNES_SAINES_GARDEES, quotidienne_saine), quel que soit son âge.
+    En partant de la plus récente : rien n'est examiné s'il n'y en a aucune de plus de 30 jours, ni une fois les 7
+    saines retenues ; une quotidienne sans marque n'est analysée que si elle a plus de 30 jours (contrat T206, le même
+    que le mode dossier). Rend les noms supprimés."""
+    aujourd_hui = instant_local(config).date()
+    try:
+        noms = sorted(os.listdir(config.dossier_sauvegardes), reverse=True)        # la plus récente d'abord
+    except OSError:
+        return []
+    ages = {}
+    for nom in noms:
+        chemin = os.path.join(config.dossier_sauvegardes, nom)
+        if est_une_date(nom) and os.path.isdir(chemin) and not est_un_lien(chemin):
+            ages[nom] = (aujourd_hui - datetime.datetime.strptime(nom, '%Y-%m-%d').date()).days
+    if all(age <= QUOTIDIENNES_GARDEES_JOURS for age in ages.values()):
+        return []                                       # rien à décider : rien n'est examiné
+    supprimees, saines = [], 0
+    for nom, age in ages.items():
+        chemin = os.path.join(config.dossier_sauvegardes, nom)
+        ancienne = age > QUOTIDIENNES_GARDEES_JOURS
+        if saines < QUOTIDIENNES_SAINES_GARDEES and quotidienne_saine(chemin, analyser=ancienne):
+            saines += 1                                 # parmi les 7 plus récentes saines : gardée
+        elif ancienne:
+            shutil.rmtree(chemin, ignore_errors=True)
+            supprimees.append(nom)
+    return supprimees
+
+
+# T206 (contrat, point 4) : donnees/fichiers-abimes.json, {"depuis": {"<table>": "AAAA-MM-JJTHH:MM:SS"}} (heure
+# locale, comme les manifestes), date à laquelle Prévo a vu la table abîmée la première fois (raisons_fichier_abime).
+# Tenu à jour chaque fois que le serveur connaît l'état de toutes les tables : au démarrage (après le passage au
+# format), à chaque sauvegarde (marques de son manifeste), après une restauration. Table abîmée : date gardée si elle
+# y est, sinon « maintenant » ; table redevenue saine : retirée ; plus rien d'abîmé : fichier supprimé. Jamais dans
+# une sauvegarde (copier_tables_dans_sauvegarde ne copie que les CSV et acces/), jamais remplacé par une restauration ;
+# rien en lecture seule (données plus récentes). Rendu par GET /api/info, « format » → « abimes_depuis ».
+MOTIF_DATE_DEPUIS = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}', re.ASCII)
+
+
+def chemin_fichiers_abimes(config):
+    return os.path.join(config.dossier_donnees, NOM_FICHIERS_ABIMES)
+
+
+def lire_fichiers_abimes(config):
+    """{table: "AAAA-MM-JJTHH:MM:SS"} de fichiers-abimes.json (tables du schéma, dates bien formées), dans l'ordre du
+    schéma ; {} si le fichier manque ou est illisible."""
+    try:
+        with open(chemin_fichiers_abimes(config), 'rb') as fichier:
+            depuis = json.loads(fichier.read().decode('utf-8-sig')).get('depuis')
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError, AttributeError):
+        return {}
+    if not isinstance(depuis, dict):
+        return {}
+    return {table: depuis[table] for table in TABLES
+            if isinstance(depuis.get(table), str) and MOTIF_DATE_DEPUIS.fullmatch(depuis[table])}
+
+
+def noter_fichiers_abimes(config, abimees=None):
+    """Met fichiers-abimes.json à jour (en tête de cette partie) ; abimees : les tables abîmées, ou None pour les
+    trouver en lisant donnees/. Jamais d'exception vers l'appelant : un échec est dit sur la console."""
+    etat = getattr(config, 'format_donnees', None)
+    if etat and etat.get('plus_recent'):
+        return
+    try:
+        if abimees is None:
+            abimees = [table for table in TABLES if raisons_fichier_abime(lire_octets(chemin_table(config, table)))]
+        ancien = lire_fichiers_abimes(config)
+        maintenant = maintenant_iso(config)
+        neuf = {table: ancien.get(table, maintenant) for table in TABLES if table in abimees}
+        chemin = chemin_fichiers_abimes(config)
+        if neuf == ancien and (neuf or not os.path.exists(chemin)):
+            return
+        if neuf:
+            ecrire_atomique(chemin, (json.dumps({'depuis': neuf}, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+        else:
+            os.remove(chemin)
+    except (ErreurHttp, OSError) as erreur:
+        afficher(traduisible('console.sauvegardes.non_mis_a_jour', 'Sauvegardes : {fichier} non mis à jour ({erreur}).',
+                             fichier=NOM_FICHIERS_ABIMES, erreur=getattr(erreur, 'message', None) or erreur))
+
+
+def noter_table_importee(config, table, abimee, depuis=None):
+    """T213 : après l'écriture d'une table par l'import ZIP (PUT avec X-Prevo-Remplacer-Abime: 1), fichiers-abimes.json
+    suit cette table : abîmée → « depuis » (date du manifeste du ZIP, X-Prevo-Abime-Depuis : gardée telle quelle,
+    jamais remise à zéro par l'import), sinon la date déjà notée, sinon maintenant ; saine → retirée. Jamais
+    d'exception vers l'appelant : un échec est dit sur la console (la table, elle, est écrite)."""
+    try:
+        ancien = lire_fichiers_abimes(config)
+        dates = dict(ancien)
+        if abimee:
+            dates[table] = depuis or ancien.get(table) or maintenant_iso(config)
+        else:
+            dates.pop(table, None)
+        neuf = {nom: dates[nom] for nom in TABLES if nom in dates}
+        chemin = chemin_fichiers_abimes(config)
+        if neuf == ancien and (neuf or not os.path.exists(chemin)):
+            return
+        if neuf:
+            ecrire_atomique(chemin, (json.dumps({'depuis': neuf}, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+        else:
+            os.remove(chemin)
+    except (ErreurHttp, OSError) as erreur:
+        afficher(traduisible('console.sauvegardes.non_mis_a_jour', 'Sauvegardes : {fichier} non mis à jour ({erreur}).',
+                             fichier=NOM_FICHIERS_ABIMES, erreur=getattr(erreur, 'message', None) or erreur))
+
+
+def faire_sauvegarde_quotidienne(config):
+    """Avant chaque écriture CSV : la sauvegarde du jour si elle manque (faire_sauvegarde_du_jour, rotation comprise),
+    puis, à la première écriture après 2 h du matin, la copie externe du jour, lancée dans son propre fil (D133). À
+    appeler en tenant VERROU_ECRITURE.
+    """
+    faire_sauvegarde_du_jour(config)
     lancer_copie_externe_si_due(config)
 
 
@@ -3544,7 +4804,9 @@ def nouveau_nom_horodate(config, suffixe=''):
         if not os.path.exists(os.path.join(config.dossier_sauvegardes, nom)):
             return nom
         time.sleep(0.2)
-    raise ErreurHttp(503, 'Sauvegarde impossible : aucun nom horodaté libre (l\'horloge du serveur n\'avance plus ?).')
+    raise ErreurHttp(503, traduisible('sauvegardes.aucun_nom_libre',
+                                      'Sauvegarde impossible : aucun nom horodaté libre (l\'horloge du serveur '
+                                      'n\'avance plus ?).'))
 
 
 def sauvegardes_manuelles(config):
@@ -3577,7 +4839,12 @@ def verifier_plafond_manuelles(config):
     ecoule = maintenant_s(config) - instant
     if 0 <= ecoule < DELAI_ENTRE_MANUELLES_S:
         secondes = max(1, int(-(-(DELAI_ENTRE_MANUELLES_S - ecoule) // 1)))
-        erreur = ErreurHttp(429, MESSAGE_PLAFOND_MANUELLES % secondes, attente_secondes=secondes)
+        erreur = ErreurHttp(429, traduisible('sauvegardes.plafond_manuelles',
+                                             {'one': 'Une sauvegarde manuelle par minute au plus : réessayez dans '
+                                                     '{n} s.',
+                                              'other': 'Une sauvegarde manuelle par minute au plus : réessayez dans '
+                                                       '{n} s.'}, n=secondes),
+                            attente_secondes=secondes)
         erreur.entetes = {'Retry-After': str(secondes)}
         raise erreur
 
@@ -3616,21 +4883,27 @@ def tables_a_restaurer(dossier_sauvegarde, tables_demandees):
     if tables_demandees is None:
         return disponibles
     if not isinstance(tables_demandees, list):
-        raise ErreurHttp(400, '« tables » doit être une liste de noms de tables.')
+        raise ErreurHttp(400, traduisible('restauration.tables_liste',
+                                          '« tables » doit être une liste de noms de tables.'))
     for table in tables_demandees:
         if not isinstance(table, str) or table not in TABLES:
-            raise ErreurHttp(400, 'Table inconnue : %s.' % table)
+            raise ErreurHttp(400, traduisible('csv.table_inconnue', 'Table inconnue : {table}.', table=table))
         if table not in disponibles:
-            raise ErreurHttp(400, 'La table %s est absente de cette sauvegarde.' % table)
+            raise ErreurHttp(400, traduisible('restauration.table_absente',
+                                              'La table {table} est absente de cette sauvegarde.', table=table))
     return [table for table in TABLES if table in tables_demandees]
 
 
 def restaurer(config, nom_sauvegarde, tables_demandees):
-    """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde."""
+    """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde. T200 : la restauration est le
+    remède à un fichier abîmé, elle le remplace (ecrire_fichier_de_donnees, remplacer_abime). T206 : puis
+    fichiers-abimes.json à jour (une table restaurée saine en est retirée)."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     verifier_nom_sauvegarde(nom_sauvegarde)
     dossier_sauvegarde = chemin_sous(config.dossier_sauvegardes, nom_sauvegarde)
     if not sauvegarde_complete(dossier_sauvegarde):
-        raise ErreurHttp(404, 'Sauvegarde introuvable ou incomplète : %s.' % nom_sauvegarde)
+        raise ErreurHttp(404, traduisible('sauvegardes.introuvable',
+                                          'Sauvegarde introuvable ou incomplète : {nom}.', nom=nom_sauvegarde))
     tables = tables_a_restaurer(dossier_sauvegarde, tables_demandees)
     copie_securite = nouveau_nom_horodate(config, '_avant-restauration')
     copier_tables_dans_sauvegarde(config, copie_securite)
@@ -3638,16 +4911,25 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
     for table in tables:
         octets = lire_octets(os.path.join(dossier_sauvegarde, table + '.csv'))
         try:
-            ecrire_atomique(chemin_table(config, table), octets)
+            ecrire_fichier_de_donnees(config, table, octets, remplacer_abime=True, sauvegarde_du_jour=False)
         except ErreurHttp as erreur:
             # Restauration partielle : on le dit clairement, avec la copie de sécurité à utiliser.
-            raise ErreurHttp(
-                erreur.statut,
-                '%s Restauration interrompue à la table %s ; tables déjà restaurées : %s. '
-                "L'état d'avant la restauration est dans la sauvegarde %s."
-                % (erreur.message, table, ', '.join(restaurees) or 'aucune', copie_securite),
-                restaurees=restaurees, copie_securite=copie_securite)
+            if restaurees:
+                message = traduisible('restauration.interrompue',
+                                      '{erreur} Restauration interrompue à la table {table} ; tables déjà '
+                                      'restaurées : {tables}. L\'état d\'avant la restauration est dans la '
+                                      'sauvegarde {copie}.',
+                                      erreur=erreur.message, table=table, tables=', '.join(restaurees),
+                                      copie=copie_securite)
+            else:
+                message = traduisible('restauration.interrompue_aucune',
+                                      '{erreur} Restauration interrompue à la table {table} ; tables déjà '
+                                      'restaurées : aucune. L\'état d\'avant la restauration est dans la '
+                                      'sauvegarde {copie}.',
+                                      erreur=erreur.message, table=table, copie=copie_securite)
+            raise ErreurHttp(erreur.statut, message, restaurees=restaurees, copie_securite=copie_securite)
         restaurees.append(table)
+    noter_fichiers_abimes(config)
     return {'restaurees': restaurees, 'copie_securite': copie_securite}
 
 
@@ -3688,21 +4970,24 @@ def tester_table_de_sauvegarde(table, chemin):
         with open(chemin, 'rb') as fichier:
             entete, lignes = lire_csv_tolerant(fichier.read())
     except OSError as erreur:
-        resultat['erreur'] = 'Fichier illisible (%s).' % (erreur.strerror or erreur.__class__.__name__)
+        resultat['erreur'] = traduisible('sauvegardes.test_illisible', 'Fichier illisible ({erreur}).',
+                                         erreur=erreur.strerror or erreur.__class__.__name__)
         return resultat
     except csv.Error as erreur:
-        resultat['erreur'] = 'Fichier illisible (%s).' % erreur
+        resultat['erreur'] = traduisible('sauvegardes.test_illisible', 'Fichier illisible ({erreur}).',
+                                         erreur=erreur)
         return resultat
     if not entete:
-        resultat['erreur'] = 'Fichier vide : la ligne d\'en-tête manque.'
+        resultat['erreur'] = traduisible('sauvegardes.test_vide', 'Fichier vide : la ligne d\'en-tête manque.')
         return resultat
     resultat['lignes'] = len(lignes)
     presentes = {cle_entete(nom) for nom in entete}
     manquantes = [colonne for colonne in COLONNES_PAR_TABLE[table] if cle_entete(colonne) not in presentes]
     if not set(manquantes) <= set(COLONNES_DES_FORMATS_SUIVANTS.get(table, ())):
-        resultat['erreur'] = ('Colonne%s du schéma absente%s de l\'en-tête : %s.'
-                              % ('s' if len(manquantes) > 1 else '', 's' if len(manquantes) > 1 else '',
-                                 ', '.join(manquantes)))
+        resultat['erreur'] = traduisible('sauvegardes.test_colonnes_absentes',
+                                         {'one': 'Colonne du schéma absente de l\'en-tête : {colonnes}.',
+                                          'other': 'Colonnes du schéma absentes de l\'en-tête : {colonnes}.'},
+                                         n=len(manquantes), colonnes=', '.join(manquantes))
     return resultat
 
 
@@ -3713,7 +4998,8 @@ def tester_sauvegarde(config, nom):
     verifier_nom_sauvegarde(nom)
     dossier = chemin_sous(config.dossier_sauvegardes, nom)
     if not sauvegarde_complete(dossier):
-        raise ErreurHttp(404, 'Sauvegarde introuvable ou incomplète : %s.' % nom)
+        raise ErreurHttp(404, traduisible('sauvegardes.introuvable',
+                                          'Sauvegarde introuvable ou incomplète : {nom}.', nom=nom))
     tables = [tester_table_de_sauvegarde(table, os.path.join(dossier, table + '.csv'))
               for table in tables_presentes(dossier)]
     return {'nom': nom, 'ok': bool(tables) and all(table['erreur'] is None for table in tables), 'tables': tables}
@@ -3757,10 +5043,12 @@ def lire_etat_copie_externe(config):
 
 def ecrire_etat_copie_externe(config, etat):
     try:
-        ecrire_atomique(chemin_etat_copie_externe(config),
-                        (json.dumps(etat, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+        ecrire_atomique(chemin_etat_copie_externe(config),          # D157 : l'erreur garde son code et ses valeurs
+                        (json.dumps(avec_codes(etat), ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
     except (OSError, ErreurHttp) as erreur:
-        afficher('Copie externe des sauvegardes : état non enregistré (%s).' % getattr(erreur, 'message', erreur))
+        afficher(traduisible('console.copie.etat_non_enregistre',
+                             'Copie externe des sauvegardes : état non enregistré ({erreur}).',
+                             erreur=getattr(erreur, 'message', erreur)))
 
 
 def noter_au_journal_serveur(config, texte):
@@ -3768,7 +5056,7 @@ def noter_au_journal_serveur(config, texte):
     pouvoir se relire après coup (D133)."""
     afficher(texte)
     if JOURNAL_SERVEUR is None:
-        JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log')).ecrire(texte)
+        JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log')).ecrire(texte_de_la_console(texte))
 
 
 def est_une_date(nom):
@@ -3804,11 +5092,14 @@ def copier_vers_l_exterieur(config, cible):
     dans la copie, ou None s'il n'y a encore aucune sauvegarde quotidienne. ErreurCopieExterne sinon."""
     nom_cible = nom_du_dossier(cible)
     if est_sous_dossier(os.path.realpath(cible), config.dossier_donnees):
-        raise ErreurCopieExterne('Le dossier de copie « %s » est dans le dossier des données de Prévo : choisissez une '
-                                 'clé USB, un NAS ou un dossier synchronisé.' % nom_cible)
+        raise ErreurCopieExterne(traduisible('copie.dossier_dans_donnees_nom',
+                                             'Le dossier de copie « {nom} » est dans le dossier des données de '
+                                             'Prévo : choisissez une clé USB, un NAS ou un dossier synchronisé.',
+                                             nom=nom_cible))
     if not os.path.isdir(cible):
-        raise ErreurCopieExterne('Dossier de copie « %s » introuvable (clé USB absente ou partage réseau '
-                                 'injoignable ?).' % nom_cible)
+        raise ErreurCopieExterne(traduisible('copie.dossier_introuvable',
+                                             'Dossier de copie « {nom} » introuvable (clé USB absente ou partage '
+                                             'réseau injoignable ?).', nom=nom_cible))
     nom = derniere_sauvegarde_quotidienne(config)
     if nom is None or os.path.isdir(os.path.join(cible, nom)):
         return nom
@@ -3819,11 +5110,16 @@ def copier_vers_l_exterieur(config, cible):
                         dirs_exist_ok=True)
         os.rename(temporaire, os.path.join(cible, nom))
     except shutil.Error as erreur:
-        raise ErreurCopieExterne('Copie vers « %s » incomplète : %d fichier(s) non copié(s) (disque plein ou fichier '
-                                 'verrouillé ?).' % (nom_cible, len(erreur.args[0]) if erreur.args else 0))
+        raise ErreurCopieExterne(traduisible('copie.incomplete',
+                                             {'one': 'Copie vers « {nom} » incomplète : {n} fichier(s) non '
+                                                     'copié(s) (disque plein ou fichier verrouillé ?).',
+                                              'other': 'Copie vers « {nom} » incomplète : {n} fichier(s) non '
+                                                       'copié(s) (disque plein ou fichier verrouillé ?).'},
+                                             nom=nom_cible, n=len(erreur.args[0]) if erreur.args else 0))
     except OSError as erreur:
-        raise ErreurCopieExterne('Copie vers « %s » impossible : %s.'
-                                 % (nom_cible, erreur.strerror or erreur.__class__.__name__))
+        raise ErreurCopieExterne(traduisible('copie.impossible',
+                                             'Copie vers « {nom} » impossible : {erreur}.',
+                                             nom=nom_cible, erreur=erreur.strerror or erreur.__class__.__name__))
     finally:
         if temporaire and os.path.isdir(temporaire):
             shutil.rmtree(temporaire, ignore_errors=True)
@@ -3850,22 +5146,30 @@ def faire_copie_externe(config):
         return None
     try:
         etat = lire_etat_copie_externe(config)
+        for suffixe in SUFFIXES_DU_CODE:                                # code de l'erreur précédente (D157)
+            etat.pop('erreur' + suffixe, None)
         try:
             nom = copier_vers_l_exterieur(config, cible)
         except ErreurCopieExterne as erreur:
-            etat['erreur'] = str(erreur)
-            noter_au_journal_serveur(config, 'Copie externe des sauvegardes impossible vers %r : %s' % (cible, erreur))
+            etat['erreur'] = traduisible_de(erreur)
+            noter_au_journal_serveur(config, traduisible('console.copie.impossible',
+                                                         'Copie externe des sauvegardes impossible vers {cible} : '
+                                                         '{erreur}', cible=repr(cible), erreur=erreur))
         else:
             etat['erreur'] = None
             if nom is not None:
                 etat['derniere_reussie'] = instant_local(config).strftime('%Y-%m-%d')
                 etat['sauvegarde_copiee'] = nom
-                afficher('Copie externe des sauvegardes : sauvegarde du %s à jour dans %r.' % (nom, cible))
+                afficher(traduisible('console.copie.a_jour',
+                                     'Copie externe des sauvegardes : sauvegarde du {nom} à jour dans {cible}.',
+                                     nom=nom, cible=repr(cible)))
                 try:
                     purger_copies_externes(cible)
                 except OSError as erreur:
-                    noter_au_journal_serveur(config, 'Copie externe des sauvegardes : ancienne copie non supprimée '
-                                                     'dans %r (%s).' % (cible, erreur.strerror or erreur))
+                    noter_au_journal_serveur(config, traduisible(
+                        'console.copie.ancienne_non_supprimee',
+                        'Copie externe des sauvegardes : ancienne copie non supprimée dans {cible} ({erreur}).',
+                        cible=repr(cible), erreur=erreur.strerror or erreur))
         ecrire_etat_copie_externe(config, etat)
         return etat
     finally:
@@ -3908,7 +5212,8 @@ def etat_copie_externe_public(config):
         return None
     etat = lire_etat_copie_externe(config)
     derniere = etat.get('derniere_reussie') if est_une_date(etat.get('derniere_reussie')) else None
-    erreur = etat.get('erreur') if isinstance(etat.get('erreur'), str) else None
+    erreur = traduisible_relu(etat.get('erreur'), etat.get('erreur_code'), etat.get('erreur_valeurs')) \
+        if isinstance(etat.get('erreur'), str) else None
     jours = None
     if derniere is not None:
         copiee = etat.get('sauvegarde_copiee') if isinstance(etat.get('sauvegarde_copiee'), str) else ''
@@ -3918,6 +5223,542 @@ def etat_copie_externe_public(config):
             depuis = datetime.datetime.strptime(derniere, '%Y-%m-%d').date()
             jours = max(0, (instant_local(config).date() - depuis).days)
     return {'derniere_reussie': derniere, 'jours_sans_copie': jours, 'erreur': erreur}
+
+
+# ---------------------------------------------------------------------------
+# Passage au format courant au démarrage du serveur, lecture seule (T185 ; décisions D168 et D169)
+# ---------------------------------------------------------------------------
+
+# En mode serveur, c'est le serveur qui passe les fichiers de données au format courant (D168), une fois, à son
+# démarrage : avant d'ouvrir ses écouteurs (main), donc avant toute connexion, que la configuration existe ou non
+# (assistant d'installation). Mêmes règles que Donnees.etatDuFormat et Donnees.migrerAuFormatCourant (js/donnees.js,
+# §4.11), appliquées aux fichiers :
+#   1. point de départ = le plus petit format entre version_schema (version_de_base) et celui de chaque fichier
+#      présent et lisible (format_du_fichier) ; fichiers vides, fichiers laissés (ci-dessous) et tables absentes
+#      ignorés ; base vide (aucun CSV) ou déjà au format courant : rien ;
+#   2. la sauvegarde « AAAA-MM-JJ_HHMMSS_avant-format-vN » (N = format courant, motif de MOTIFS_SAUVEGARDE) d'abord ;
+#      impossible : rien n'est écrit, nouvel essai au prochain démarrage ;
+#   3. chaque table présente que les étapes (migrer_tables) complètent est réécrite d'un coup (ecrire_atomique) :
+#      ses colonnes dans leur ordre, ses cellules telles quelles, les colonnes du format en fin d'en-tête avec la
+#      valeur par défaut du champ ; une table absente n'est pas créée ; une table à l'en-tête illisible (format 0), ou
+#      d'un format plus ancien qu'une réécriture ferait perdre en partie (structure abîmée, valeurs au-delà de
+#      l'en-tête, noms de colonnes en double), n'est jamais réécrite : laissée telle quelle et signalée ;
+#   4. puis version_schema (parametres.csv, créé s'il manque) ; 5. puis une ligne de journal par étape (journal.csv),
+#      mêmes textes que le navigateur. Un fichier tenu par un autre programme (Excel, 423) arrête le passage : ce qui
+#      est écrit l'est en entier, version_schema n'avance pas, le démarrage suivant reprend (étapes idempotentes).
+# Données d'un format plus récent (version_schema > format courant, D169) : rien n'est écrit, et jusqu'au prochain
+# démarrage toute écriture de données est refusée (409, code « format_plus_recent ») ; les lectures et la sauvegarde
+# manuelle restent permises. L'état est gardé dans config.format_donnees et rendu par GET /api/info (« format »).
+
+MIGRATIONS_DU_FORMAT = ('faite', 'rien', 'impossible', 'incomplete')
+CODE_FORMAT_PLUS_RECENT = 'format_plus_recent'
+# Routes qui écrivent dans les données, refusées en lecture seule (traiter_api). Les étapes de l'assistant qui écrivent
+# une table (« compte » en Solo, « terminer » en Solo ou avec la démo) le vérifient elles-mêmes, avant toute écriture.
+ROUTES_ECRITURE_DES_DONNEES = (('PUT', 'csv/<table>'), ('POST', 'csv/<table>/ajout'), ('PUT', 'documents/<nom>'),
+                               ('POST', 'restauration'))
+POSTE_DU_SERVEUR = 'Serveur Prévo'          # colonne « poste » des lignes de journal écrites par le serveur
+CARACTERES_ID_JOURNAL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'     # CARACTERES_ALEATOIRES de js/donnees.js
+OCTETS_HORS_CP1252 = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))      # sans caractère en cp1252 (WHATWG : même code)
+RAISONS_DE_LAISSER = {          # console du démarrage (signaler_fichiers_laisses)
+    'entete': traduisible('console.format.entete_illisible', 'en-tête illisible : des colonnes du format 1 y manquent'),
+    'illisible': traduisible('console.format.fichier_illisible', 'fichier illisible'),
+}
+# Pertes d'une réécriture (lire_fichier_de_donnees) que le navigateur compte aussi (entree.abime) : celles de la garde
+# « fichier abîmé » (raisons_fichier_abime, T200).
+PERTE_STRUCTURE = traduisible('abime.perte_structure',
+                              'structure du fichier abîmée (guillemet non fermé, ou texte collé à un guillemet)')
+PERTE_AU_DELA_DE_L_ENTETE = traduisible('abime.perte_au_dela_entete', 'valeurs au-delà de l\'en-tête')
+
+
+def texte_du_format(format):
+    """Format pour un message : « 4 », ou « 4.5 » s'il n'est pas entier."""
+    return str(int(format)) if float(format).is_integer() else str(format)
+
+
+def verifier_ecriture_permise(config):
+    """Lecture seule (D169) : 409 {"erreur", "code": "format_plus_recent", "format"} quand le serveur a trouvé à son
+    démarrage des données d'un format plus récent que le sien ; rien sinon (ni avant le démarrage, ni hors de main)."""
+    etat = getattr(config, 'format_donnees', None)
+    if etat and etat.get('plus_recent'):
+        raise ErreurHttp(409, traduisible('format.plus_recent',
+                                          'Lecture seule : ces données viennent d\'une version plus récente de Prévo '
+                                          '(format {format} des fichiers ; ce serveur lit jusqu\'au format '
+                                          '{courant}). Rien n\'est enregistré : mettez Prévo à jour sur le PC '
+                                          'serveur, puis relancez-le.',
+                                          format=texte_du_format(etat['base']), courant=VERSION_SCHEMA_CSV),
+                         code=CODE_FORMAT_PLUS_RECENT, format=etat['base'])
+
+
+def decoder_windows_1252(octets):
+    """Octets → texte, comme TextDecoder('windows-1252') du navigateur : les cinq octets sans caractère en cp1252
+    donnent le caractère de même code (rien n'est perdu à la réécriture en UTF-8)."""
+    try:
+        return octets.decode('cp1252')
+    except UnicodeDecodeError:
+        return ''.join(chr(octet) if octet in OCTETS_HORS_CP1252 else bytes((octet,)).decode('cp1252')
+                       for octet in octets)
+
+
+def lire_fichier_de_donnees(octets):
+    """Lecture d'un CSV de données pour le passage au format courant, comme Donnees.csv.analyser (§3.3) : BOM retiré,
+    UTF-8 sinon Windows-1252, « ; » (« , » si la première ligne non vide n'a aucun « ; » et a une virgule), lignes
+    entièrement blanches ignorées, cellules telles quelles (apostrophe de protection comprise). Rend {"vide",
+    "entete", "lignes", "pertes", "utf8", "separateur", "octets"} : vide si le fichier n'a aucun enregistrement (0
+    octet, ou seulement des blancs) ; entete : les noms de la ligne d'en-tête tels qu'écrits ; lignes : listes de
+    cellules ; pertes : ce qu'une réécriture ferait perdre (structure abîmée — guillemet non fermé, texte collé à un
+    guillemet fermant, comme les erreurs de PapaParse —, valeurs au-delà de l'en-tête, noms de colonnes en double),
+    [] sinon."""
+    lu = {'vide': True, 'entete': [], 'lignes': [], 'pertes': [], 'utf8': True, 'separateur': ';', 'octets': octets}
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    try:
+        texte = octets.decode('utf-8')
+    except UnicodeDecodeError:
+        texte, lu['utf8'] = decoder_windows_1252(octets), False
+    if sans_blancs_js_aux_bords(texte) == '':
+        return lu
+    trouvee = MOTIF_PREMIERE_LIGNE_NON_VIDE.search(texte)
+    premiere = trouvee.group(0) if trouvee else ''
+    lu['separateur'] = ',' if ';' not in premiere and ',' in premiere else ';'
+
+    def decouper(strict):
+        lecteur = csv.reader(io.StringIO(texte, newline=''), delimiter=lu['separateur'], strict=strict)
+        return [ligne for ligne in lecteur if any(sans_blancs_js_aux_bords(cellule) for cellule in ligne)]
+
+    try:
+        enregistrements = decouper(True)
+    except csv.Error:
+        lu['pertes'].append(PERTE_STRUCTURE)
+        try:
+            enregistrements = decouper(False)
+        except csv.Error:
+            enregistrements = []
+    lu['vide'] = not enregistrements and not lu['pertes']
+    if not enregistrements:
+        return lu
+    entete = enregistrements[0]
+    lu['entete'], lu['lignes'] = entete, enregistrements[1:]
+    if any(sans_blancs_js_aux_bords(cellule) for ligne in lu['lignes'] for cellule in ligne[len(entete):]):
+        lu['pertes'].append(PERTE_AU_DELA_DE_L_ENTETE)
+    cles = [cle_de_colonne(nom) for nom in entete]
+    doubles = sorted({nom for nom, cle in zip(entete, cles) if cle and cles.count(cle) > 1})
+    if doubles:
+        lu['pertes'].append('colonnes en double (%s)' % ', '.join(doubles))
+    return lu
+
+
+def raison_de_laisser(lu):
+    """Pourquoi le passage au format courant ne réécrit jamais ce fichier (raisonDeLaisser de js/donnees.js), ou
+    None : « entete » (en-tête illisible, format 0) ; « contenu » (format plus ancien que le courant et une réécriture
+    ferait perdre une partie du fichier : lu['pertes'])."""
+    if lu['format'] == 0:
+        return 'entete'
+    return 'contenu' if lu['pertes'] and lu['format'] < VERSION_SCHEMA_CSV else None
+
+
+def lignes_en_dictionnaires(lu):
+    """Lignes d'un fichier lu en {colonne: cellule} (première colonne d'un nom en double), pour version_de_base."""
+    lignes = []
+    for cellules in lu['lignes']:
+        ligne = {}
+        for position, nom in enumerate(lu['entete']):
+            ligne.setdefault(nom, cellules[position] if position < len(cellules) else '')
+        lignes.append(ligne)
+    return lignes
+
+
+def etat_des_fichiers(config):
+    """État du format des fichiers de données, sans rien écrire (Donnees.etatDuFormat) : {"base", "depart",
+    "plus_recent", "lus", "laissees", "vides"} ; lus : {table: lecture (lire_fichier_de_donnees, plus « format »)} des
+    tables du schéma présentes, dans l'ordre du schéma ; laissees : [(table, raison)] des fichiers que le passage ne
+    réécrit jamais (raison_de_laisser, ou « illisible » si la lecture échoue) ; vides : fichiers sans enregistrement,
+    lus comme des tables vides. Les fichiers laissés et vides ne comptent pas pour le point de départ."""
+    lus, laissees, vides = {}, [], []
+    for table in TABLES:
+        try:
+            octets = lire_octets(chemin_table(config, table))
+        except OSError:
+            laissees.append((table, 'illisible'))
+            continue
+        if octets is None:
+            continue
+        lu = lire_fichier_de_donnees(octets)
+        lu['format'] = 0 if lu['vide'] else format_du_fichier(table, lu['entete'])
+        lus[table] = lu
+    parametres = lus.get('parametres')
+    base = (version_de_base(lignes_en_dictionnaires(parametres)) if parametres is not None
+            else VERSION_SCHEMA_PAR_DEFAUT)
+    depart = base
+    for table, lu in lus.items():
+        if lu['vide']:
+            vides.append(table)
+            continue
+        raison = raison_de_laisser(lu)
+        if raison:
+            laissees.append((table, raison))
+            continue
+        depart = min(depart, lu['format'])
+    ordre = {table: position for position, table in enumerate(TABLES)}
+    laissees.sort(key=lambda laissee: ordre[laissee[0]])
+    return {'base': base, 'depart': depart, 'plus_recent': base > VERSION_SCHEMA_CSV, 'lus': lus, 'laissees': laissees,
+            'vides': vides}
+
+
+def etapes_du_passage(depart, entetes):
+    """Étapes du passage depuis « depart » sur les en-têtes donnés ({table: en-tête}, ordre du schéma), comme
+    etapesDuPassage de js/donnees.js : [{"vers", "passage", "tables"}], où passage est la ligne de journal de l'étape
+    et tables les tables données que l'étape complète."""
+    base = {table: {'entete': list(entete), 'lignes': []} for table, entete in entetes.items()}
+    etapes = []
+    for etape in ETAPES_FORMAT:
+        if etape.vers <= depart or etape.vers > VERSION_SCHEMA_CSV:
+            continue
+        suivante, journal, _ = migrer_tables(base, etape.de, etape.vers)
+        etapes.append({'vers': etape.vers, 'passage': journal[0],
+                       'tables': [table for table in entetes
+                                  if len(suivante[table]['entete']) != len(base[table]['entete'])]})
+        base = suivante
+    return etapes
+
+
+def cellules_alignees(cellules, largeur):
+    """Les cellules d'une ligne sur « largeur » colonnes : complétées par des cellules vides, ou coupées (seules des
+    cellules blanches dépassent l'en-tête d'un fichier réécrit : lire_fichier_de_donnees)."""
+    return (list(cellules) + [''] * largeur)[:largeur]
+
+
+def table_au_format_courant(table, lu):
+    """(en-tête, lignes) d'une table lisible passée de son format au format courant (ecrireAuFormatCourant) : les
+    colonnes que les étapes ajoutent (migrer_tables) en fin d'en-tête, avec la valeur par défaut du champ dans chaque
+    ligne ; les colonnes et les cellules du fichier telles quelles, dans leur ordre."""
+    entete = list(lu['entete'])
+    sonde = migrer_tables({table: {'entete': list(entete), 'lignes': [{}]}}, lu['format'], VERSION_SCHEMA_CSV)[0][table]
+    ajoutees = sonde['entete'][len(entete):]
+    defauts = [sonde['lignes'][0].get(colonne, '') for colonne in ajoutees]
+    return entete + ajoutees, [cellules_alignees(cellules, len(entete)) + defauts for cellules in lu['lignes']]
+
+
+def parametres_au_format_courant(lu):
+    """(en-tête, lignes) de parametres.csv avec version_schema au format courant, écrit comme Prévo l'écrit (« '3 »,
+    poser_version_de_base) : dans la première ligne qui porte la clé, sinon dans une ligne ajoutée en fin ; fichier
+    absent ou vide : l'en-tête du format courant. Les autres lignes et colonnes telles quelles."""
+    if lu is None or lu['vide']:
+        entete, lignes = colonnes_du_format('parametres'), []
+    else:
+        entete = list(lu['entete'])
+        lignes = [cellules_alignees(cellules, len(entete)) for cellules in lu['lignes']]
+    position_cle = entete.index(colonne_de_champ(entete, 'cle'))
+    position_valeur = entete.index(colonne_de_champ(entete, 'valeur'))
+    cellule = ecrire_valeur_texte(str(VERSION_SCHEMA_CSV))
+    for ligne in lignes:
+        if sans_blancs_js_aux_bords(ligne[position_cle]) == CLE_VERSION_SCHEMA:
+            ligne[position_valeur] = cellule
+            break
+    else:
+        nouvelle = [''] * len(entete)
+        nouvelle[position_cle], nouvelle[position_valeur] = CLE_VERSION_SCHEMA, cellule
+        lignes.append(nouvelle)
+    return entete, lignes
+
+
+def lignes_de_journal_du_format(config, actions):
+    """Lignes de journal ({colonne: cellule}) des actions du passage, comme entreeJournal : identifiant
+    « J-AAAAMMJJHHMMSS-XXXX » (distincts dans le lot), date et heure du serveur, poste « Serveur Prévo », table
+    parametres, ligne version_schema."""
+    instant = instant_local(config)
+    pris, lignes = set(), []
+    for action in actions:
+        identifiant = None
+        while identifiant is None or identifiant in pris:
+            identifiant = 'J-%s-%s' % (instant.strftime('%Y%m%d%H%M%S'),
+                                       ''.join(secrets.choice(CARACTERES_ID_JOURNAL) for _ in range(4)))
+        pris.add(identifiant)
+        lignes.append({'id': identifiant, 'date_heure': instant.strftime('%Y-%m-%d %H:%M'),
+                       'poste': ecrire_valeur_texte(POSTE_DU_SERVEUR), 'profil': '', 'table': 'parametres',
+                       'id_ligne': CLE_VERSION_SCHEMA, 'action': ecrire_valeur_texte(action)})
+    return lignes
+
+
+def ecrire_journal_du_format(config, lu, lignes):
+    """Ajoute les lignes à journal.csv ; rend vrai si c'est fait. Fichier absent ou vide : créé avec l'en-tête du
+    format courant. En UTF-8 et en « ; » : lignes ajoutées en fin (le reste du fichier à l'octet près), dans l'ordre de
+    ses colonnes (celles du fichier inconnues du schéma laissées vides) ; en Windows-1252 ou en « , » : le fichier
+    réécrit en entier, cellules telles quelles. Fichier laissé (format 0) ou qu'une réécriture abîmerait : rien
+    (faux). ErreurHttp 423 ou OSError si l'écriture échoue, 409 « fichier_abime » si la garde la refuse (T200,
+    ecrire_fichier_de_donnees : l'ajout en fin de fichier passe par elle comme un ajout)."""
+    colonnes = colonnes_du_format('journal')
+    if lu is None or lu['vide']:
+        neuf = ecrire_tableau_csv(colonnes, [[ligne[colonne] for colonne in colonnes] for ligne in lignes])
+        ecrire_fichier_de_donnees(config, 'journal', neuf, sauvegarde_du_jour=False)
+        return True
+    if lu['pertes'] or lu['format'] == 0:
+        return False
+    entete = lu['entete']
+    champs = {cle_de_colonne(colonne): colonne for colonne in colonnes}
+    nouvelles = [[ligne.get(champs.get(cle_de_colonne(nom)), '') for nom in entete] for ligne in lignes]
+    if lu['utf8'] and lu['separateur'] == ';':
+        ajout = ''.join(';'.join(cellule_csv(cellule) for cellule in ligne) + '\r\n' for ligne in nouvelles)
+        octets = lu['octets']
+        ecrire_fichier_de_donnees(config, 'journal', octets + (b'' if octets.endswith(b'\n') else FIN_DE_LIGNE)
+                                  + ajout.encode('utf-8'), ajout=True, sauvegarde_du_jour=False)
+    else:
+        anciennes = [cellules_alignees(cellules, len(entete)) for cellules in lu['lignes']]
+        ecrire_fichier_de_donnees(config, 'journal', ecrire_tableau_csv(entete, anciennes + nouvelles),
+                                  sauvegarde_du_jour=False)
+    return True
+
+
+def noms_de_fichiers(tables):
+    """« a.csv, b.csv » pour un message de la console."""
+    return ', '.join(table + '.csv' for table in tables)
+
+
+def signaler_fichiers_laisses(etat):
+    """Console : fichiers laissés tels quels (jamais réécrits) et fichiers vides, à chaque démarrage."""
+    lus = etat['lus']
+    for table, raison in etat['laissees']:
+        detail = (traduisible('console.format.fichier_abime', 'fichier abîmé : {pertes}', pertes=lus[table]['pertes'])
+                  if raison == 'contenu' else RAISONS_DE_LAISSER[raison])
+        afficher(traduisible('console.format.laisse_tel_quel',
+                             'Format des données : {fichier} laissé tel quel, jamais réécrit ({detail}). Corrigez le '
+                             'fichier, ou restaurez une sauvegarde.', fichier=table + '.csv', detail=detail))
+    if etat['vides']:
+        afficher(traduisible('console.format.tables_vides',
+                             'Format des données : sans aucune ligne, lu comme une table vide : {fichiers}.',
+                             fichiers=noms_de_fichiers(etat['vides'])))
+
+
+def migrer_donnees_au_demarrage(config):
+    """Passage des fichiers de données au format courant au démarrage du serveur (T185, D168 ; règles en tête de cette
+    partie), et garde des données plus récentes (D169). Appelée par main avant l'ouverture des écouteurs ; idempotente
+    (un second démarrage n'écrit rien et ne refait pas de sauvegarde). Rend l'état public et le garde dans
+    config.format_donnees (GET /api/info, « format ») : {"base", "courant", "plus_recent", "migration": "faite" | "rien"
+    | "impossible" | "incomplete", "tables_abimees", "tables_vides", "table_bloquee"} ; base : version_schema après ce
+    démarrage ; table_bloquee : la table qui a arrêté un passage incomplet. Aucune donnée des fichiers."""
+    etat = etat_des_fichiers(config)
+    public = {'base': etat['base'], 'courant': VERSION_SCHEMA_CSV, 'plus_recent': etat['plus_recent'],
+              'migration': 'rien', 'tables_abimees': [table for table, _ in etat['laissees']],
+              'tables_vides': list(etat['vides']), 'table_bloquee': None}
+    config.format_donnees = public
+    if not etat['lus'] and not etat['laissees']:
+        return public                                   # base vide : aucun CSV
+    signaler_fichiers_laisses(etat)
+    if etat['plus_recent']:
+        afficher(traduisible('console.format.plus_recent',
+                             'Format des données : format {base}, plus récent que celui de cette version de Prévo '
+                             '({courant}) : données en LECTURE SEULE, rien n\'est enregistré. Mettez Prévo à jour sur '
+                             'ce PC, puis relancez-le.', base=texte_du_format(etat['base']), courant=VERSION_SCHEMA_CSV))
+        return public
+    if etat['depart'] >= VERSION_SCHEMA_CSV:
+        return public
+    suivi = {'sauvegarde': None, 'ecrites': []}
+    try:
+        passer_les_fichiers_au_format_courant(config, etat, public, suivi)
+    except Exception:                       # bogue : tracé ; le serveur démarre quand même, rien de plus n'est écrit
+        traceback.print_exc()
+        if public['migration'] != 'faite':
+            public['migration'] = 'incomplete' if suivi['sauvegarde'] else 'impossible'
+        suite = (traduisible('console.format.sauvegarde_juste_avant', 'sauvegarde {nom} faite juste avant',
+                             nom=suivi['sauvegarde']) if suivi['sauvegarde']
+                 else traduisible('console.format.rien_ecrit', 'rien n\'a été écrit'))
+        afficher(traduisible('console.format.erreur_interne',
+                             'Format des données : passage au format {courant} arrêté par une erreur interne ({suite}) '
+                             '; nouvel essai au prochain démarrage.', courant=VERSION_SCHEMA_CSV, suite=suite))
+    return public
+
+
+def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
+    """Étapes 2 à 5 du passage (en tête de cette partie) ; suivi : {"sauvegarde", "ecrites"} tenu à jour."""
+    courant = VERSION_SCHEMA_CSV
+    lus = etat['lus']
+    version_a_ecrire = etat['base'] < courant
+    parametres = lus.get('parametres')
+    laissees = {table for table, _ in etat['laissees']}
+    if version_a_ecrire and ('parametres' in laissees or (parametres is not None and parametres['pertes'])):
+        # version_schema ne s'écrirait pas sans perte (en-tête illisible, fichier abîmé ou illisible) : rien n'est fait
+        # (sinon une sauvegarde à chaque démarrage, et jamais de version_schema).
+        if 'parametres' not in public['tables_abimees']:
+            public['tables_abimees'].append('parametres')
+        public['migration'] = 'impossible'
+        afficher(traduisible('console.format.parametres_sans_perte',
+                             'Format des données : passage au format {courant} impossible : parametres.csv ne se '
+                             'réécrit pas sans perte ({detail}) ; rien n\'a été écrit. Corrigez parametres.csv, ou '
+                             'restaurez une sauvegarde, puis relancez Prévo.', courant=courant,
+                             detail=parametres['pertes'] if parametres and parametres['pertes']
+                             else RAISONS_DE_LAISSER[dict(etat['laissees'])['parametres']]))
+        return
+
+    # 2. La sauvegarde d'abord : sans elle, on ne touche à rien.
+    motif = 'avant-format-v%d' % courant
+    try:
+        with VERROU_ECRITURE:
+            nom = nouveau_nom_horodate(config, '_' + motif)
+            verifier_nom_sauvegarde(nom)
+            copier_tables_dans_sauvegarde(config, nom)
+    except (ErreurHttp, OSError) as erreur:
+        public['migration'] = 'impossible'
+        afficher(traduisible('console.format.sauvegarde_impossible',
+                             'Format des données : passage au format {courant} impossible : la sauvegarde « {motif} » '
+                             'n\'a pas pu être faite ({erreur}). Rien n\'a été écrit ; nouvel essai au prochain '
+                             'démarrage.', courant=courant, motif=motif, erreur=getattr(erreur, 'message', None) or erreur))
+        return
+    suivi['sauvegarde'] = nom
+
+    # 3. Les tables que les étapes complètent, dans l'ordre du schéma (parametres à part).
+    lisibles =[table for table in lus if not lus[table]['vide'] and table not in laissees]
+    etapes = etapes_du_passage(etat['depart'], {table: lus[table]['entete'] for table in lisibles})
+    a_ecrire = [table for table in lisibles
+                if table != 'parametres' and any(table in etape['tables'] for etape in etapes)]
+    for table in a_ecrire + (['parametres'] if version_a_ecrire else []):
+        if table == 'parametres':
+            entete, lignes = parametres_au_format_courant(parametres)         # 4. version_schema
+        else:
+            entete, lignes = table_au_format_courant(table, lus[table])
+        try:
+            with VERROU_ECRITURE:
+                ecrire_fichier_de_donnees(config, table, ecrire_tableau_csv(entete, lignes), sauvegarde_du_jour=False)
+        except (ErreurHttp, OSError) as erreur:             # 423 (Excel), et 409 « fichier_abime » (T200) : arrêt propre
+            public['migration'], public['table_bloquee'] = 'incomplete', table
+            afficher(traduisible('console.format.interrompu',
+                                 'Format des données : passage au format {courant} interrompu : {table}.csv ne peut pas '
+                                 'être écrit ({erreur}). Fermez Excel (ou le programme qui a ouvert ce fichier) et '
+                                 'relancez Prévo : le passage reprendra là (sauvegarde {nom} faite juste avant ; déjà '
+                                 'complétés : {completes}).', courant=courant, table=table,
+                                 erreur=getattr(erreur, 'message', None) or erreur, nom=nom,
+                                 completes=noms_de_fichiers(suivi['ecrites'])
+                                 or traduisible('console.format.aucun', 'aucun')))
+            return
+        if table != 'parametres':
+            suivi['ecrites'].append(table)
+    if version_a_ecrire:
+        public['base'] = courant
+    public['migration'] = 'faite'
+
+    # 5. Le journal : une ligne par étape, mêmes textes que migrerAuFormatCourant.
+    suite = 'sauvegarde %s faite juste avant' % nom
+    actions = []
+    for etape in etapes:
+        if version_a_ecrire and etape['vers'] > etat['base']:
+            actions.append(etape['passage'] + ' ; ' + suite)
+            continue
+        completees = [table for table in etape['tables'] if table in suivi['ecrites']]
+        if completees:
+            actions.append('fichiers complétés au format %d : %s ; %s' % (etape['vers'], ', '.join(completees), suite))
+    if version_a_ecrire:
+        afficher(traduisible('console.format.passage_fait',
+                             'Format des données : passage au format {courant} fait (sauvegarde {nom} faite juste '
+                             'avant) ; fichiers complétés : {completes}.', courant=courant, nom=nom,
+                             completes=noms_de_fichiers(suivi['ecrites']) or traduisible('console.format.aucun', 'aucun')))
+    else:
+        afficher(traduisible('console.format.fichiers_completes',
+                             'Format des données : fichiers complétés au format {courant} : {completes} (sauvegarde '
+                             '{nom} faite juste avant).', courant=courant, completes=noms_de_fichiers(suivi['ecrites']),
+                             nom=nom))
+    if not actions:
+        return
+    ecrit, detail = False, traduisible('console.format.journal_laisse', 'journal.csv laissé tel quel')
+    if 'journal' not in laissees:               # illisible : jamais remplacé par un journal neuf
+        try:
+            with VERROU_ECRITURE:
+                ecrit = ecrire_journal_du_format(config, lus.get('journal'),
+                                                 lignes_de_journal_du_format(config, actions))
+        except (ErreurHttp, OSError) as erreur:
+            detail = getattr(erreur, 'message', None) or erreur
+    if not ecrit:
+        afficher(traduisible('console.format.journal_non_ecrit',
+                             'Format des données : lignes du journal du passage non écrites ({detail}).', detail=detail))
+
+
+# ---------------------------------------------------------------------------
+# Sauvegardes du démarrage (T187 ; décision D170 ; docs/FORMAT.md §8)
+# ---------------------------------------------------------------------------
+
+# Au démarrage du serveur, dans main, avant d'ouvrir les écouteurs (donc avant toute connexion), dans cet ordre :
+#   1. « avant-mise-a-jour » : base non vide (au moins un CSV du schéma) et donnees/derniere-version.json absent,
+#      illisible ou portant une autre version que VERSION_APPLICATION → sauvegarde
+#      « AAAA-MM-JJ_HHMMSS_avant-mise-a-jour » (manifeste : « de » = version notée ou « inconnue », « vers » = version
+#      courante), puis, après sa réussite seulement, derniere-version.json écrit d'un coup ({"version", "depuis"}) ;
+#      échec : une ligne sur la console et rien d'autre (nouvel essai au démarrage suivant) ; base vide : rien ;
+#   2. le passage au format courant (migrer_donnees_au_demarrage, T185), avec sa sauvegarde « avant-format-vN » ;
+#   3. la sauvegarde quotidienne si celle du jour manque (faire_sauvegarde_du_jour, rotation à 30 jours comprise) ;
+#   4. T206 : fichiers-abimes.json à jour (noter_fichiers_abimes ; fait par la sauvegarde de l'étape 3 si elle a lieu).
+# Aucune de ces étapes n'écrit dans les tables : elles se font aussi en lecture seule (données plus récentes, D169 ;
+# fichiers-abimes.json excepté, laissé tel quel en lecture seule).
+
+
+def chemin_derniere_version(config):
+    return os.path.join(config.dossier_donnees, NOM_DERNIERE_VERSION)
+
+
+def lire_derniere_version(config):
+    """Version de Prévo notée dans donnees/derniere-version.json (texte non vide), ou None : fichier absent, illisible,
+    ou sans « version »."""
+    try:
+        with open(chemin_derniere_version(config), 'rb') as fichier:
+            contenu = json.loads(fichier.read().decode('utf-8-sig'))
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        return None
+    version = contenu.get('version') if isinstance(contenu, dict) else None
+    return version.strip() if isinstance(version, str) and version.strip() else None
+
+
+def sauvegarder_avant_mise_a_jour(config):
+    """Étape 1 ci-dessus. Rend le nom de la sauvegarde faite, ou None (rien à faire, ou échec dit sur la console)."""
+    if not tables_presentes(config.dossier_donnees):
+        return None                                     # base vide : rien à garder
+    notee = lire_derniere_version(config)
+    if notee == VERSION_APPLICATION:
+        return None
+    de = notee                                          # None (JSON null) si inconnue, comme le mode dossier
+    try:
+        with VERROU_ECRITURE:
+            nom = nouveau_nom_horodate(config, '_' + MOTIF_AVANT_MISE_A_JOUR)
+            verifier_nom_sauvegarde(nom)
+            copier_tables_dans_sauvegarde(config, nom, {'de': de, 'vers': VERSION_APPLICATION})
+    except (ErreurHttp, OSError) as erreur:
+        afficher(traduisible('console.sauvegardes.avant_mise_a_jour_impossible',
+                             'Sauvegardes : sauvegarde « {motif} » impossible ({erreur}) ; nouvel essai au prochain '
+                             'démarrage.', motif=MOTIF_AVANT_MISE_A_JOUR,
+                             erreur=getattr(erreur, 'message', None) or erreur))
+        return None
+    afficher(traduisible('console.sauvegardes.avant_mise_a_jour_faite',
+                         'Sauvegardes : version de Prévo précédente : {precedente}, version actuelle : {actuelle} ; '
+                         'sauvegarde {nom} faite avant la mise à jour.',
+                         precedente=de or traduisible('console.sauvegardes.version_inconnue', 'inconnue'),
+                         actuelle=VERSION_APPLICATION, nom=nom))
+    contenu = {'version': VERSION_APPLICATION, 'depuis': maintenant_iso(config)}
+    try:
+        ecrire_atomique(chemin_derniere_version(config),
+                        (json.dumps(contenu, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+    except (ErreurHttp, OSError) as erreur:
+        afficher(traduisible('console.sauvegardes.version_non_ecrite',
+                             'Sauvegardes : {fichier} non écrit ({erreur}) : une autre sauvegarde « {motif} » sera '
+                             'faite au prochain démarrage.', fichier=NOM_DERNIERE_VERSION,
+                             erreur=getattr(erreur, 'message', None) or erreur, motif=MOTIF_AVANT_MISE_A_JOUR))
+    return nom
+
+
+def sauvegarder_le_jour_au_demarrage(config):
+    """Étape 3 ci-dessus : la sauvegarde quotidienne si celle du jour manque (rotation comprise). Échec dit sur la
+    console (la première écriture du jour la retente). Rend son nom, ou None."""
+    try:
+        with VERROU_ECRITURE:
+            return faire_sauvegarde_du_jour(config)
+    except (ErreurHttp, OSError) as erreur:
+        afficher(traduisible('console.sauvegardes.jour_impossible',
+                             'Sauvegardes : sauvegarde du jour impossible au démarrage ({erreur}) ; elle sera refaite '
+                             'avant la première modification.', erreur=getattr(erreur, 'message', None) or erreur))
+        return None
+
+
+def preparer_donnees_au_demarrage(config):
+    """Étapes 1 à 4 ci-dessus, dans cet ordre (main, avant les écouteurs). Rend l'état du format des données
+    (migrer_donnees_au_demarrage)."""
+    sauvegarder_avant_mise_a_jour(config)
+    etat = migrer_donnees_au_demarrage(config)
+    if sauvegarder_le_jour_au_demarrage(config) is None:
+        noter_fichiers_abimes(config)
+    return etat
 
 
 # ---------------------------------------------------------------------------
@@ -3943,70 +5784,229 @@ def versions_des_tables(config):
 MOTIF_CELLULE_DANGEREUSE = re.compile(r'^(?:[=+@\t\r]|-(?![0-9.,]))')
 
 
-def verifier_contenu_csv(table, octets, corps_d_ajout=False):
-    """UTF-8, en-tête qui commence par les colonnes du schéma, aucune cellule dangereuse sans apostrophe ; 400 sinon."""
+def verifier_contenu_csv(table, octets, corps_d_ajout=False, entete_libre=False):
+    """UTF-8, en-tête qui commence par les colonnes du schéma, aucune cellule dangereuse sans apostrophe ; 400 sinon.
+    entete_libre (T213) : l'en-tête n'est pas comparé au schéma (CSV abîmé importé tel quel, enregistrer_csv)."""
     if not est_utf8(octets):
-        raise ErreurHttp(400, 'Le fichier %s.csv doit être encodé en UTF-8.' % table)
+        raise ErreurHttp(400, traduisible('csv.encodage',
+                                          'Le fichier {table}.csv doit être encodé en UTF-8.', table=table))
     texte = octets.decode('utf-8')
     if texte.startswith('﻿'):
         texte = texte[1:]
     try:
         lignes = list(csv.reader(io.StringIO(texte, newline=''), delimiter=';'))
     except csv.Error as erreur:
-        raise ErreurHttp(400, 'Le fichier %s.csv est illisible (%s).' % (table, erreur))
+        raise ErreurHttp(400, traduisible('csv.illisible',
+                                          'Le fichier {table}.csv est illisible ({erreur}).',
+                                          table=table, erreur=erreur))
     if not lignes:
-        raise ErreurHttp(400, 'Le fichier %s.csv est vide : la ligne d\'en-tête manque.' % table)
+        raise ErreurHttp(400, traduisible('csv.vide',
+                                          'Le fichier {table}.csv est vide : la ligne d\'en-tête manque.',
+                                          table=table))
     attendues = list(COLONNES_PAR_TABLE.get(table, ()))
     recues = [nom.strip() for nom in lignes[0]]
-    if recues[:len(attendues)] != attendues:
-        raise ErreurHttp(400, 'En-tête de %s.csv inattendu : il doit commencer par %s.' % (table, ';'.join(attendues)))
+    if not entete_libre and recues[:len(attendues)] != attendues:
+        raise ErreurHttp(400, traduisible('csv.entete_inattendu',
+                                          'En-tête de {table}.csv inattendu : il doit commencer par {colonnes}.',
+                                          table=table, colonnes=';'.join(attendues)))
     for numero, ligne in enumerate(lignes[1:], 2):
         for cellule in ligne:
             if MOTIF_CELLULE_DANGEREUSE.match(cellule):
-                raise ErreurHttp(400, 'Ligne %d de %s.csv : une cellule commence par un caractère de formule '
-                                      '(« %s ») ; Prévo la protège par une apostrophe.' % (numero, table, cellule[:1]))
+                raise ErreurHttp(400, traduisible('csv.formule',
+                                                  'Ligne {numero} de {table}.csv : une cellule commence par un '
+                                                  'caractère de formule (« {caractere} ») ; Prévo la protège par '
+                                                  'une apostrophe.',
+                                                  numero=numero, table=table, caractere=cellule[:1]))
 
 
-def enregistrer_csv(config, table, octets, version_attendue, controle=None):
+# ---------------------------------------------------------------------------
+# Écriture des CSV de données : la fonction commune et sa garde « fichier abîmé » (T200 ; suite de T197)
+# ---------------------------------------------------------------------------
+
+# Toutes les écritures de donnees/<table>.csv du serveur passent par ecrire_fichier_de_donnees (PUT et ajout de l'API,
+# assistant et Solo, jeu de démo, passage au format, restauration ; tests/test_garde_abime_serveur.py le vérifie sur le
+# code : aucun autre ecrire_atomique d'un chemin venu de chemin_table). Avant d'écrire, elle regarde le fichier en place
+# (verifier_fichier_en_place), comme Donnees.enregistrerLignes du navigateur (ErreurFichierAbime) :
+#   - réécriture : refusée si le fichier en place est abîmé (raisons_fichier_abime : la réécrire en perdrait une
+#     partie sans le dire) ;
+#   - ajout en fin de fichier : refusé s'il se termine au milieu d'un texte entre guillemets (les lignes ajoutées y
+#     seraient avalées, donc perdues) ; un fichier abîmé ailleurs reçoit l'ajout (rien de ce qui est en place ne change).
+# Dérogations à la réécriture : la restauration d'une sauvegarde (le remède) et un PUT /api/csv/<table> qui porte
+# l'en-tête X-Prevo-Remplacer-Abime: 1 (l'import ZIP du navigateur). L'en-tête n'ajoute aucun droit : les règles des
+# rôles (§22.5 : routes permises, controle_d_ecriture) et le contrôle de version restent les mêmes. Refus : 409
+# {"erreur", "code": "fichier_abime", "table"}, la table reste identique à l'octet. T206 (règle de Nicolas : « un
+# fichier abîmé bloque l'écriture dans les données, jamais la sauvegarde quotidienne ») : la sauvegarde du jour passe
+# AVANT la garde, une écriture refusée la fait donc si elle manque (son manifeste marque le fichier abîmé).
+CODE_FICHIER_ABIME = 'fichier_abime'
+ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime'
+ENTETE_ABIME_DEPUIS = 'X-Prevo-Abime-Depuis'   # T213 : CSV abîmé importé tel quel (avec la dérogation) et sa date
+MOTIF_PREMIERE_LIGNE_NON_VIDE_OCTETS = re.compile(rb'[^\r\n]*\S[^\r\n]*')
+A_LIRE = object()           # ecrire_fichier_de_donnees : le fichier en place est lu par la fonction elle-même
+
+
+def separateur_des_octets(octets):
+    """« ; », ou « , » si la première ligne non vide n'a aucun « ; » et a une virgule (choisirSeparateur de
+    js/donnees.js), sur les octets bruts : lignes coupées en CR ou LF, « non vide » = un octet autre qu'un blanc."""
+    trouvee = MOTIF_PREMIERE_LIGNE_NON_VIDE_OCTETS.search(octets)
+    premiere = trouvee.group(0) if trouvee else b''
+    return b',' if b';' not in premiere and b',' in premiere else b';'
+
+
+def finit_dans_un_guillemet_ouvert(octets):
+    """Vrai si le CSV se termine au milieu d'un texte entre guillemets (cellule « "… » jamais fermée) : à la relecture,
+    une ligne ajoutée à la suite serait avalée dans cette cellule. Sur les octets bruts, sans décodage (BOM UTF-8 de
+    tête ignoré ; séparateur : separateur_des_octets), par l'automate que le navigateur applique aussi :
+      - début de champ : « " » → entre guillemets ; séparateur, CR ou LF → début de champ ; autre → dans le champ ;
+      - dans le champ : séparateur, CR ou LF → début de champ ; tout autre octet (« " » compris) → dans le champ ;
+      - entre guillemets : « " » → guillemet vu ; tout autre octet (CR et LF compris) → entre guillemets ;
+      - guillemet vu : « " » → entre guillemets (guillemet doublé) ; séparateur, CR ou LF → début de champ ; autre →
+        dans le champ.
+    Vrai si et seulement si l'état final est « entre guillemets » ; aucun blanc n'est sauté. « Guillemet vu » se
+    comporte comme « début de champ » : la lecture va donc d'un guillemet au suivant (bytes.find : un journal de
+    plusieurs Mo se lit vite), l'état devant un guillemet se déduisant de l'octet qui le précède."""
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    fins_de_champ = (separateur_des_octets(octets)[0], 0x0D, 0x0A)
+    position, dans_le_champ = 0, False      # état à « position » : début de champ (ou guillemet vu), ou dans le champ
+    while True:
+        guillemet = octets.find(b'"', position)
+        if guillemet < 0:
+            return False                    # plus de guillemet : l'état final n'est pas « entre guillemets »
+        if guillemet > position:
+            dans_le_champ = octets[guillemet - 1] not in fins_de_champ
+        if dans_le_champ:
+            position = guillemet + 1        # guillemet ordinaire d'un champ non guillemeté : on reste dans le champ
+            continue
+        fermant = octets.find(b'"', guillemet + 1)          # entre guillemets jusqu'au guillemet suivant
+        if fermant < 0:
+            return True
+        position, dans_le_champ = fermant + 1, False        # guillemet vu
+
+
+def raisons_fichier_abime(octets):
+    """Ce qu'une réécriture du fichier ferait perdre, même critère que entree.abime du navigateur (csv.analyser de
+    js/donnees.js) : structure abîmée (guillemet non fermé, texte collé à un guillemet fermant) et valeurs au-delà de
+    l'en-tête, lues par lire_fichier_de_donnees ; [] si rien (fichier sain, vide ou absent). Les colonnes en double
+    n'y sont pas : le navigateur garde la seconde colonne d'un même nom (associerColonnes : colonne inconnue
+    « nom (2) », réécrite en fin de fichier), rien ne s'en perd."""
+    if octets is None:
+        return []
+    return [perte for perte in lire_fichier_de_donnees(octets)['pertes']
+            if perte in (PERTE_STRUCTURE, PERTE_AU_DELA_DE_L_ENTETE)]
+
+
+def fichier_sans_contenu(octets):
+    """Vrai pour un fichier absent (None), de 0 octet, ou qui n'a que des blancs (après un BOM de tête)."""
+    if octets is None:
+        return True
+    return not (octets[len(BOM_UTF8):] if octets.startswith(BOM_UTF8) else octets).strip()
+
+
+def verifier_fichier_en_place(table, actuel, ajout=False, remplacer_abime=False):
+    """Garde « fichier abîmé » (en tête de cette partie) sur « actuel », les octets du fichier en place (None s'il est
+    absent) ; rien si le fichier est sans contenu (fichier_sans_contenu). Ajout : 409 s'il se termine au milieu d'un
+    texte entre guillemets (finit_dans_un_guillemet_ouvert). Réécriture : 409 s'il est abîmé (raisons_fichier_abime),
+    sauf remplacer_abime. 409 {"erreur", "code": "fichier_abime", "table"}."""
+    if fichier_sans_contenu(actuel):
+        return
+    if ajout:
+        if finit_dans_un_guillemet_ouvert(actuel):
+            raise ErreurHttp(409, traduisible('abime.guillemet_ouvert',
+                                              'Le fichier {table}.csv se termine au milieu d\'un texte entre '
+                                              'guillemets (guillemet jamais fermé) : Prévo n\'y ajoute plus rien, '
+                                              'pour ne rien perdre (les lignes ajoutées seraient avalées dans ce '
+                                              'texte). Corrigez-le, restaurez une sauvegarde ou importez un ZIP '
+                                              '(Paramètres) ; le détail est dans Paramètres › Contrôle de la base.',
+                                              table=table), code=CODE_FICHIER_ABIME, table=table)
+        return
+    raisons = [] if remplacer_abime else raisons_fichier_abime(actuel)
+    if raisons:
+        raise ErreurHttp(409, traduisible('abime.fichier',
+                                          'Le fichier {table}.csv est abîmé ({raisons}) : Prévo ne l\'enregistre '
+                                          'plus, pour ne rien perdre. Corrigez-le, restaurez une sauvegarde ou '
+                                          'importez un ZIP (Paramètres) ; le détail est dans Paramètres › Contrôle '
+                                          'de la base.', table=table, raisons=raisons),
+                         code=CODE_FICHIER_ABIME, table=table)
+
+
+def ecrire_fichier_de_donnees(config, table, octets, actuel=A_LIRE, *, ajout=False, remplacer_abime=False,
+                              sauvegarde_du_jour):
+    """LA fonction d'écriture des CSV de données (donnees/<table>.csv ; en tête de cette partie), dans cet ordre :
+      1. la sauvegarde du jour si « sauvegarde_du_jour » (faire_sauvegarde_quotidienne), AVANT la garde (T206) : un
+         fichier abîmé bloque l'écriture dans les données, jamais la sauvegarde quotidienne ;
+      2. la garde (verifier_fichier_en_place) sur le fichier en place : « actuel », ses octets (None s'il est absent),
+         lus ici s'ils ne sont pas donnés ; ajout : « octets » est le fichier en place suivi des lignes ajoutées ;
+         remplacer_abime : la réécriture d'un fichier abîmé est voulue (restauration, import ZIP) ;
+      3. ecrire_atomique (423 si le fichier est verrouillé, Excel).
+    Refus de la garde : 409 « fichier_abime », la table reste identique à l'octet (la sauvegarde du jour, elle, est
+    faite si elle manquait ; son manifeste marque le fichier abîmé). Rend l'empreinte des octets écrits. À appeler en
+    tenant VERROU_ECRITURE (ou au démarrage, avant les écouteurs)."""
+    chemin = chemin_table(config, table)
+    if sauvegarde_du_jour:
+        faire_sauvegarde_quotidienne(config)
+    if ajout or not remplacer_abime:
+        verifier_fichier_en_place(table, lire_octets(chemin) if actuel is A_LIRE else actuel, ajout, remplacer_abime)
+    ecrire_atomique(chemin, octets)
+    return empreinte(octets)
+
+
+def enregistrer_csv(config, table, octets, version_attendue, controle=None, remplacer_abime=False,
+                    abime_depuis=None):
     """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2).
     controle (lot 7, §22.5) : (octets reçus, octets actuels) → octets à écrire, appelé après le contrôle de version
-    (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon)."""
-    verifier_contenu_csv(table, octets)
+    (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon). Puis
+    ecrire_fichier_de_donnees (T200) : 409 « fichier_abime » si le fichier en place est abîmé, sauf remplacer_abime
+    (PUT avec l'en-tête X-Prevo-Remplacer-Abime: 1, l'import ZIP). T213 : abime_depuis (en-tête X-Prevo-Abime-Depuis,
+    avec remplacer_abime) : l'import écrit tel quel un CSV que son ZIP marque abîmé ; son en-tête n'est alors pas
+    comparé au schéma si le serveur le voit abîmé lui aussi (raisons_fichier_abime ; UTF-8 et cellules dangereuses
+    toujours contrôlés). Après une écriture avec remplacer_abime, fichiers-abimes.json suit la table
+    (noter_table_importee)."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
+    abimee = bool(remplacer_abime and raisons_fichier_abime(octets))
+    verifier_contenu_csv(table, octets, entete_libre=abimee and abime_depuis is not None)
     chemin = chemin_table(config, table)
     actuel = lire_octets(chemin)
     version_actuelle = empreinte(actuel) if actuel is not None else None
     attendue = None if version_attendue == 'aucune' else version_attendue
     if attendue != version_actuelle:
         if version_actuelle is None:
-            message = 'Le fichier %s.csv n\'existe plus.' % table
+            message = traduisible('csv.n_existe_plus', 'Le fichier {table}.csv n\'existe plus.', table=table)
         elif attendue is None:
-            message = 'Le fichier %s.csv existe déjà.' % table
+            message = traduisible('csv.existe_deja', 'Le fichier {table}.csv existe déjà.', table=table)
         else:
-            message = 'Le fichier %s.csv a été modifié par un autre poste.' % table
+            message = traduisible('csv.modifie_ailleurs', 'Le fichier {table}.csv a été modifié par un autre poste.',
+                                  table=table)
         raise ErreurHttp(409, message, version_actuelle=version_actuelle)
     if controle is not None:
         octets = controle(octets, actuel)
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin, octets)
-    return empreinte(octets)
+    version = ecrire_fichier_de_donnees(config, table, octets, actuel, remplacer_abime=remplacer_abime,
+                                        sauvegarde_du_jour=True)
+    if remplacer_abime:
+        noter_table_importee(config, table, abimee, abime_depuis)
+    return version
 
 
 def decouper_corps_ajout(corps):
     """Corps d'un ajout = ligne d'en-tête + lignes de données (UTF-8 sans BOM)."""
     if not est_utf8(corps):
-        raise ErreurHttp(400, 'Le corps doit être encodé en UTF-8.')
+        raise ErreurHttp(400, traduisible('csv.corps_encodage', 'Le corps doit être encodé en UTF-8.'))
     if corps.startswith(BOM_UTF8):
         corps = corps[len(BOM_UTF8):]
     entete, lignes = premiere_ligne(corps)
     if not entete:
-        raise ErreurHttp(400, 'Le corps doit commencer par la ligne d\'en-tête.')
+        raise ErreurHttp(400, traduisible('csv.corps_sans_entete',
+                                          'Le corps doit commencer par la ligne d\'en-tête.'))
     return corps, entete, lignes
 
 
 def ajouter_au_csv(config, table, corps, controle=None):
     """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent.
     controle (lot 7, §22.5) : (en-tête, lignes, octets actuels) → lignes à ajouter (colonnes cachées vidées pour le
-    technicien, demandes nouvelles seulement pour le demandeur ; 403 sinon)."""
+    technicien, demandes nouvelles seulement pour le demandeur ; 403 sinon). T200 : 409 « fichier_abime » si le
+    fichier en place (non vide) se termine au milieu d'un texte entre guillemets, avant les contrôles d'UTF-8 et
+    d'en-tête (verifier_fichier_en_place, puis ecrire_fichier_de_donnees en ajout). T206 : la sauvegarde du jour est
+    faite juste avant cette garde, même si elle refuse."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     chemin = chemin_table(config, table)
     verifier_contenu_csv(table, corps, corps_d_ajout=True)
     corps, entete, lignes = decouper_corps_ajout(corps)
@@ -4014,24 +6014,23 @@ def ajouter_au_csv(config, table, corps, controle=None):
     if controle is not None:
         lignes = controle(entete, lignes, actuel)
         corps = entete + FIN_DE_LIGNE + lignes
+    faire_sauvegarde_quotidienne(config)                # T206 : avant la garde (faite ici, pas dans les écritures)
+    verifier_fichier_en_place(table, actuel, ajout=True)
     if actuel is None or not actuel.replace(BOM_UTF8, b'', 1).strip():
-        faire_sauvegarde_quotidienne(config)
-        nouveau = BOM_UTF8 + corps
-        ecrire_atomique(chemin, nouveau)
-        return empreinte(nouveau)
+        return ecrire_fichier_de_donnees(config, table, BOM_UTF8 + corps, actuel, ajout=True, sauvegarde_du_jour=False)
     if not est_utf8(actuel):
-        raise ErreurHttp(409, 'Le fichier %s.csv n\'est pas en UTF-8 (réenregistré par Excel ?).'
-                         % table, version_actuelle=empreinte(actuel))
+        raise ErreurHttp(409, traduisible('csv.ajout_encodage',
+                                          'Le fichier {table}.csv n\'est pas en UTF-8 (réenregistré par Excel ?).',
+                                          table=table), version_actuelle=empreinte(actuel))
     if premiere_ligne(actuel)[0] != entete:
-        raise ErreurHttp(409, 'L\'en-tête de %s.csv est différent.' % table,
+        raise ErreurHttp(409, traduisible('csv.ajout_entete_different',
+                                          'L\'en-tête de {table}.csv est différent.', table=table),
                          version_actuelle=empreinte(actuel))
     if not lignes:
         return empreinte(actuel)
     separateur = b'' if actuel.endswith(b'\n') else FIN_DE_LIGNE
-    nouveau = actuel + separateur + lignes
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin, nouveau)
-    return empreinte(nouveau)
+    return ecrire_fichier_de_donnees(config, table, actuel + separateur + lignes, actuel, ajout=True,
+                                     sauvegarde_du_jour=False)
 
 
 # ---------------------------------------------------------------------------
@@ -4072,24 +6071,29 @@ def taille_des_documents(config):
 
 
 def verifier_quota_documents(config, taille_ajoutee):
-    """Audit F2 : 413 si le dossier documents/ et le document envoyé dépassent quota_documents_mo (2 Go par défaut).
-    À appeler en tenant VERROU_ECRITURE, avant d'écrire."""
-    quota_mo = config.reglages.get('quota_documents_mo', 2048)
+    """Audit F2 : 413 si le dossier documents/ et le document envoyé dépassent quota_documents_mo (4 Go par défaut
+    depuis T250). Le refus dit où se règle le quota (T250) : Paramètres › Accès et installation, sur le PC serveur
+    (carte du responsable, section « Comptes des demandeurs, durées de session, documents ») ; aussi dans
+    prevo.config.json. À appeler en tenant VERROU_ECRITURE, avant d'écrire."""
+    quota_mo = config.reglages.get('quota_documents_mo', QUOTA_DOCUMENTS_MO_PAR_DEFAUT)
     occupe = taille_des_documents(config) + taille_ajoutee
     if occupe > quota_mo * 1024 * 1024:
-        raise ErreurHttp(413, 'Dossier des documents plein (%s Mo sur %d Mo avec ce document) : faites de la place '
-                              'ou augmentez quota_documents_mo.'
-                         % (('%.1f' % (occupe / (1024 * 1024))).replace('.', ','), quota_mo))
+        raise ErreurHttp(413, traduisible('documents.dossier_plein',
+                                          'Dossier des documents plein ({occupe} Mo sur {quota} Mo avec ce '
+                                          'document) : faites de la place, ou agrandissez la place des documents '
+                                          'dans Paramètres › Accès et installation, sur le PC serveur.',
+                                          occupe=('%.1f' % (occupe / (1024 * 1024))).replace('.', ','), quota=quota_mo))
 
 
 def enregistrer_document(config, nom_demande, octets):
     """Enregistre un nouveau document sous le nom imposé par le serveur (nom_de_document_impose) et rend ce nom ;
     409 s'il existe déjà (même nom demandé dans la même seconde : jamais d'écrasement), 413 si le quota du dossier
     serait dépassé. La signature d'une image est contrôlée avant (verifier_signature_image, api_document_ecrire)."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     nom = nom_de_document_impose(config, nom_demande)
     chemin = chemin_document(config, nom)
     if os.path.exists(chemin):
-        raise ErreurHttp(409, 'Le document %s existe déjà.' % nom)
+        raise ErreurHttp(409, traduisible('documents.existe_deja', 'Le document {nom} existe déjà.', nom=nom))
     verifier_quota_documents(config, len(octets))
     ecrire_atomique(chemin, octets)
     return nom
@@ -4249,9 +6253,7 @@ LIGNES_CACHEES_PAR_ROLE = {
 # Demande créée par le demandeur : statut « Nouvelle », champs de la décision du responsable vides.
 STATUT_DEMANDE_NOUVELLE = 'Nouvelle'
 CHAMPS_DE_DECISION = ('motif_decision', 'date_decision', 'ot_id')
-MESSAGE_RESERVE_AU_RESPONSABLE = 'Accès refusé : réservé au responsable.'
-MESSAGE_AJOUT_SEULEMENT = ('Accès refusé : le demandeur ne peut qu\'ajouter une demande (statut « Nouvelle », sans '
-                           'décision) ; %s')
+MESSAGE_RESERVE_AU_RESPONSABLE = traduisible('acces.reserve_au_responsable', 'Accès refusé : réservé au responsable.')
 
 
 def role_effectif(identite):
@@ -4309,16 +6311,23 @@ def message_refus(identite, route, segment):
     if ROLES_PAR_ROUTE.get(route) == RESPONSABLE:
         return MESSAGE_RESERVE_AU_RESPONSABLE
     if motif == 'csv/<table>' and methode == 'GET':
-        return 'Accès refusé : la table « %s » n\'est pas ouverte au %s.' % (segment, role)
+        return traduisible('acces.table_fermee', 'Accès refusé : la table « {table} » n\'est pas ouverte au {role}.',
+                           table=segment, role=role)
     if motif.startswith('csv/') and role == 'technicien':
-        return 'Accès refusé : la table « %s » ne se modifie que par le responsable.' % segment
+        return traduisible('acces.table_du_responsable',
+                           'Accès refusé : la table « {table} » ne se modifie que par le responsable.', table=segment)
     if motif.startswith('csv/'):
-        return ('Accès refusé : le %s ne peut que créer une demande (et la ligne du journal qui va avec).' % role)
+        return traduisible('acces.demande_seulement',
+                           'Accès refusé : le {role} ne peut que créer une demande (et la ligne du journal qui va '
+                           'avec).', role=role)
     if motif == 'documents/<nom>' and methode == 'PUT':
-        return 'Accès refusé : le %s ne joint que la photo d\'une demande.' % role
+        return traduisible('acces.photo_seulement', 'Accès refusé : le {role} ne joint que la photo d\'une demande.',
+                           role=role)
     if motif == 'documents/<nom>':
-        return 'Accès refusé : ce document n\'est pas ouvert au %s.' % role
-    return 'Accès refusé : votre rôle (%s) ne permet pas cette action.' % role
+        return traduisible('acces.document_ferme', 'Accès refusé : ce document n\'est pas ouvert au {role}.',
+                           role=role)
+    return traduisible('acces.role_refuse', 'Accès refusé : votre rôle ({role}) ne permet pas cette action.',
+                       role=role)
 
 
 def verifier_role(config, identite, route, segment):
@@ -4366,7 +6375,9 @@ def lire_tableau(table, octets):
     try:
         return lire_csv_tolerant(octets)
     except csv.Error as erreur:
-        raise ErreurHttp(500, 'Le fichier %s.csv est illisible (%s).' % (table, erreur))
+        raise ErreurHttp(500, traduisible('csv.illisible',
+                                          'Le fichier {table}.csv est illisible ({erreur}).',
+                                          table=table, erreur=erreur))
 
 
 def dictionnaires_csv(octets, table=''):
@@ -4451,7 +6462,10 @@ def remettre_colonnes_cachees(table, octets_recus, octets_actuels, colonnes):
 
 
 def refus_ajout_seulement(raison):
-    return ErreurHttp(403, MESSAGE_AJOUT_SEULEMENT % raison)
+    """403 d'une écriture de demandes.csv par le demandeur ; raison : un message (traduisible) en minuscule."""
+    return ErreurHttp(403, traduisible('acces.ajout_seulement',
+                                       'Accès refusé : le demandeur ne peut qu\'ajouter une demande (statut '
+                                       '« Nouvelle », sans décision) ; {raison}', raison=raison))
 
 
 def verifier_demande_nouvelle(ligne, deja_prises):
@@ -4459,14 +6473,19 @@ def verifier_demande_nouvelle(ligne, deja_prises):
     sinon. deja_prises : ids du fichier et des nouvelles lignes déjà vues (complété ici)."""
     identifiant = ligne.get('id', '').strip()
     if not identifiant:
-        raise refus_ajout_seulement('une nouvelle demande doit avoir un numéro.')
+        raise refus_ajout_seulement(traduisible('demandes.numero_obligatoire',
+                                                'une nouvelle demande doit avoir un numéro.'))
     if identifiant in deja_prises:
-        raise refus_ajout_seulement('le numéro %s est déjà pris.' % identifiant)
+        raise refus_ajout_seulement(traduisible('demandes.numero_pris',
+                                                'le numéro {numero} est déjà pris.', numero=identifiant))
     deja_prises.add(identifiant)
     if ligne.get('statut', '').strip() != STATUT_DEMANDE_NOUVELLE:
-        raise refus_ajout_seulement('une nouvelle demande a le statut « %s ».' % STATUT_DEMANDE_NOUVELLE)
+        raise refus_ajout_seulement(traduisible('demandes.statut_nouvelle',
+                                                'une nouvelle demande a le statut « {statut} ».',
+                                                statut=STATUT_DEMANDE_NOUVELLE))
     if any(ligne.get(cle_entete(champ), '').strip() for champ in CHAMPS_DE_DECISION):
-        raise refus_ajout_seulement('la décision (motif, date, ordre de travail) revient au responsable.')
+        raise refus_ajout_seulement(traduisible('demandes.decision_reservee',
+                                                'la décision (motif, date, ordre de travail) revient au responsable.'))
 
 
 def garder_les_demandes_actuelles(octets_recus, octets_actuels):
@@ -4498,13 +6517,18 @@ def garder_les_demandes_actuelles(octets_recus, octets_actuels):
         if retrouvee is not None:
             candidates.remove(retrouvee)
         elif identifiant in prises:
-            raise refus_ajout_seulement('la demande %s existe déjà : elle ne se modifie pas ici.' % identifiant)
+            raise refus_ajout_seulement(traduisible('demandes.non_modifiable',
+                                                    'la demande {numero} existe déjà : elle ne se modifie pas ici.',
+                                                    numero=identifiant))
         else:
             verifier_demande_nouvelle(recue, prises)
             nouvelles.append(brute)
-    manquantes = [identifiant or 'sans numéro' for identifiant, reste in restantes.items() if reste]
+    manquantes = [identifiant or traduisible('demandes.sans_numero', 'sans numéro')
+                  for identifiant, reste in restantes.items() if reste]
     if manquantes:
-        raise refus_ajout_seulement('une demande ne se supprime pas (%s).' % ', '.join(sorted(manquantes)[:5]))
+        raise refus_ajout_seulement(traduisible('demandes.non_supprimable',
+                                                'une demande ne se supprime pas ({demandes}).',
+                                                demandes=sorted(manquantes)[:5]))
     gardees = [[ancienne.get(cle, '') for cle in cles] for ancienne in actuelles]
     return ecrire_tableau_csv(entete, gardees + nouvelles)
 
@@ -4557,7 +6581,7 @@ def controle_d_ajout(identite, table):
 
 # --- Comptes gérés par le responsable (GET/POST /api/acces/comptes…, §22.4) ----------------------------------------
 
-CHAMPS_COMPTE_MODIFIABLES = ('prenom', 'nom', 'role', 'technicien_id')
+CHAMPS_COMPTE_MODIFIABLES = ('prenom', 'nom', 'role', 'technicien_id', 'langue')       # langue : T298
 ACTIONS_COMPTE = ('modifier', 'reinitialiser', 'desactiver', 'activer')
 
 
@@ -4570,23 +6594,34 @@ def technicien_existe(config, technicien_id):
 
 def champs_de_compte(config, demande, obligatoires=()):
     """Champs d'un compte reçus par /api/acces/comptes (création, modification) : des textes, un rôle connu, un technicien
-    lié présent dans techniciens.csv ; 400 sinon, champ inconnu compris (jamais un mot de passe, un sel ni « actif » par
-    cette voie)."""
+    lié présent dans techniciens.csv, une langue déclarée ou vide (T298, langue_de_compte) ; 400 sinon, champ inconnu
+    compris (jamais un mot de passe, un sel ni « actif » par cette voie)."""
     champs = {}
     for cle, valeur in demande.items():
         if cle not in CHAMPS_COMPTE_MODIFIABLES:
-            raise ErreurHttp(400, 'Champ inconnu ou non modifiable ici : « %s » (prenom, nom, role, technicien_id).'
-                             % str(cle)[:60])
+            raise ErreurHttp(400, traduisible('comptes.champ_inconnu',
+                                              'Champ inconnu ou non modifiable ici : « {champ} » (prenom, nom, '
+                                              'role, technicien_id, langue).', champ=str(cle)[:60]))
         if not isinstance(valeur, str):
-            raise ErreurHttp(400, '« %s » : un texte est attendu.' % cle)
-        champs[cle] = valeur.strip()
+            raise ErreurHttp(400, traduisible('comptes.texte_attendu',
+                                              '« {champ} » : un texte est attendu.', champ=cle))
+        champs[cle] = valeur if cle == 'langue' else valeur.strip()      # langue : la valeur exacte (T298)
     for cle in obligatoires:
         if not champs.get(cle):
-            raise ErreurHttp(400, '« %s » est obligatoire.' % cle)
+            raise ErreurHttp(400, traduisible('comptes.champ_obligatoire', '« {champ} » est obligatoire.', champ=cle))
     if 'role' in champs and champs['role'] not in ROLES_COMPTES:
-        raise ErreurHttp(400, 'Rôle inconnu : « %s » (responsable, technicien ou demandeur).' % champs['role'][:60])
+        raise ErreurHttp(400, traduisible('comptes.role_inconnu_liste',
+                                          'Rôle inconnu : « {role} » (responsable, technicien ou demandeur).',
+                                          role=champs['role'][:60]))
     if champs.get('technicien_id') and not technicien_existe(config, champs['technicien_id']):
-        raise ErreurHttp(400, 'Technicien inconnu : « %s » (voir Équipe).' % champs['technicien_id'][:60])
+        raise ErreurHttp(400, traduisible('comptes.technicien_inconnu',
+                                          'Technicien inconnu : « {technicien} » (voir Équipe).',
+                                          technicien=champs['technicien_id'][:60]))
+    if 'langue' in champs:
+        try:
+            langue_de_compte(champs['langue'])
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, traduisible_de(erreur))
     return champs
 
 
@@ -4668,7 +6703,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     def traiter(self, methode):
         # Ordre des contrôles (audit F2, §22.4) : hôte, chemin, accès à l'API (session quand les comptes sont
-        # exigés), X-Prevo, puis seulement la lecture du corps : un client sans session ne fait jamais lire 10 Mo.
+        # exigés), X-Prevo, puis seulement la lecture du corps : un client sans session ne fait jamais lire 10 Mo (50 Mo
+        # pour l'envoi d'une table, T208).
         # Un refus prononcé avant la lecture jette au plus 64 Ko de corps (envoyer_erreur) pour que le navigateur
         # reçoive la réponse ; au-delà, la connexion persistante est fermée après la réponse (les octets non lus
         # seraient pris pour la requête suivante).
@@ -4678,7 +6714,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.mandat = origine_mandatee(self)        # §22.7 : None pour un client direct
         try:
             if not hote_autorise(self.headers.get('Host'), self.config):
-                raise ErreurHttp(403, 'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.')
+                raise ErreurHttp(403, traduisible('requete.hote_refuse',
+                                                  'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.'))
             if self.mandat is not None and not hote_autorise(self.mandat['hote'], self.config):
                 raise ErreurHttp(403, MESSAGE_HOTE_ORIGINE_REFUSE)
             morceaux = analyser_chemin(self.path)
@@ -4702,14 +6739,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             elif methode == 'GET':
                 self.servir_statique(morceaux)
             else:
-                raise ErreurHttp(405, 'Méthode non autorisée.')
+                raise ErreurHttp(405, traduisible('requete.methode_non_autorisee', 'Méthode non autorisée.'))
         except ErreurHttp as erreur:
             self.envoyer_erreur(erreur)
         except (ConnectionError, socket.timeout):
             pass                        # le navigateur a fermé la connexion
         except Exception:               # bogue : on le trace sans arrêter le serveur
             traceback.print_exc()
-            self.envoyer_erreur(ErreurHttp(500, 'Erreur interne du serveur.'))
+            self.envoyer_erreur(ErreurHttp(500, traduisible('requete.erreur_interne', 'Erreur interne du serveur.')))
 
     def traiter_api(self, methode, morceaux, corps):
         """Aiguillage d'après ROUTES_API (chemin après /api/) : 404 adresse inconnue, 405 autre méthode. Le segment
@@ -4725,7 +6762,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             chemin_document(self.config, segment)
         fonction = ROUTES_API.get((methode, motif))
         if fonction is None:
-            raise ErreurHttp(405, 'Méthode non autorisée.')
+            raise ErreurHttp(405, traduisible('requete.methode_non_autorisee', 'Méthode non autorisée.'))
+        if (methode, motif) in ROUTES_ECRITURE_DES_DONNEES:
+            verifier_ecriture_permise(self.config)          # T185 (D169) : données plus récentes, 409
         getattr(self, fonction)(segment, corps)
 
     # --- Accès à l'API (lot 7, §22.3, §22.4) -------------------------------
@@ -4834,12 +6873,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     def page_de_porte(self):
         """acces/porte.html avec le port https de ce serveur dans data-port-https (porte.js interroge
-        https://<même hôte>:<ce port>/api/ping ; le port vient toujours de la page servie)."""
+        https://<même hôte>:<ce port>/api/ping ; le port vient toujours de la page servie) et la langue de
+        l'installation dans data-langue-installation (T297 : langue_defaut, sinon « fr »)."""
         octets = lire_octets(PAGE_PORTE)
         if octets is None:
-            raise ErreurHttp(500, 'Page de porte introuvable (acces/porte.html).')
+            raise ErreurHttp(500, traduisible('porte.page_introuvable',
+                                              'Page de porte introuvable (acces/porte.html).'))
         attribut = 'data-port-https="%d"' % self.config.port_https
-        return octets.replace(ATTRIBUT_PORT_HTTPS.encode('ascii'), attribut.encode('ascii'), 1)
+        octets = octets.replace(ATTRIBUT_PORT_HTTPS.encode('ascii'), attribut.encode('ascii'), 1)
+        return poser_langue_de_l_installation(octets, langue_de_l_installation(self.config) or LANGUE_PAR_DEFAUT)
 
     def origine_https(self):
         """Origine https de ce serveur vue par ce client (même hôte que la requête, port_https)."""
@@ -4870,24 +6912,31 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def verifier_entete_prevo(self):
         """X-Prevo: 1 obligatoire : une page d'un autre site ne peut pas l'envoyer."""
         if self.headers.get('X-Prevo') != '1':
-            raise ErreurHttp(403, 'En-tête X-Prevo manquant.')
+            raise ErreurHttp(403, traduisible('requete.entete_prevo_manquant', 'En-tête X-Prevo manquant.'))
 
     def lire_corps(self):
-        """Lit le corps : Content-Length obligatoire (411) et au plus 10 Mo (413)."""
+        """Lit le corps : Content-Length obligatoire (411) et au plus TAILLE_MAX_CORPS (413), TAILLE_MAX_CORPS_CSV pour
+        l'envoi d'une table (ROUTES_CORPS_CSV, T208)."""
         longueur_texte = self.headers.get('Content-Length')
         if longueur_texte is None:
-            raise ErreurHttp(411, 'En-tête Content-Length obligatoire.')
+            raise ErreurHttp(411, traduisible('requete.longueur_obligatoire', 'En-tête Content-Length obligatoire.'))
         try:
             longueur = int(longueur_texte)
         except ValueError:
-            raise ErreurHttp(400, 'En-tête Content-Length invalide.')
+            raise ErreurHttp(400, traduisible('requete.longueur_invalide', 'En-tête Content-Length invalide.'))
         if longueur < 0:
-            raise ErreurHttp(400, 'En-tête Content-Length invalide.')
-        if longueur > TAILLE_MAX_CORPS:
-            raise ErreurHttp(413, 'Envoi trop gros (10 Mo au maximum).')
+            raise ErreurHttp(400, traduisible('requete.longueur_invalide', 'En-tête Content-Length invalide.'))
+        morceaux = analyser_chemin(self.path)          # déjà contrôlé par traiter
+        route = (self.command, motif_de_route(morceaux[1:])) if morceaux[0] == 'api' else None
+        limite = TAILLE_MAX_CORPS_CSV if route in ROUTES_CORPS_CSV else TAILLE_MAX_CORPS
+        if longueur > limite:
+            raise ErreurHttp(413, traduisible('requete.envoi_trop_gros',
+                                              {'one': 'Envoi trop gros ({n} Mo au maximum).',
+                                               'other': 'Envoi trop gros ({n} Mo au maximum).'},
+                                              n=limite // (1024 * 1024)))
         corps = self.rfile.read(longueur)
         if len(corps) != longueur:
-            raise ErreurHttp(400, 'Corps de la requête incomplet.')
+            raise ErreurHttp(400, traduisible('requete.corps_incomplet', 'Corps de la requête incomplet.'))
         return corps
 
     # --- Fonctions de l'API (appelées avec le segment variable du chemin, ou None, et le corps) ------
@@ -4914,7 +6963,12 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'tailscale': etat_tailscale_public(self.config),
                                 # §22.10 : l'écran propose l'assistant tant que prevo.config.json manque (jamais
                                 # imposé : les tests des lots 1 à 6 tournent sans configuration).
-                                'installation_a_faire': not self.config.reglages.get('_present')})
+                                'installation_a_faire': not self.config.reglages.get('_present'),
+                                # T185 : format des données trouvé au démarrage et passage fait ou non (le bandeau
+                                # du responsable en dit la raison) ; None quand le serveur ne l'a pas regardé.
+                                # T206 : « abimes_depuis », {table: date} des tables abîmées (fichiers-abimes.json).
+                                'format': self.config.format_donnees and dict(
+                                    self.config.format_donnees, abimes_depuis=lire_fichiers_abimes(self.config))})
 
     def api_session(self, segment, corps):
         """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton). Pour un appareil
@@ -4939,8 +6993,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         identifiant, mot_de_passe = demande.get('identifiant'), demande.get('mot_de_passe')
         rester = demande.get('rester', False)
         if not (isinstance(identifiant, str) and isinstance(mot_de_passe, str) and isinstance(rester, bool)):
-            raise ErreurHttp(400, 'Connexion : « identifiant » et « mot_de_passe » (textes) sont attendus, '
-                                  '« rester » vaut vrai ou faux.')
+            raise ErreurHttp(400, traduisible('sessions.connexion_champs',
+                                              'Connexion : « identifiant » et « mot_de_passe » (textes) sont '
+                                              'attendus, « rester » vaut vrai ou faux.'))
         compte = verifier_tentative(self.config, identifiant, mot_de_passe, self.origine(),
                                     ErreurHttp(401, MESSAGE_CONNEXION_REFUSEE))
         if self.session is not None:
@@ -4959,27 +7014,56 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def api_mot_de_passe(self, segment, corps):
         """POST /api/mot-de-passe {actuel, nouveau} : 200 et une session neuve, toutes les autres sessions du compte
         fermées ; 400 si le nouveau est refusé (12 à 256 caractères, différent de l'actuel) ; 403 si l'actuel est faux
-        (compté comme un échec de connexion) ; 429 pendant un blocage."""
+        (compté comme un échec de connexion) ; 429 pendant un blocage. T298 : {"langue": code} seul, la langue du compte
+        de la session (api_langue_du_compte) ; « langue » avec tout autre champ : 400, rien de changé."""
         self.exiger_comptes()
         demande = lire_objet_json(corps)
+        if 'langue' in demande:
+            self.api_langue_du_compte(demande)
+            return
         actuel, nouveau = demande.get('actuel'), demande.get('nouveau')
         if not (isinstance(actuel, str) and isinstance(nouveau, str)):
-            raise ErreurHttp(400, 'Mot de passe : « actuel » et « nouveau » (textes) sont attendus.')
+            raise ErreurHttp(400, traduisible('sessions.mot_de_passe_champs',
+                                              'Mot de passe : « actuel » et « nouveau » (textes) sont attendus.'))
         try:
             verifier_mot_de_passe_choisi(nouveau)
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         if nouveau == actuel:
-            raise ErreurHttp(400, 'Choisissez un mot de passe différent de l\'actuel.')
+            raise ErreurHttp(400, traduisible('sessions.mot_de_passe_identique',
+                                              'Choisissez un mot de passe différent de l\'actuel.'))
         identifiant, origine = self.session['identifiant'], self.origine()
         verifier_tentative(self.config, identifiant, actuel, origine, ErreurHttp(403, MESSAGE_ACTUEL_FAUX),
                            journal_reussite=None)
         try:
             changer_mot_de_passe(self.config, identifiant, nouveau, origine=origine)
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         compte = trouver_compte(comptes_du_serveur(self.config), identifiant)
         self.repondre_avec_session(compte, self.session['longue'])
+
+    def api_langue_du_compte(self, demande):
+        """POST /api/mot-de-passe {"langue": code} (T298, aucune route nouvelle) : la personne connectée change la langue
+        de SON compte (celui de la session, jamais un autre) : une langue déclarée, ou "" pour la langue de
+        l'installation (400 sinon, rien d'écrit) ; ni mot de passe demandé ni session fermée ; 200 et la session à jour.
+        Refus : « langue » avec un autre champ (400 sessions.langue_seule : un changement de mot de passe garde
+        exactement ses règles), appareil enrôlé (403, il n'a pas de compte), mot de passe provisoire (403)."""
+        if set(demande) != {'langue'}:
+            raise ErreurHttp(400, traduisible('sessions.langue_seule',
+                                              'La langue se change seule : « langue » sans « actuel » ni « nouveau » '
+                                              '(ni aucun autre champ).'))
+        if self.session.get('appareil'):
+            raise ErreurHttp(403, traduisible('sessions.langue_appareil',
+                                              'Un appareil enrôlé n\'a pas de compte : sa langue se choisit pour ce '
+                                              'poste.'))
+        if self.session.get('a_changer'):
+            raise ErreurHttp(403, MESSAGE_MOT_DE_PASSE_PROVISOIRE)
+        try:
+            langue = changer_langue(self.config, self.session['identifiant'], demande['langue'], origine=self.origine())
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, traduisible_de(erreur))
+        self.session['langue'] = langue
+        self.envoyer_json(200, {'comptes': True, 'session': session_publique(self.session)})
 
     def api_enroler(self, segment, corps):
         """POST /api/enroler {invitation, nom} (route publique, D125) : l'appareil est enrôlé, reçoit son cookie
@@ -4989,7 +7073,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps)
         invitation, nom = demande.get('invitation'), demande.get('nom')
         if not (isinstance(invitation, str) and isinstance(nom, str)):
-            raise ErreurHttp(400, 'Enrôlement : « invitation » et « nom » (textes) sont attendus.')
+            raise ErreurHttp(400, traduisible('appareils.enrolement_champs',
+                                              'Enrôlement : « invitation » et « nom » (textes) sont attendus.'))
         jeton, appareil = enroler_appareil(self.config, invitation, nom, self.headers.get('User-Agent', ''))
         self.session = identite_de_l_appareil(appareil, empreinte_jeton(jeton))
         adresse, agent, tailscale = self.origine()
@@ -5005,14 +7090,18 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps) if corps.strip() else {}
         cible = demande.get('identifiant', self.session['identifiant'])
         if not isinstance(cible, str) or not cible.strip():
-            raise ErreurHttp(400, '« identifiant » : l\'identifiant d\'un compte est attendu.')
-        cible = cible.strip().lower()
+            raise ErreurHttp(400, traduisible('sessions.identifiant_attendu',
+                                              '« identifiant » : l\'identifiant d\'un compte est attendu.'))
+        cible = identifiant_tape(cible)
         soi_meme = cible == self.session['identifiant']
         if not soi_meme:
             if self.session['role'] != 'responsable':
-                raise ErreurHttp(403, 'Réservé au responsable : vous ne pouvez fermer que vos propres sessions.')
+                raise ErreurHttp(403, traduisible('sessions.reserve_au_responsable',
+                                                  'Réservé au responsable : vous ne pouvez fermer que vos propres '
+                                                  'sessions.'))
             if trouver_compte(comptes_du_serveur(self.config), cible) is None:
-                raise ErreurHttp(404, 'Compte introuvable : %s.' % cible)
+                raise ErreurHttp(404, traduisible('comptes.introuvable',
+                                                  'Compte introuvable : {identifiant}.', identifiant=cible))
         nombre = fermer_sessions_de(self.config, cible)
         adresse, agent, tailscale = self.origine()
         ecrire_journal_acces(self.config, cible, adresse, agent, 'deconnexion', tailscale)
@@ -5025,35 +7114,46 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, {'comptes': [compte_public(compte) for compte in comptes_du_serveur(self.config)]})
 
     def api_compte_creer(self, segment, corps):
-        """POST /api/acces/comptes (responsable) {prenom, nom, role, technicien_id} : compte créé avec un mot de passe
-        provisoire de 16 caractères, à changer à la première connexion (a_changer), rendu une seule fois dans la
-        réponse : jamais écrit dans un fichier, le journal ou la console."""
+        """POST /api/acces/comptes (responsable) {prenom, nom, role, technicien_id, langue, autre_personne} : compte créé
+        avec un mot de passe provisoire de 16 caractères, à changer à la première connexion (a_changer), rendu une seule
+        fois dans la réponse : jamais écrit dans un fichier, le journal ou la console. T301 : même prénom et même nom
+        qu'un compte existant → 400 comptes.meme_personne, sauf autre_personne vrai. T298 : langue facultative."""
         self.exiger_comptes()
-        champs = champs_de_compte(self.config, lire_objet_json(corps), obligatoires=('prenom', 'role'))
+        demande = lire_objet_json(corps)
+        autre_personne = demande.pop('autre_personne', False)       # T301 : case « C'est une autre personne »
+        if not isinstance(autre_personne, bool):
+            raise ErreurHttp(400, traduisible('comptes.autre_personne_booleen',
+                                              '« autre_personne » vaut vrai ou faux.'))
+        champs = champs_de_compte(self.config, demande, obligatoires=('prenom', 'role'))
         provisoire = mot_de_passe_provisoire()
         try:
             compte = creer_compte(self.config, champs['prenom'], champs.get('nom', ''), champs['role'], provisoire,
                                   technicien_id=champs.get('technicien_id', ''), a_changer=True,
-                                  origine=self.origine())
+                                  origine=self.origine(), autre_personne=autre_personne,
+                                  langue=champs.get('langue', ''))
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         self.envoyer_json(200, {'compte': compte, 'mot_de_passe_provisoire': provisoire})
 
     def api_compte_changer(self, identifiant, corps):
-        """POST /api/acces/comptes/<identifiant> (responsable) {"action": "modifier" (prenom, nom, role, technicien_id)
-        | "reinitialiser" | "desactiver" | "activer"} : fonctions de T150 (au moins un responsable actif reste : 400) ;
+        """POST /api/acces/comptes/<identifiant> (responsable) {"action": "modifier" (prenom, nom, role, technicien_id,
+        langue) | "reinitialiser" | "desactiver" | "activer"} : fonctions de T150 (au moins un responsable actif reste : 400) ;
         « reinitialiser » rend le mot de passe provisoire une seule fois ; 404 compte inconnu, 400 action inconnue."""
         self.exiger_comptes()
         demande = lire_objet_json(corps)
         action = demande.pop('action', None)
         if action not in ACTIONS_COMPTE:
-            raise ErreurHttp(400, '« action » attendue : %s.' % ', '.join(ACTIONS_COMPTE))
+            raise ErreurHttp(400, traduisible('comptes.action_attendue',
+                                              '« action » attendue : {actions}.', actions=', '.join(ACTIONS_COMPTE)))
         if action != 'modifier' and demande:
-            raise ErreurHttp(400, 'L\'action « %s » ne prend aucun autre champ.' % action)
+            raise ErreurHttp(400, traduisible('comptes.action_sans_champ',
+                                              'L\'action « {action} » ne prend aucun autre champ.', action=action))
         champs = champs_de_compte(self.config, demande) if action == 'modifier' else {}
         cible = trouver_compte(comptes_du_serveur(self.config), identifiant)
         if cible is None:
-            raise ErreurHttp(404, 'Compte introuvable : %s.' % identifiant[:LONGUEUR_MAX_IDENTIFIANT])
+            raise ErreurHttp(404, traduisible('comptes.introuvable',
+                                              'Compte introuvable : {identifiant}.',
+                                              identifiant=identifiant[:LONGUEUR_MAX_IDENTIFIANT]))
         reponse = {}
         try:
             if action == 'reinitialiser':
@@ -5066,7 +7166,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 compte = modifier_compte(self.config, cible['identifiant'], origine=self.origine(),
                                          actif=(action == 'activer'))
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         reponse['compte'] = compte
         self.envoyer_json(200, reponse)
 
@@ -5100,7 +7200,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps) if corps.strip() else {}
         inconnus = sorted(set(demande) - {'heures'})
         if inconnus:
-            raise ErreurHttp(400, 'Champ inconnu : « %s » (« heures » seulement).' % str(inconnus[0])[:60])
+            raise ErreurHttp(400, traduisible('appareils.champ_inconnu',
+                                              'Champ inconnu : « {champ} » (« heures » seulement).',
+                                              champ=str(inconnus[0])[:60]))
         jeton, invitation = creer_invitation(self.config, demande.get('heures'))
         adresse, agent, tailscale = self.origine()
         ecrire_journal_acces(self.config, self.session['identifiant'], adresse, agent, 'invitation', tailscale)
@@ -5147,7 +7249,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(403, MESSAGE_DISTANT_REFUSE)
         statut, octets = appeler_fournisseur(demande)
         if len(octets) > TAILLE_MAX_REPONSE_IA:
-            raise ErreurHttp(502, 'Réponse du fournisseur d\'IA trop grande (2 Mo au maximum).')
+            raise ErreurHttp(502, traduisible('ia.reponse_trop_grande',
+                                              'Réponse du fournisseur d\'IA trop grande (2 Mo au maximum).'))
         octets = sans_la_cle(octets, cle_ia(self.config.reglages))
         self.envoyer_json(200, {'statut': statut, 'corps': corps_lisible(octets)})
 
@@ -5171,17 +7274,35 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         with VERROU_ECRITURE:
             octets = lire_octets(chemin)
         if octets is None:
-            raise ErreurHttp(404, 'Le fichier %s.csv n\'existe pas encore.' % table)
+            raise ErreurHttp(404, traduisible('csv.absent',
+                                              'Le fichier {table}.csv n\'existe pas encore.', table=table))
         self.envoyer(200, filtrer_csv_pour(self.session, table, octets), 'text/csv; charset=utf-8',
                      {'X-Version': empreinte(octets)})
 
     def api_csv_ecrire(self, table, corps):
         version_attendue = self.headers.get('X-Version-Attendue')
         if not version_attendue:
-            raise ErreurHttp(400, 'En-tête X-Version-Attendue manquant.')
+            raise ErreurHttp(400, traduisible('csv.version_manquante', 'En-tête X-Version-Attendue manquant.'))
+        # T200 : « X-Prevo-Remplacer-Abime: 1 » (import ZIP) permet de remplacer un fichier abîmé ; aucun droit de plus.
+        # Avec les comptes, l'import ZIP est réservé au responsable (D172) : la dérogation aussi (403 sinon, rien écrit).
+        remplacer_abime = (self.headers.get(ENTETE_REMPLACER_ABIME) or '').strip() == '1'
+        if remplacer_abime and self.session is not None and role_effectif(self.session) != 'responsable':
+            raise ErreurHttp(403, traduisible('csv.remplacer_abime_reserve',
+                                              'Accès refusé : seul le responsable remplace un fichier abîmé (import '
+                                              'ZIP).'))
+        # T213 : « X-Prevo-Abime-Depuis: AAAA-MM-JJTHH:MM:SS », seulement avec la dérogation (400 sinon, rien écrit).
+        abime_depuis = self.headers.get(ENTETE_ABIME_DEPUIS)
+        if abime_depuis is not None:
+            abime_depuis = abime_depuis.strip()
+            if not remplacer_abime or not MOTIF_DATE_DEPUIS.fullmatch(abime_depuis):
+                raise ErreurHttp(400, traduisible('csv.entete_abime_depuis',
+                                                  'En-tête {entete} refusé : une date AAAA-MM-JJTHH:MM:SS, avec '
+                                                  '{derogation}: 1.',
+                                                  entete=ENTETE_ABIME_DEPUIS, derogation=ENTETE_REMPLACER_ABIME))
         with VERROU_ECRITURE:
             version = enregistrer_csv(self.config, table, corps, version_attendue.strip(),
-                                      controle_d_ecriture(self.session, table))
+                                      controle_d_ecriture(self.session, table), remplacer_abime=remplacer_abime,
+                                      abime_depuis=abime_depuis)
         self.envoyer_json(200, {'version': version})
 
     def api_ajout(self, table, corps):
@@ -5193,7 +7314,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         chemin = chemin_document(self.config, nom)          # 400 si nom refusé, 415 si type refusé
         octets = lire_octets(chemin)
         if octets is None:
-            raise ErreurHttp(404, 'Document introuvable : %s.' % nom)
+            raise ErreurHttp(404, traduisible('documents.introuvable', 'Document introuvable : {nom}.', nom=nom))
         # nosniff + sandbox : un document ne peut jamais s'exécuter comme une page. Hors images et PDF (audit F4) :
         # en téléchargement, jamais affiché dans la page (le nom ne contient que lettres, chiffres, « . », « _ », « - »).
         entetes = {'Content-Security-Policy': 'sandbox'}
@@ -5217,6 +7338,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         Manuelle (D133) : une par minute au plus (429 et Retry-After), les 60 dernières gardées ; une sauvegarde à
         motif n'est ni limitée ni comptée."""
         motif = lire_motif_sauvegarde(corps)            # 400 si motif refusé, avant toute écriture
+        # T187 : « avant-import-zip » copie aussi donnees/documents/ ; manifeste.json dans toute sauvegarde.
         suffixe = '_' + motif if motif else ''
         with VERROU_ECRITURE:
             if not motif:
@@ -5288,7 +7410,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         """{"situation": seul | equipe | informaticien} : brouillon réinitialisé aux défauts de cette situation."""
         situation = demande.get('situation')
         if situation not in SITUATIONS:
-            raise ErreurHttp(400, 'Situation inconnue : « seul », « equipe » ou « informaticien ».')
+            raise ErreurHttp(400, traduisible('installation.situation_inconnue',
+                                              'Situation inconnue : « seul », « equipe » ou « informaticien ».'))
         return self.garder_brouillon(brouillon_neuf(self.config, situation))
 
     # --- Paramètres › Accès et installation (T170 ; D131 dernier point, CS130) : chaque réglage refaisable -----
@@ -5301,8 +7424,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if brouillon is not None:
             return {'brouillon': brouillon, 'etapes': brouillon.get('etapes'), 'repris': False}
         if not self.config.reglages.get('_present'):
-            raise ErreurHttp(400, 'L\'installation n\'est pas terminée : réglez l\'accès par l\'assistant (%s).'
-                             % ROUTE_INSTALLATION)
+            raise ErreurHttp(400, traduisible('installation.non_terminee',
+                                              'L\'installation n\'est pas terminée : réglez l\'accès par '
+                                              'l\'assistant ({adresse}).', adresse=ROUTE_INSTALLATION))
         return dict(self.garder_brouillon(brouillon_depuis_configuration(self.config)), repris=True)
 
     def installation_reglages(self, brouillon, demande):
@@ -5310,10 +7434,13 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         "quota_documents_mo"?} (CLES_REGLAGES_SIMPLES, une au moins) : chaque valeur contrôlée comme dans le fichier
         (bornes de CLES_CONFIGURATION ; 400 au message, qui cite les bornes) ; toute autre clé 400."""
         if not demande:
-            raise ErreurHttp(400, 'Aucun réglage reçu : %s.' % ', '.join(CLES_REGLAGES_SIMPLES))
+            raise ErreurHttp(400, traduisible('installation.aucun_reglage',
+                                              'Aucun réglage reçu : {cles}.', cles=', '.join(CLES_REGLAGES_SIMPLES)))
         for cle, valeur in demande.items():
             if cle not in CLES_REGLAGES_SIMPLES:
-                raise ErreurHttp(400, 'Réglage inconnu « %s » : %s.' % (cle, ', '.join(CLES_REGLAGES_SIMPLES)))
+                raise ErreurHttp(400, traduisible('installation.reglage_inconnu',
+                                                  'Réglage inconnu « {cle} » : {cles}.',
+                                                  cle=cle, cles=', '.join(CLES_REGLAGES_SIMPLES)))
             brouillon[cle] = valeur_du_brouillon(cle, valeur)
         return self.garder_brouillon(brouillon)
 
@@ -5322,14 +7449,18 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         d'IA côté serveur (§22.12). La clé ne passe jamais par l'API (400 si elle est envoyée) : ia_cle du fichier ou
         PREVO_IA_CLE, comme à T158 ; la réponse dit seulement si une clé est réglée."""
         if not demande:
-            raise ErreurHttp(400, 'Aucun réglage reçu : fournisseur, url, en_ligne.')
+            raise ErreurHttp(400, traduisible('installation.ia_aucun_reglage',
+                                              'Aucun réglage reçu : fournisseur, url, en_ligne.'))
         for nom, valeur in demande.items():
             if nom not in CLES_IA_DU_CORPS:
-                raise ErreurHttp(400, 'Réglage inconnu « %s » : fournisseur, url, en_ligne. La clé se règle dans le fichier '
-                                      'de configuration (ia_cle) ou par PREVO_IA_CLE, jamais par l\'API.' % nom)
+                raise ErreurHttp(400, traduisible('installation.ia_reglage_inconnu',
+                                                  'Réglage inconnu « {cle} » : fournisseur, url, en_ligne. La clé '
+                                                  'se règle dans le fichier de configuration (ia_cle) ou par '
+                                                  'PREVO_IA_CLE, jamais par l\'API.', cle=nom))
             brouillon[CLES_IA_DU_CORPS[nom]] = valeur_du_brouillon(CLES_IA_DU_CORPS[nom], valeur)
         if not brouillon.get('ia_url'):
-            raise ErreurHttp(400, 'Donnez l\'adresse du service d\'IA (« url »).')
+            raise ErreurHttp(400, traduisible('installation.ia_adresse',
+                                              'Donnez l\'adresse du service d\'IA (« url »).'))
         return dict(self.garder_brouillon(brouillon), cle_reglee=bool(cle_ia(self.config.reglages)))
 
     def installation_annuler(self, brouillon, demande):
@@ -5342,12 +7473,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         aucun mandataire ; au-delà ⇒ comptes exigés ; ports et noms contrôlés comme dans le fichier (400 sinon)."""
         portee = demande.get('portee')
         if portee not in PORTEES:
-            raise ErreurHttp(400, 'Portée inconnue : « ce-pc », « atelier » ou « dehors ».')
+            raise ErreurHttp(400, traduisible('installation.portee_inconnue',
+                                              'Portée inconnue : « ce-pc », « atelier » ou « dehors ».'))
         for cle in ('port_http', 'port_https', 'noms'):
             if cle in demande:
                 brouillon[cle] = valeur_du_brouillon(cle, demande[cle])
         if brouillon['port_http'] == brouillon['port_https']:
-            raise ErreurHttp(400, 'Les ports http et https doivent être différents.')
+            raise ErreurHttp(400, traduisible('installation.ports_identiques',
+                                              'Les ports http et https doivent être différents.'))
         brouillon['portee'] = portee
         if portee == 'ce-pc':
             brouillon['comptes'] = False
@@ -5366,11 +7499,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         nom = demande.get('nom') if isinstance(demande.get('nom'), str) else ''
         prenom, nom = prenom.strip(), nom.strip()
         if not prenom:
-            raise ErreurHttp(400, 'Le prénom est obligatoire.')
+            raise ErreurHttp(400, traduisible('comptes.prenom_obligatoire', 'Le prénom est obligatoire.'))
         solo = bool(brouillon.get('mode_solo'))
+        if solo:
+            verifier_ecriture_permise(self.config)          # T185 : techniciens.csv serait écrit (lecture seule)
         if brouillon.get('portee') == 'ce-pc':
             if not solo:
-                raise ErreurHttp(400, 'Sur ce PC seulement, aucun compte n\'est nécessaire : passez cette étape.')
+                raise ErreurHttp(400, traduisible('installation.compte_inutile',
+                                                  'Sur ce PC seulement, aucun compte n\'est nécessaire : passez '
+                                                  'cette étape.'))
             with VERROU_ECRITURE:
                 technicien_id = technicien_moi(self.config, prenom, nom)
             brouillon['solo_technicien_id'] = technicien_id
@@ -5379,12 +7516,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         existant = next((c for c in comptes_du_serveur(self.config) if c.get('role') == 'responsable' and c.get('actif')),
                         None)
         if existant is not None:
-            raise ErreurHttp(409, 'Un compte responsable existe déjà (« %s ») : passez cette étape, ou réinitialisez '
-                                  'son mot de passe par %s.' % (existant['identifiant'], NOM_SCRIPT_REINITIALISATION))
+            raise ErreurHttp(409, traduisible('installation.responsable_existe',
+                                              'Un compte responsable existe déjà (« {identifiant} ») : passez cette '
+                                              'étape, ou réinitialisez son mot de passe par {script}.',
+                                              identifiant=existant['identifiant'], script=NOM_SCRIPT_REINITIALISATION))
         try:
             verifier_mot_de_passe_choisi(demande.get('mot_de_passe'))
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         technicien_id = ''
         if solo:
             with VERROU_ECRITURE:
@@ -5393,7 +7532,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             compte = creer_compte(self.config, prenom, nom, 'responsable', demande['mot_de_passe'],
                                   technicien_id=technicien_id, origine=self.origine())
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         brouillon['solo_technicien_id'] = technicien_id
         reponse = self.garder_brouillon(brouillon, 'compte')
         return dict(reponse, compte=compte, technicien_id=technicien_id)
@@ -5405,39 +7544,49 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         https (mandataire sur ce PC) ; mandataire ⇒ noms obligatoires. Rend ce que la fiche d'accès montrera."""
         mode = demande.get('mode')
         if mode not in MODES_CERTIFICAT:
-            raise ErreurHttp(400, 'Mode inconnu : « automatique », « reseau_prive », « fichiers » ou « mandataire ».')
+            raise ErreurHttp(400, traduisible('installation.certificat_mode_inconnu',
+                                              'Mode inconnu : « automatique », « reseau_prive », « fichiers » ou '
+                                              '« mandataire ».'))
         if brouillon.get('portee') == 'ce-pc':
-            raise ErreurHttp(400, 'Sur ce PC seulement, Prévo reste en http : aucun certificat à préparer.')
+            raise ErreurHttp(400, traduisible('installation.certificat_inutile',
+                                              'Sur ce PC seulement, Prévo reste en http : aucun certificat à '
+                                              'préparer.'))
         noms_certificat = []
         if mode == 'automatique':
             try:
                 executable = executable_mkcert()
             except ErreurConfiguration as erreur:
-                raise ErreurHttp(503, 'Certificat automatique impossible : %s Remettez mkcert dans le dossier '
-                                      'outils-tiers/ (il est dans le zip de Prévo), ou choisissez le réseau privé ou vos '
-                                      'propres fichiers.' % erreur)
+                raise ErreurHttp(503, traduisible('installation.certificat_sans_mkcert',
+                                                  'Certificat automatique impossible : {erreur} Remettez mkcert '
+                                                  'dans le dossier outils-tiers/ (il est dans le zip de Prévo), ou '
+                                                  'choisissez le réseau privé ou vos propres fichiers.',
+                                                  erreur=traduisible_de(erreur)))
             try:
                 _, _, noms_certificat = preparer_certificat_local(self.config, executable,
                                                                   noms_acceptes=brouillon.get('noms', []))
             except ErreurConfiguration as erreur:
-                raise ErreurHttp(503, 'Certificat automatique impossible : %s' % erreur)
+                raise ErreurHttp(503, traduisible('installation.certificat_impossible',
+                                                  'Certificat automatique impossible : {erreur}',
+                                                  erreur=traduisible_de(erreur)))
             brouillon.update(certificat_auto=True, certificat='', cle='')
         elif mode == 'fichiers':
             certificat, cle = demande.get('certificat'), demande.get('cle')
             if not (isinstance(certificat, str) and certificat.strip() and isinstance(cle, str) and cle.strip()):
-                raise ErreurHttp(400, 'Donnez les deux fichiers PEM : « certificat » et « cle ».')
+                raise ErreurHttp(400, traduisible('installation.certificat_fichiers',
+                                                  'Donnez les deux fichiers PEM : « certificat » et « cle ».'))
             certificat, cle = os.path.abspath(certificat.strip()), os.path.abspath(cle.strip())
             try:
                 creer_contexte_ssl(certificat, cle)
             except SystemExit as erreur:
-                raise ErreurHttp(400, str(erreur))
+                raise ErreurHttp(400, traduisible_de(erreur))
             brouillon.update(certificat=certificat, cle=cle, certificat_auto=False, mandataire=False)
         elif mode == 'reseau_prive':
             brouillon.update(certificat_auto=False, certificat='', cle='', mandataire=True)
         else:
             noms = valeur_du_brouillon('noms', demande['noms']) if 'noms' in demande else brouillon.get('noms', [])
             if not noms:
-                raise ErreurHttp(400, 'Donnez le nom par lequel le mandataire appelle Prévo (« noms »).')
+                raise ErreurHttp(400, traduisible('installation.mandataire_noms',
+                                                  'Donnez le nom par lequel le mandataire appelle Prévo (« noms »).'))
             brouillon.update(noms=noms, certificat_auto=False, certificat='', cle='', mandataire=True)
         reponse = self.garder_brouillon(brouillon, 'certificat')
         return dict(reponse, mode=mode, noms_certificat=noms_certificat,
@@ -5450,7 +7599,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         (503 si refusé) ; plus tard ⇒ rien, étape à faire. Jamais « up », jamais d'installation (T165)."""
         action = demande.get('action')
         if action not in ACTIONS_TAILSCALE:
-            raise ErreurHttp(400, 'Action inconnue : « detecter », « appliquer », « unattended » ou « plus_tard ».')
+            raise ErreurHttp(400, traduisible('installation.tailscale_action_inconnue',
+                                              'Action inconnue : « detecter », « appliquer », « unattended » ou '
+                                              '« plus_tard ».'))
         if action == 'detecter':
             detection = detecter_tailscale(maintenant=maintenant_s(self.config))
             proposition = preparer_tailscale(self.config, detection, systeme=self.config.systeme, reglages=brouillon)
@@ -5479,13 +7630,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         rien n'était à lancer ou si le script a réussi ; à faire si l'élévation a été refusée (repli proposé)."""
         demarrage = demande.get('demarrage')
         if demarrage not in ('systeme', 'session', 'aucun'):
-            raise ErreurHttp(400, 'Démarrage inconnu : « systeme », « session » ou « aucun ».')
+            raise ErreurHttp(400, traduisible('installation.demarrage_inconnu',
+                                              'Démarrage inconnu : « systeme », « session » ou « aucun ».'))
         veille = demande.get('veille_desactivee', False)
         if not isinstance(veille, bool):
-            raise ErreurHttp(400, '« veille_desactivee » : vrai ou faux attendu.')
+            raise ErreurHttp(400, traduisible('installation.veille_booleen',
+                                              '« veille_desactivee » : vrai ou faux attendu.'))
         retirer = demande.get('retirer', False)
         if not isinstance(retirer, bool):
-            raise ErreurHttp(400, '« retirer » : vrai ou faux attendu.')
+            raise ErreurHttp(400, traduisible('installation.retirer_booleen', '« retirer » : vrai ou faux attendu.'))
         retirer = retirer and demarrage == 'aucun'
         brouillon.update(demarrage=demarrage, veille_desactivee=veille)
         mkcert = None
@@ -5523,7 +7676,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         dans les données (400 sinon) ; brouillon copie_sauvegardes."""
         dossier = demande.get('dossier', '')
         if not isinstance(dossier, str):
-            raise ErreurHttp(400, '« dossier » : un chemin (texte) est attendu, vide pour plus tard.')
+            raise ErreurHttp(400, traduisible('installation.sauvegardes_dossier',
+                                              '« dossier » : un chemin (texte) est attendu, vide pour plus tard.'))
         brouillon['copie_sauvegardes'] = verifier_dossier_de_copie(self.config, dossier) if dossier.strip() else ''
         return self.garder_brouillon(brouillon, 'sauvegardes')
 
@@ -5534,7 +7688,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         supprimé. Rend {copie, vers, relance}. {"rester": true} (« Rester ici ») : refus mémorisé dans le brouillon
         (deplacement_refuse), l'étape reste à faire et l'écran ne la propose plus."""
         if not self.config.systeme.startswith('win'):
-            raise ErreurHttp(400, 'Le déplacement vers %s n\'existe que sous Windows.' % DOSSIER_CONSEILLE_WINDOWS)
+            raise ErreurHttp(400, traduisible('installation.deplacement_windows',
+                                              'Le déplacement vers {dossier} n\'existe que sous Windows.',
+                                              dossier=DOSSIER_CONSEILLE_WINDOWS))
         if demande.get('rester') is True:
             brouillon['deplacement_refuse'] = True
             return self.garder_brouillon(brouillon, 'deplacer', ETAT_A_FAIRE)
@@ -5542,7 +7698,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if not isinstance(vers, str) or not vers.strip():
             vers = DOSSIER_CONSEILLE_WINDOWS
         if not os.path.isabs(vers.strip()):
-            raise ErreurHttp(400, 'Donnez un chemin complet (par exemple %s).' % DOSSIER_CONSEILLE_WINDOWS)
+            raise ErreurHttp(400, traduisible('deplacement.chemin_complet',
+                                              'Donnez un chemin complet (par exemple {exemple}).',
+                                              exemple=DOSSIER_CONSEILLE_WINDOWS))
         brouillon.pop('deplacement_refuse', None)
         self.garder_brouillon(brouillon, 'deplacer')          # noté avant la copie : le brouillon copié le sait
         try:
@@ -5553,33 +7711,51 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         return dict(resultat, etapes=brouillon['etapes'])
 
     def installation_terminer(self, brouillon, demande):
-        """{"base": "vide" | "demo"} (défaut vide ; demo seulement sur une base absente au départ, 400 sinon : les CSV
-        existants ne sont jamais remplacés). Règles de portée sur le brouillon (400 au message : comptes sans
+        """{"base": "vide" | "demo", "langue_defaut": code} (base : défaut vide ; demo seulement sur une base absente au
+        départ, 400 sinon : les CSV existants ne sont jamais remplacés ; langue_defaut : une langue déclarée par
+        js/i18n/langues.js, 400 sinon, défaut fr, T296). Règles de portée sur le brouillon (400 au message : comptes sans
         responsable, réseau sans https…), jeu de démo écrit s'il est demandé (installer_jeu_de_demo), puis
         prevo.config.json écrit (seulement ici : ecrire_configuration, ou modifier_configuration s'il existe déjà,
-        les clés inconnues gardées) ; Solo ⇒ mode_solo dans parametres.csv (les autres lignes gardées) ; brouillon
+        les clés inconnues gardées) ; Solo ⇒ mode_solo dans parametres.csv, base absente au départ ⇒ langue_defaut
+        (les autres lignes gardées ; une base présente au départ n'a jamais sa langue changée ici) ; brouillon
         supprimé ; puis le serveur se relance avec la configuration (config.relancer). Rend {configuration, fichier,
         relance, base}."""
         base = demande.get('base', 'vide')
         if base not in BASES_AU_DEPART:
-            raise ErreurHttp(400, 'Base de départ inconnue : « vide » ou « demo ».')
-        if base == 'demo' and brouillon.get('base_presente', True):
-            raise ErreurHttp(400, 'Des fichiers de données sont déjà là : la démonstration ne remplace jamais une base '
-                                  'existante. Terminez avec « vide » (vos fichiers sont gardés).')
+            raise ErreurHttp(400, traduisible('installation.base_inconnue',
+                                              'Base de départ inconnue : « vide » ou « demo ».'))
+        langue = demande.get('langue_defaut', LANGUE_PAR_DEFAUT)
+        declarees = langues_declarees()
+        if not isinstance(langue, str) or langue not in declarees:
+            raise ErreurHttp(400, traduisible('installation.langue_inconnue',
+                                              'Langue de Prévo inconnue : une langue déclarée est attendue '
+                                              '({langues}).', langues=declarees))
+        base_neuve = not brouillon.get('base_presente', True)
+        if base == 'demo' and not base_neuve:
+            raise ErreurHttp(400, traduisible('installation.demo_sur_donnees',
+                                              'Des fichiers de données sont déjà là : la démonstration ne remplace '
+                                              'jamais une base existante. Terminez avec « vide » (vos fichiers sont '
+                                              'gardés).'))
+        if base == 'demo' or brouillon.get('mode_solo') or base_neuve:
+            verifier_ecriture_permise(self.config)          # T185 : tables écrites (lecture seule), avant la config
         reglages = reglages_par_defaut()
         reglages.update({cle: brouillon[cle] for cle in CLES_DU_BROUILLON if cle in brouillon})
         reglages['ecoute'] = ecoute_du_brouillon(brouillon)
         reglages['_https_auto'] = bool(reglages['certificat_auto']) and not reglages['certificat']
         responsable = responsable_actif_existe(self.config)
         if reglages['comptes'] and not responsable:
-            raise ErreurHttp(400, 'Aucun compte responsable : créez-le (étape « compte ») avant de terminer.')
+            raise ErreurHttp(400, traduisible('installation.sans_responsable',
+                                              'Aucun compte responsable : créez-le (étape « compte ») avant de '
+                                              'terminer.'))
         try:
             verifier_regles_portee(dict(reglages), responsable)
         except ErreurConfiguration as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         if reglages['ecoute'] != '127.0.0.1' and reglages['_https_auto'] and not mkcert_disponible():
-            raise ErreurHttp(400, 'Certificat automatique impossible sans mkcert (outils-tiers/) : Prévo refuserait de '
-                                  'démarrer sur le réseau. Faites l\'étape « certificat » autrement.')
+            raise ErreurHttp(400, traduisible('installation.certificat_auto_sans_mkcert',
+                                              'Certificat automatique impossible sans mkcert (outils-tiers/) : '
+                                              'Prévo refuserait de démarrer sur le réseau. Faites l\'étape '
+                                              '« certificat » autrement.'))
         chemin = self.config.reglages.get('_fichier') or os.path.join(self.config.dossier_application,
                                                                       NOM_FICHIER_CONFIGURATION)
         a_ecrire = {cle: reglages[cle] for cle in CLES_DU_BROUILLON}
@@ -5592,10 +7768,16 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             else:
                 ecrire_configuration(chemin, reglages)
         except (OSError, ValueError) as erreur:
-            raise ErreurHttp(500, 'Configuration non écrite (%s) : rien n\'a changé.' % erreur)
-        if brouillon.get('mode_solo'):
+            raise ErreurHttp(500, traduisible('installation.configuration_non_ecrite',
+                                              'Configuration non écrite ({erreur}) : rien n\'a changé.',
+                                              erreur=erreur))
+        # Après le jeu de démo (il change solo_technicien_id) : Solo, et la langue de la base neuve (T296).
+        a_poser = valeurs_du_mode_solo(brouillon.get('solo_technicien_id', '')) if brouillon.get('mode_solo') else {}
+        if base_neuve:
+            a_poser['langue_defaut'] = langue
+        if a_poser:
             with VERROU_ECRITURE:
-                poser_mode_solo(self.config, brouillon.get('solo_technicien_id', ''))
+                poser_parametres(self.config, a_poser)
         supprimer_brouillon(self.config)
         relance = bool(self.config.relancer(None))
         return {'configuration': a_ecrire, 'fichier': chemin, 'relance': relance, 'base': base}
@@ -5603,31 +7785,33 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     # --- Fichiers statiques ------------------------------------------------
 
     def servir_statique(self, morceaux, entetes=None):
-        """Sert un fichier de la liste blanche (index.html, favicon.svg, GUIDE.html, css/, js/, acces/ ;
+        """Sert un fichier de la liste blanche (index.html, favicon.svg, GUIDE.html, GUIDE.en.html, css/, js/, acces/ ;
         tests/fixtures/ avec --servir-tests) et /acces/ca.crt (certificat public de l'autorité, §22.6). Jamais
         donnees/ ni les fichiers cachés. « entetes » : ceux de la porte ; sinon ceux de l'application."""
         if morceaux == ['']:
             morceaux = ['index.html']
         if morceaux[0].lower() == 'donnees':
-            raise ErreurHttp(403, 'Accès refusé.')
+            raise ErreurHttp(403, traduisible('statique.acces_refuse', 'Accès refusé.'))
         if [morceau.lower() for morceau in morceaux] == CHEMIN_CERTIFICAT_AUTORITE:
             self.servir_certificat_autorite()
             return
         servir_tests = self.config.servir_tests
         # Hors liste blanche : même réponse qu'un fichier absent (on ne dit pas qu'il existe).
         if not chemin_public(morceaux, servir_tests):
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
         chemin = chemin_sous(DOSSIER_APPLICATION, *morceaux)
         if not chemin_public(morceaux_resolus(chemin, DOSSIER_APPLICATION), servir_tests):
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
         for dossier_interdit in self.config.dossiers_interdits_statique:
             if est_sous_dossier(chemin, dossier_interdit):
-                raise ErreurHttp(403, 'Accès refusé.')
+                raise ErreurHttp(403, traduisible('statique.acces_refuse', 'Accès refusé.'))
         if not os.path.isfile(chemin):
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
         octets = lire_octets(chemin)
         if octets is None:
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
+        if [morceau.lower() for morceau in morceaux] == PAGE_APPLICATION:
+            octets = poser_langue_de_l_installation(octets, langue_de_l_installation(self.config))     # T297
         if entetes is None:
             entetes = None if morceaux[0].lower() == 'tests' else self.entetes_securite()
         self.envoyer(200, octets, TYPES_STATIQUES.get(extension(chemin), TYPE_PAR_DEFAUT), entetes)
@@ -5668,7 +7852,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             pass
 
     def envoyer_json(self, statut, donnees, entetes_supplementaires=None):
-        octets = json.dumps(donnees, ensure_ascii=False).encode('utf-8')
+        octets = json.dumps(avec_codes(donnees), ensure_ascii=False).encode('utf-8')     # D157 : codes des messages
         self.envoyer(statut, octets, 'application/json; charset=utf-8', entetes_supplementaires)
 
     def envoyer_erreur(self, erreur):
@@ -5766,12 +7950,14 @@ def ouvrir_ecouteur(port_demande, config, porte=False):
     for port in range(port_demande, port_maximum + 1):
         try:
             if config.ecoute != '0.0.0.0' and port_pris_ailleurs(port):
-                raise OSError('port %d déjà utilisé par un autre programme' % port)
+                raise OSError(traduisible('console.port.deja_utilise', 'port {port} déjà utilisé par un autre '
+                                          'programme', port=port))
             return ServeurPrevo((config.ecoute, port), config, porte), port
         except OSError as erreur:
             derniere_erreur = erreur
-    raise SystemExit('Impossible d\'ouvrir un port entre %d et %d (%s).'
-                     % (port_demande, port_maximum, derniere_erreur))
+    raise SystemExit(texte_de_la_console(traduisible(
+        'console.port.aucun_libre', 'Impossible d\'ouvrir un port entre {premier} et {dernier} ({erreur}).',
+        premier=port_demande, dernier=port_maximum, erreur=traduisible_de(derniere_erreur))))
 
 
 def demarrer_serveur(port_demande, config):
@@ -5783,7 +7969,8 @@ def demarrer_serveur(port_demande, config):
         serveur, port = ouvrir_ecouteur(port_demande, config)
         return [serveur], port
     if config.contexte_ssl is None:
-        raise SystemExit('Prévo n\'écoute pas sur le réseau sans https (certificat absent).')
+        raise SystemExit(texte_de_la_console(traduisible(
+            'console.reseau_sans_certificat', 'Prévo n\'écoute pas sur le réseau sans https (certificat absent).')))
     porte, port = ouvrir_ecouteur(port_demande, config, porte=True)
     try:
         application, config.port_https = ouvrir_ecouteur(config.reglages['port_https'], config)
@@ -5795,47 +7982,63 @@ def demarrer_serveur(port_demande, config):
 
 
 def afficher_accueil(config, port_demande, avertissements=()):
-    afficher('%s %s - serveur local de GMAO' % (NOM_APPLICATION, VERSION_APPLICATION))
+    """Console du démarrage, dans la langue de la console (T297) : une ligne par traduisible, libellés alignés."""
+    afficher(traduisible('console.accueil.titre', '{application} {version} - serveur local de GMAO',
+                         application=NOM_APPLICATION, version=VERSION_APPLICATION))
     if config.port != port_demande:
-        afficher('  Le port %d est occupé : port %d utilisé.' % (port_demande, config.port))
-    afficher('  Sur ce PC        : %s' % config.adresse_locale())
+        afficher(traduisible('console.accueil.port_occupe', '  Le port {demande} est occupé : port {port} utilisé.',
+                             demande=port_demande, port=config.port))
+    afficher(traduisible('console.accueil.sur_ce_pc', '  Sur ce PC        : {adresse}', adresse=config.adresse_locale()))
     adresses = [] if config.ce_pc_seulement else config.adresses_reseau()
     if adresses:
         for adresse in adresses:
-            afficher('  Sur le réseau    : %s   (téléphones, tablettes)' % adresse)
+            afficher(traduisible('console.accueil.sur_le_reseau', '  Sur le réseau    : {adresse}   (téléphones, '
+                                 'tablettes)', adresse=adresse))
     elif not config.ce_pc_seulement:
-        afficher('  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)')
-    afficher('  Données          : %s' % config.dossier_donnees)
+        afficher(traduisible('console.accueil.sans_adresse_reseau',
+                             '  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)'))
+    afficher(traduisible('console.accueil.donnees', '  Données          : {dossier}', dossier=config.dossier_donnees))
     if not config.reglages.get('_present'):
-        afficher('  Installation     : pas encore faite ; l\'assistant est sur %s%s (sur ce PC seulement).'
-                 % (config.adresse_locale(), ROUTE_INSTALLATION))
+        afficher(traduisible('console.accueil.installation_a_faire',
+                             '  Installation     : pas encore faite ; l\'assistant est sur {adresse}{route} (sur ce PC '
+                             'seulement).', adresse=config.adresse_locale(), route=ROUTE_INSTALLATION))
     elif config.reglages.get('comptes') and aucun_responsable_sur(config):
-        afficher('  Installation     : aucun compte responsable ; créez-le avec l\'assistant sur %s%s (sur ce PC '
-                 'seulement).' % (config.adresse_locale(), ROUTE_INSTALLATION))
+        afficher(traduisible('console.accueil.installation_sans_responsable',
+                             '  Installation     : aucun compte responsable ; créez-le avec l\'assistant sur '
+                             '{adresse}{route} (sur ce PC seulement).', adresse=config.adresse_locale(),
+                             route=ROUTE_INSTALLATION))
     if config.ecoute == '127.0.0.1':
-        afficher('  Écoute           : ce PC seulement (127.0.0.1) ; les autres appareils ne joignent pas Prévo.')
+        afficher(traduisible('console.accueil.ecoute_ce_pc', '  Écoute           : ce PC seulement (127.0.0.1) ; les '
+                             'autres appareils ne joignent pas Prévo.'))
     else:
-        afficher('  Écoute           : le réseau (%s), comptes exigés.' % config.ecoute)
+        afficher(traduisible('console.accueil.ecoute_reseau', '  Écoute           : le réseau ({ecoute}), comptes '
+                             'exigés.', ecoute=config.ecoute))
     if config.porte:
         # Jamais l'adresse https elle-même (CS137) : les téléphones passent par la porte, qui les y conduit.
-        afficher('  Application      : en https sur le port %d ; l\'adresse ci-dessus (la porte) y conduit les '
-                 'téléphones%s.' % (config.port_https, ' avec le certificat fabriqué par Prévo'
-                                     if config.reglages.get('_https_auto') else ''))
-    afficher('  Assistant IA     : %s' % resume_ia(config))
+        if config.reglages.get('_https_auto'):
+            afficher(traduisible('console.accueil.application_certificat_prevo',
+                                 '  Application      : en https sur le port {port} ; l\'adresse ci-dessus (la porte) y '
+                                 'conduit les téléphones avec le certificat fabriqué par Prévo.', port=config.port_https))
+        else:
+            afficher(traduisible('console.accueil.application',
+                                 '  Application      : en https sur le port {port} ; l\'adresse ci-dessus (la porte) y '
+                                 'conduit les téléphones.', port=config.port_https))
+    afficher(traduisible('console.accueil.assistant_ia', '  Assistant IA     : {resume}', resume=resume_ia(config)))
     if dossier_copie_externe(config):
-        afficher('  Copie externe    : %s (chaque nuit, %d copies gardées)'
-                 % (dossier_copie_externe(config), COPIES_EXTERNES_GARDEES))
+        afficher(traduisible('console.accueil.copie_externe', '  Copie externe    : {dossier} (chaque nuit, {copies} '
+                             'copies gardées)', dossier=dossier_copie_externe(config), copies=COPIES_EXTERNES_GARDEES))
     if config.tailscale is not None:
-        afficher('  Tailscale        : %s' % resume_tailscale(config.tailscale))
+        afficher(traduisible('console.accueil.tailscale', '  Tailscale        : {resume}',
+                             resume=resume_tailscale(config.tailscale)))
     for avertissement in avertissements:
-        afficher('  ' + avertissement)
-    afficher('  Ctrl+C pour arrêter.')
+        afficher(traduisible('console.accueil.avertissement', '  {avertissement}', avertissement=avertissement))
+    afficher(traduisible('console.accueil.arreter', '  Ctrl+C pour arrêter.'))
 
 
 def lire_arguments(arguments=None):
     analyseur = argparse.ArgumentParser(
         description='Serveur local de la GMAO Prévo. Sert index.html, favicon.svg, '
-                    'GUIDE.html, css/, js/ et acces/ (la porte d\'entrée) ; tout autre fichier répond 404.')
+                    'GUIDE.html, GUIDE.en.html, css/, js/ et acces/ (la porte d\'entrée) ; tout autre fichier répond 404.')
     analyseur.add_argument('--port', type=int, default=None,
                            help='port d\'écoute (défaut 8080 ; le suivant si occupé) ; sur le réseau, celui de la '
                                 'porte d\'entrée, l\'application étant en https sur « port_https » (8443)')
@@ -5918,15 +8121,21 @@ def reinitialiser_en_ligne_de_commande(config, identifiant):
     try:
         provisoire = reinitialiser_compte(config, identifiant)
     except (ErreurCompte, OSError, ValueError) as erreur:
-        afficher('Réinitialisation impossible : %s' % erreur)
+        afficher(traduisible('console.reinitialiser.impossible', 'Réinitialisation impossible : {erreur}',
+                             erreur=traduisible_de(erreur)))
         sys.exit(1)
-    afficher('Mot de passe provisoire de « %s » : %s' % (identifiant.strip().lower(), provisoire))
-    afficher('Notez-le : il ne sera plus affiché. Il faudra le changer à la première connexion.')
+    compte = trouver_compte(lire_comptes(config), identifiant)        # T301 : l'identifiant réel du compte
+    afficher(traduisible('console.reinitialiser.provisoire', 'Mot de passe provisoire de « {identifiant} » : '
+                         '{provisoire}', identifiant=compte['identifiant'] if compte else identifiant,
+                         provisoire=provisoire))
+    afficher(traduisible('console.reinitialiser.notez', 'Notez-le : il ne sera plus affiché. Il faudra le changer à la '
+                         'première connexion.'))
 
 
 def main(arguments=None):
     global JOURNAL_SERVEUR
     preparer_console()
+    choisir_langue_console()                # T297 : avant la configuration, la langue du système
     options = lire_arguments(arguments)
     if options.aide:
         afficher(texte_aide_configuration())
@@ -5936,6 +8145,7 @@ def main(arguments=None):
         config = Configuration(options.donnees, reglages['noms'], options.servir_tests)
         config.reglages = reglages
         creer_dossiers(config)
+        choisir_langue_console(config)      # T297 : langue_defaut de parametres.csv, sinon celle du système
         if options.journal or sys.stdout is None:
             JOURNAL_SERVEUR = JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log'))
         if options.reinitialiser:
@@ -5946,10 +8156,15 @@ def main(arguments=None):
         # Hors de « ce PC » : certificat de la configuration, sinon fabriqué par mkcert ; refus (code 2) sans lui.
         certificat, cle = certificat_du_serveur(config, reglages)
     except ErreurConfiguration as erreur:
-        afficher('Démarrage refusé. %s' % erreur)
+        afficher(traduisible('console.demarrage_refuse', 'Démarrage refusé. {erreur}', erreur=traduisible_de(erreur)))
         sys.exit(CODE_SORTIE_REGLES)
     if certificat:
         config.contexte_ssl = creer_contexte_ssl(certificat, cle)
+    # T185 (D168) : les données au format courant, après la sauvegarde « avant-format-vN », AVANT d'ouvrir les
+    # écouteurs (aucune connexion ne voit une base à moitié passée) ; avec ou sans configuration (assistant) ; données
+    # plus récentes : lecture seule (D169). T187 (D170) : la sauvegarde « avant-mise-a-jour » d'abord (nouvelle
+    # version de Prévo), la sauvegarde du jour ensuite (rotation à 30 jours).
+    preparer_donnees_au_demarrage(config)
     serveurs, config.port = demarrer_serveur(reglages['port_http'], config)
     if tailscale_attendu(reglages):
         detecter_tailscale_pour(config)         # §22.8 : commandes locales, une fois au démarrage (ligne de console)
@@ -5963,7 +8178,7 @@ def main(arguments=None):
     try:
         serveurs[-1].serve_forever()
     except KeyboardInterrupt:
-        afficher('Serveur arrêté.')
+        afficher(traduisible('console.serveur_arrete', 'Serveur arrêté.'))
     finally:
         for serveur in serveurs:
             serveur.server_close()

@@ -95,7 +95,7 @@ CLASSES_STATUT = {"Sûre": "ok", "À confirmer": "attention", "Non utilisée": "
 
 # Collage pour l'IA : la 4e colonne n'a aucun titre reconnu ; ses cellules ne doivent jamais partir.
 COLLAGE_IA = ("Raison sociale\tInterlocuteur\tTél\tPour commander\r\n"
-              "Hydraulique Durance\tNina Roux\t0490112233\tcommandes@hydraulique-durance.example\r\n"
+              "Hydraulique Durance\tNina Roux\t0465710009\tcommandes@hydraulique-durance.example\r\n"
               "Fluidalpes Services\tBruno Faure\t0465710002\tcommandes@fluidalpes-demo.example\r\n")
 
 

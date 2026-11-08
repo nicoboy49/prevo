@@ -27,10 +27,13 @@ import re
 import unittest
 import urllib.request
 
-from commun import RACINE, CasNavigateur, ServeurPrevo, url_fichier
+from commun import RACINE, CasNavigateur, ServeurPrevo, preregler_profil, url_fichier
 
 GUIDE = RACINE / "GUIDE.html"
+GUIDE_EN = RACINE / "GUIDE.en.html"          # Lot 6 (T338, D181) : le guide en anglais, même structure
+DOSSIER_CAPTURES_EN = RACINE / "docs" / "captures" / "en"
 README = RACINE / "README.md"
+README_FR = RACINE / "README.fr.md"          # Lot 6 : README.md en anglais (principal), README.fr.md en français
 DOSSIER_CAPTURES = RACINE / "docs" / "captures"
 CAPTURE_README = "docs/captures/accueil.png"
 BUDGET_CAPTURES = 1500000          # octets de texte base64, toutes images comprises (§17.8)
@@ -75,7 +78,7 @@ MENTIONS = [
     # Lot 7 (T177, D135, D138, CS134 I4, CS135, CS137) : l'assistant, la connexion, la porte, Tailscale, le
     # démarrage avec le PC, le mode Solo, la rubrique RGPD, l'annuaire.
     "C:\\Prevo", "python", "prevo.config.json", "Moi seul", "Une petite équipe", "Je suis l'informaticien de l'entreprise",
-    "Paramètres › Accès et installation", "docs/INSTALLATION.md", "Solo", "Atelier", "Intranet",
+    "Paramètres › Accès et installation", "docs/INSTALLATION.fr.md", "Solo", "Atelier", "Intranet",
     "Se connecter", "prenom.nom", "mot de passe provisoire", "Rester connecté sur cet appareil", "rester connecté",
     "12 caractères au moins", "Reinitialiser_mot_de_passe.bat", "Aucun courriel n'est envoyé",
     "Équipe › Accès", "Inviter un appareil", "Révoquer", "Journal des connexions",
@@ -160,9 +163,9 @@ class LecteurGuide(html.parser.HTMLParser):
             self._dans_titre[1] += donnees
 
 
-def lire_guide():
+def lire_guide(chemin=None):
     lecteur = LecteurGuide()
-    texte = GUIDE.read_text(encoding="utf-8")
+    texte = (chemin or GUIDE).read_text(encoding="utf-8")
     lecteur.feed(texte)
     lecteur.close()
     return texte, lecteur
@@ -299,23 +302,32 @@ class TestGuideSource(unittest.TestCase):
 
 class TestReadme(unittest.TestCase):
 
+    # Lot 6 : README.fr.md (capture française) et README.md (anglais, capture de Prévo en anglais, T338).
+    LECTURES = (
+        (README_FR, "docs/captures/accueil.png", "Pour qui, pourquoi", "## Essayer en 30 secondes", "(GUIDE.html)",
+         ("Assistant IA", "Dictée", "Ce poste", "thème clair", "https")),
+        (README, "docs/captures/en/accueil.png", "Who it is for, and why", "## Try it in 30 seconds", "(GUIDE.en.html)",
+         ("AI assistant", "Dictation", "This workstation", "light theme", "https")),
+    )
+
     def test_readme_capture_en_tete_et_renvois(self):
-        texte = README.read_text(encoding="utf-8")
-        image = re.search(r"!\[[^\]]+\]\((docs/captures/accueil\.png)\)", texte)
-        self.assertIsNotNone(image, "image Markdown de %s attendue" % CAPTURE_README)
-        self.assertTrue((RACINE / CAPTURE_README).is_file(), CAPTURE_README + " absent")
-        self.assertTrue((RACINE / CAPTURE_README).read_bytes().startswith(b"\x89PNG"))
-        # « Pour qui, pourquoi » (passe de lancement) précède la présentation : c'est l'introduction,
-        # la capture doit venir avant le premier vrai chapitre qui la suit.
-        chapitres = [m for m in re.finditer(r"^## (.*)$", texte, re.MULTILINE) if m.group(1) != "Pour qui, pourquoi"]
-        premier_titre = chapitres[0]
-        self.assertLess(image.start(), premier_titre.start(),
-                        "la capture doit être en tête, avant le premier chapitre (hors « Pour qui, pourquoi »)")
-        self.assertIn("## Essayer en 30 secondes", texte)
-        self.assertIn("(GUIDE.html)", texte)
-        self.assertIn("(FICHE_TECHNIQUE_CSV.md)", texte)
-        for fonction in ("Assistant IA", "Dictée", "Ce poste", "thème clair", "https"):
-            self.assertIn(fonction, texte)
+        for chemin, capture, introduction, essayer, guide, fonctions in self.LECTURES:
+            with self.subTest(readme=chemin.name):
+                texte = chemin.read_text(encoding="utf-8")
+                image = re.search(r"!\[[^\]]+\]\((%s)\)" % re.escape(capture), texte)
+                self.assertIsNotNone(image, "image Markdown de %s attendue" % capture)
+                self.assertTrue((RACINE / capture).is_file(), capture + " absent")
+                self.assertTrue((RACINE / capture).read_bytes().startswith(b"\x89PNG"))
+                # L'introduction (passe de lancement) précède la présentation : la capture doit venir avant le
+                # premier vrai chapitre qui la suit.
+                chapitres = [m for m in re.finditer(r"^## (.*)$", texte, re.MULTILINE) if m.group(1) != introduction]
+                self.assertLess(image.start(), chapitres[0].start(),
+                                "la capture doit être en tête, avant le premier chapitre (hors « %s »)" % introduction)
+                self.assertIn(essayer, texte)
+                self.assertIn(guide, texte)
+                self.assertIn("(FICHE_TECHNIQUE_CSV.md)", texte)
+                for fonction in fonctions:
+                    self.assertIn(fonction, texte)
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +340,62 @@ LIENS_CASSES_JS = """() => [...document.querySelectorAll('a[href^="#"]')]
 IMAGES_JS = """() => [...document.querySelectorAll('img[data-capture]')]
   .map((i) => [i.dataset.capture, i.complete && i.naturalWidth > 0])"""
 DEBORDEMENT_JS = "() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]"
+
+
+class TestGuideAnglais(unittest.TestCase):
+    """T338 (D181) : GUIDE.en.html, traduction de GUIDE.html : mêmes chapitres, mêmes ancres (l'aide à l'écran et
+    À propos y renvoient selon la langue, UI.adresseGuide), mêmes captures, prises sur Prévo en anglais
+    (py outils/generer_captures.py --langue en)."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not GUIDE_EN.is_file():
+            raise AssertionError("GUIDE.en.html est absent de la racine du projet")
+        cls.texte, cls.page = lire_guide(GUIDE_EN)
+        cls.texte_fr, cls.page_fr = lire_guide(GUIDE)
+
+    def test_langue_titre_et_autonomie(self):
+        self.assertIn('<html lang="en">', self.texte)
+        self.assertIn("<title>Prévo user guide</title>", self.texte)
+        self.assertEqual(self.page.scripts, 0)
+        self.assertEqual(self.page.ressources, [])
+        self.assertRegex(self.texte, r"@media print\b")
+
+    def test_meme_structure_que_le_guide_francais(self):
+        self.assertEqual(self.page.identifiants, self.page_fr.identifiants)
+        self.assertEqual(self.page.liens_internes, self.page_fr.liens_internes)
+        self.assertEqual(self.page.liens_sommaire, self.page_fr.liens_sommaire)
+        self.assertEqual(self.page.sections, self.page_fr.sections)
+        numeros = lambda page: [titre.split(" ")[0] for balise, titre in page.titres if balise in ("h2", "h3")]
+        self.assertEqual(numeros(self.page), numeros(self.page_fr))
+
+    def test_captures_anglaises_integrees_dans_le_budget(self):
+        self.assertEqual(sorted(image.get("data-capture") for image in self.page.captures), sorted(CAPTURES))
+        total = 0
+        for image in self.page.captures:
+            with self.subTest(capture=image["data-capture"]):
+                src = image.get("src") or ""
+                self.assertTrue(src.startswith(PREFIXE_JPEG), "src en data:image/jpeg;base64 attendu")
+                self.assertGreater(len(src), 1000, "capture vide")
+                self.assertNotEqual(src, next(i.get("src") for i in self.page_fr.captures
+                                              if i.get("data-capture") == image["data-capture"]),
+                                    "capture identique à celle du guide français")
+                self.assertTrue((image.get("alt") or "").strip(), "texte de remplacement (alt) manquant")
+                total += len(src)
+                fichier = DOSSIER_CAPTURES_EN / (image["data-capture"] + ".png")
+                self.assertTrue(fichier.is_file(), "%s absent : py outils/generer_captures.py --langue en" % fichier)
+        self.assertLessEqual(total, BUDGET_CAPTURES)
+
+    def test_typographie_anglaise_et_renvois(self):
+        # Texte affiché seulement : les commentaires et la feuille de style de l'en-tête restent ceux du guide français.
+        corps = re.sub(r"<!--.*?-->|<style\b.*?</style>", " ", self.texte, flags=re.DOTALL)
+        texte = texte_affiche(corps)
+        self.assertEqual(re.findall(r"\w\s[:;!?](?:\s|$)", texte), [], "espace avant une ponctuation (typographie française)")
+        self.assertNotIn('href="GUIDE.html', self.texte, "le guide anglais renvoie à lui-même, pas au français")
+        for attendu in ("qwen2.5:7b", "Lancer_GMAO.bat", "prevo.config.json", "docs/INSTALLATION.md", "Tailscale",
+                        "SELECTIS", "https://prevo.pro/version.json"):
+            with self.subTest(attendu=attendu):
+                self.assertIn(attendu, texte)
 
 
 class CasGuide(CasNavigateur):
@@ -374,6 +442,23 @@ class TestGuideNavigateur(CasGuide):
         pdf = self.page.pdf(format="A4")
         self.assertTrue(pdf.startswith(b"%PDF"), "PDF attendu")
         self.assertGreater(len(pdf), 100000, "PDF anormalement petit : %d octets" % len(pdf))
+
+    def test_guide_de_la_langue_ouvert_par_l_application(self):
+        # T338 : l'aide à l'écran et À propos ouvrent le guide de la langue active (anglais : GUIDE.en.html).
+        preregler_profil(self.contexte, "responsable", "Test")
+        self.page.add_init_script("try { localStorage.setItem('prevo.langue', 'en'); } catch (e) {}")
+        self.page.goto(url_fichier(RACINE / "index.html"))
+        self.page.click("#btn-demo")
+        self.page.wait_for_function("document.documentElement.dataset.etat === 'pret'")
+        self.assertEqual(self.page.evaluate("[I18n.langue, UI.adresseGuide()]"), ["en", "GUIDE.en.html"])
+        self.page.evaluate("location.hash = '#/apropos'")
+        self.page.wait_for_selector("#contenu a[href='GUIDE.en.html']")
+
+    def test_serveur_guide_anglais_servi(self):
+        with ServeurPrevo() as serveur:
+            with urllib.request.urlopen(serveur.url + "/GUIDE.en.html", timeout=10) as reponse:
+                self.assertEqual(reponse.status, 200)
+                self.assertEqual(reponse.read(), GUIDE_EN.read_bytes())
 
     def test_serveur_guide_servi_sans_requete_externe(self):
         with ServeurPrevo() as serveur:

@@ -30,7 +30,7 @@ Object.assign(Magasin, (() => {
   // ===========================================================================================
 
   function enCoursHtml(achats) {
-    return UI.html`${achats.map((achat) => UI.html`<span class="magasin-achat-en-cours">${achat.id} ${UI.badgeStatut(achat.statut)}
+    return UI.html`${achats.map((achat) => UI.html`<span class="magasin-achat-en-cours">${achat.id} ${UI.badgeValeur('achats', 'statut', achat.statut)}
       <span class="muted">${UI.nombreFr(achat.quantite)}</span></span> `)}`;
   }
 
@@ -38,7 +38,7 @@ Object.assign(Magasin, (() => {
   function boutonDemande(ligne) {
     if (!App.estResponsable() || ligne.enCours.some((achat) => achat.statut === 'demandée')) return '';
     return UI.html`<button type="button" class="btn btn-secondaire" data-action="demander-achat" data-article="${ligne.id}"
-      data-quantite="${String(ligne.quantiteProposee)}">Demander l'achat</button>`;
+      data-quantite="${String(ligne.quantiteProposee)}">${I18n.t('magasin.bouton_demande.demander_achat')}</button>`;
   }
 
   function afficherOngletACommander(panneau) {
@@ -49,27 +49,25 @@ Object.assign(Magasin, (() => {
       enCours: achatsEnCours(entree.article.id),
     }));
     const liste = listeAdaptative({
-      lignes, libelle: 'Articles à commander', vide: 'Aucun article à commander : tous les stocks sont au-dessus de leur point de commande.',
+      lignes, libelle: I18n.t('magasin.onglet_acommander.articles_commander'), vide: I18n.t('magasin.onglet_acommander.aucun_article_commander_tous'),
       colonnes: [
-        { cle: 'reference', libelle: 'Référence', rendu: (l) => lienArticle(l.article) },
-        { cle: 'designation', libelle: 'Désignation', rendu: (l) => UI.html`${l.designation}${l.article.critique === '1' ? UI.html` <span class="badge violet">Critique</span>` : ''}` },
-        { cle: 'stock', libelle: 'Stock', type: 'nombre', rendu: (l) => quantiteUnite(l.stock, l.article.unite) },
-        { cle: 'pointCommande', libelle: 'Point de commande', type: 'nombre', rendu: (l) => UI.nombreFr(l.pointCommande) },
-        { cle: 'quantiteProposee', libelle: 'Quantité proposée', type: 'nombre', rendu: (l) => UI.html`<b>${UI.nombreFr(l.quantiteProposee)}</b>` },
-        { cle: 'fournisseur', libelle: 'Fournisseur' },
-        { cle: 'achat', libelle: 'Achat', triable: false, rendu: (l) => UI.html`${enCoursHtml(l.enCours)}${boutonDemande(l)}` },
+        { cle: 'reference', libelle: I18n.t('commun.champ.reference'), rendu: (l) => lienArticle(l.article) },
+        { cle: 'designation', libelle: I18n.t('commun.champ.designation'), rendu: (l) => UI.html`${l.designation}${l.article.critique === '1' ? UI.html` <span class="badge violet">${I18n.t('magasin.onglet_acommander.critique')}</span>` : ''}` },
+        { cle: 'stock', libelle: I18n.t('magasin.onglet_acommander.stock'), type: 'nombre', rendu: (l) => quantiteUnite(l.stock, l.article.unite) },
+        { cle: 'pointCommande', libelle: I18n.t('magasin.onglet_acommander.point_commande'), type: 'nombre', rendu: (l) => UI.nombreFr(l.pointCommande) },
+        { cle: 'quantiteProposee', libelle: I18n.t('magasin.onglet_acommander.quantite_proposee'), type: 'nombre', rendu: (l) => UI.html`<b>${UI.nombreFr(l.quantiteProposee)}</b>` },
+        { cle: 'fournisseur', libelle: I18n.t('magasin.onglet_acommander.fournisseur') },
+        { cle: 'achat', libelle: I18n.t('magasin.onglet_acommander.achat'), triable: false, rendu: (l) => UI.html`${enCoursHtml(l.enCours)}${boutonDemande(l)}` },
       ],
       carte: (l) => UI.html`<div class="carte-ligne">
-        <div class="carte-tete">${lienArticle(l.article)}${l.article.critique === '1' ? UI.html`<span class="badge violet">Critique</span>` : ''}</div>
+        <div class="carte-tete">${lienArticle(l.article)}${l.article.critique === '1' ? UI.html`<span class="badge violet">${I18n.t('magasin.onglet_acommander.critique')}</span>` : ''}</div>
         <div class="carte-titre">${l.designation}</div>
-        <div class="carte-meta"><span>Stock : ${quantiteUnite(l.stock, l.article.unite)}</span><span>Point de commande : ${UI.nombreFr(l.pointCommande)}</span>
-          <span>Proposé : <b>${UI.nombreFr(l.quantiteProposee)}</b></span>${l.fournisseur ? UI.html`<span>${l.fournisseur}</span>` : ''}</div>
+        <div class="carte-meta">${I18n.html('magasin.onglet_acommander.stock_point_commande_propose', { quantiteUnite: quantiteUnite(l.stock, l.article.unite), pointCommande: UI.nombreFr(l.pointCommande), quantiteProposee: UI.nombreFr(l.quantiteProposee) })}${l.fournisseur ? UI.html`<span>${l.fournisseur}</span>` : ''}</div>
         ${l.enCours.length ? UI.html`<div class="carte-meta">${enCoursHtml(l.enCours)}</div>` : ''}
         ${boutonDemande(l) ? UI.html`<div class="actions">${boutonDemande(l)}</div>` : ''}</div>`,
     });
     UI.remplir(panneau, UI.html`
-      <p class="note magasin-intro">Articles actifs dont le stock est au point de commande ou en dessous (RG6). Quantité proposée :
-        la quantité à commander de l'article, sinon point de commande − stock + stock de sécurité.</p>
+      <p class="note magasin-intro">${I18n.t('magasin.onglet_acommander.articles_actifs_dont_stock')}</p>
       <div class="carte magasin-liste magasin-a-commander"></div>`);
     UI.$('.magasin-liste', panneau).appendChild(liste);
     surAction(panneau, {
@@ -86,17 +84,16 @@ Object.assign(Magasin, (() => {
       : ((Magasin.aCommander().find((entree) => entree.article.id === article.id) || {}).quantiteProposee
         || Donnees.nombre(article.qte_commande) || 1);
     const champs = [
-      UI.champ(definitionChamp('achats', 'quantite', { libelle: 'Quantité à commander' + (article.unite ? ' (' + article.unite + ')' : '') }),
+      UI.champ(definitionChamp('achats', 'quantite', { libelle: article.unite ? I18n.t('magasin.ouvrir_demande_achat.quantite_commander', { unite: article.unite }) : I18n.t('magasin.ouvrir_demande_achat.quantite_commander_2') }),
         String(proposee), { obligatoire: true }),
-      UI.champ(definitionChamp('achats', 'fournisseur_id'), article.fournisseur_id, { liste: listeFournisseurs(), aide: 'Vide : fournisseur habituel de l\'article.' }),
+      UI.champ(definitionChamp('achats', 'fournisseur_id'), article.fournisseur_id, { liste: listeFournisseurs(), aide: I18n.t('magasin.ouvrir_demande_achat.vide_fournisseur_habituel_article') }),
     ];
     const id = await fenetreSaisie({
-      titre: 'Demander l\'achat', champs, libelleValider: 'Demander l\'achat',
-      introduction: UI.html`<p><b>${libelleArticle(article)}</b> — stock : ${quantiteUnite(Donnees.stockArticle(article.id), article.unite)},
-        prix unitaire actuel : ${UI.euro(article.prix_unitaire)}.</p>`,
+      titre: I18n.t('magasin.bouton_demande.demander_achat'), champs, libelleValider: I18n.t('magasin.bouton_demande.demander_achat'),
+      introduction: UI.html`<p>${I18n.html('magasin.ouvrir_demande_achat.stock_prix_unitaire_actuel', { libelleArticle: libelleArticle(article), quantiteUnite: quantiteUnite(Donnees.stockArticle(article.id), article.unite), euro: UI.euro(article.prix_unitaire) })}</p>`,
       action: (valeurs) => Magasin.demanderAchat(article.id, valeurs.quantite, valeurs.fournisseur_id || undefined),
     });
-    if (id) await apresEcriture('Demande d\'achat ' + id + ' enregistrée.');
+    if (id) await apresEcriture(I18n.t('magasin.ouvrir_demande_achat.demande_achat_enregistree', { id }));
   }
 
   /** Fenêtre « Nouvelle demande d'achat » (onglet Achats) : l'article est choisi dans la liste. */
@@ -104,32 +101,34 @@ Object.assign(Magasin, (() => {
     const champs = [
       UI.champ(definitionChamp('achats', 'article_id'), '', { liste: listeArticles(true), obligatoire: true }),
       UI.champ(definitionChamp('achats', 'quantite'), '', { obligatoire: true }),
-      UI.champ(definitionChamp('achats', 'fournisseur_id'), '', { liste: listeFournisseurs(), aide: 'Vide : fournisseur habituel de l\'article.' }),
+      UI.champ(definitionChamp('achats', 'fournisseur_id'), '', { liste: listeFournisseurs(), aide: I18n.t('magasin.ouvrir_demande_achat.vide_fournisseur_habituel_article') }),
     ];
     const id = await fenetreSaisie({
-      titre: 'Nouvelle demande d\'achat', champs, libelleValider: 'Demander l\'achat',
+      titre: I18n.t('magasin.ouvrir_nouvelle_demande.nouvelle_demande_achat'), champs, libelleValider: I18n.t('magasin.bouton_demande.demander_achat'),
       action: (valeurs) => Magasin.demanderAchat(valeurs.article_id, valeurs.quantite, valeurs.fournisseur_id || undefined),
     });
-    if (id) await apresEcriture('Demande d\'achat ' + id + ' enregistrée.');
+    if (id) await apresEcriture(I18n.t('magasin.ouvrir_demande_achat.demande_achat_enregistree', { id }));
   }
 
   // ===========================================================================================
   // 15. Onglet « Achats » : demandées, commandées, reçues
   // ===========================================================================================
 
-  const SECTIONS_ACHATS = [
-    { statut: 'demandée', titre: 'Demandées', aide: 'À passer chez le fournisseur.' },
-    { statut: 'commandée', titre: 'Commandées', aide: 'En attente de livraison.' },
-    { statut: 'reçue', titre: 'Reçues', aide: 'Entrées en stock à la réception.' },
-  ];
+  function sectionsAchats() {
+    return [
+      { statut: 'demandée', titre: I18n.t('magasin.sections_achats.demandees'), aide: I18n.t('magasin.sections_achats.passer_chez_fournisseur') },
+      { statut: 'commandée', titre: I18n.t('magasin.sections_achats.commandees'), aide: I18n.t('magasin.sections_achats.attente_livraison') },
+      { statut: 'reçue', titre: I18n.t('magasin.sections_achats.recues'), aide: I18n.t('magasin.sections_achats.entrees_stock_reception') },
+    ];
+  }
 
   function actionAchat(achat) {
     if (!App.estResponsable()) return '';
     if (achat.statut === 'demandée') {
-      return UI.html`<button type="button" class="btn btn-secondaire" data-action="commander" data-achat="${achat.id}">Commander</button>`;
+      return UI.html`<button type="button" class="btn btn-secondaire" data-action="commander" data-achat="${achat.id}">${I18n.t('magasin.action_achat.commander')}</button>`;
     }
     if (achat.statut === 'commandée') {
-      return UI.html`<button type="button" class="btn btn-primaire" data-action="receptionner" data-achat="${achat.id}">Réceptionner</button>`;
+      return UI.html`<button type="button" class="btn btn-primaire" data-action="receptionner" data-achat="${achat.id}">${I18n.t('magasin.action_achat.receptionner')}</button>`;
     }
     return '';
   }
@@ -145,24 +144,23 @@ Object.assign(Magasin, (() => {
   function listeAchats(achats, statut) {
     const article = (achat) => Donnees.trouver('articles', achat.article_id);
     const colonnes = [
-      { cle: 'id', libelle: 'N° et date', rendu: (a) => UI.html`<b>${a.id}</b><small class="magasin-sous-ligne">${UI.dateFr(a.date)}</small>` },
-      { cle: 'article_id', libelle: 'Article', classe: 'magasin-col-designation', valeurTri: (a) => texte((article(a) || {}).reference),
+      { cle: 'id', libelle: I18n.t('magasin.liste_achats.date'), rendu: (a) => UI.html`<b>${a.id}</b><small class="magasin-sous-ligne">${UI.dateFr(a.date)}</small>` },
+      { cle: 'article_id', libelle: I18n.t('commun.champ.article'), classe: 'magasin-col-designation', valeurTri: (a) => texte((article(a) || {}).reference),
         rendu: (a) => (article(a) ? UI.html`${lienArticle(article(a))}<small class="magasin-sous-ligne">${article(a).designation}</small>` : a.article_id) },
-      { cle: 'fournisseur_id', libelle: 'Fournisseur', valeurTri: (a) => libelleFournisseur(a.fournisseur_id), rendu: (a) => libelleFournisseur(a.fournisseur_id) },
-      { cle: 'quantite', libelle: 'Quantité', type: 'nombre', rendu: (a) => UI.nombreFr(a.quantite) },
-      { cle: 'montant', libelle: 'Montant', type: 'nombre', valeurTri: montant,
-        rendu: (a) => UI.html`${UI.euro(montant(a))}<small class="magasin-sous-ligne">${UI.euro(a.prix_unitaire)} l'unité</small>` },
+      { cle: 'fournisseur_id', libelle: I18n.t('magasin.onglet_acommander.fournisseur'), valeurTri: (a) => libelleFournisseur(a.fournisseur_id), rendu: (a) => libelleFournisseur(a.fournisseur_id) },
+      { cle: 'quantite', libelle: I18n.t('commun.champ.quantite'), type: 'nombre', rendu: (a) => UI.nombreFr(a.quantite) },
+      { cle: 'montant', libelle: I18n.t('magasin.liste_achats.montant'), type: 'nombre', valeurTri: montant,
+        rendu: (a) => UI.html`${I18n.html('magasin.liste_achats.euro_euro2_unite', { euro: UI.euro(montant(a)), prixUnitaire: UI.euro(a.prix_unitaire) })}` },
     ];
-    if (statut === 'reçue') colonnes.push({ cle: 'date_reception', libelle: 'Reçu le', classe: 'sans-coupure', rendu: (a) => UI.dateFr(a.date_reception) });
+    if (statut === 'reçue') colonnes.push({ cle: 'date_reception', libelle: I18n.t('magasin.liste_achats.recu'), classe: 'sans-coupure', rendu: (a) => UI.dateFr(a.date_reception) });
     else if (App.estResponsable()) colonnes.push({ cle: 'action', libelle: '', triable: false, rendu: actionAchat });
     return listeAdaptative({
-      lignes: achats, libelle: 'Achats', vide: 'Aucun achat.', colonnes,
+      lignes: achats, libelle: I18n.t('magasin.liste_achats.achats'), vide: I18n.t('magasin.liste_achats.aucun_achat'), colonnes,
       carte: (a) => UI.html`<div class="carte-ligne">
-        <div class="carte-tete"><b>${a.id}</b>${UI.badgeStatut(a.statut)}</div>
+        <div class="carte-tete"><b>${a.id}</b>${UI.badgeValeur('achats', 'statut', a.statut)}</div>
         <div class="carte-titre">${article(a) ? libelleArticle(article(a)) : a.article_id}</div>
-        <div class="carte-meta"><span>${UI.dateFr(a.date)}</span><span>Quantité : ${UI.nombreFr(a.quantite)}</span>
-          <span>${UI.euro(montant(a))}</span>${a.fournisseur_id ? UI.html`<span>${libelleFournisseur(a.fournisseur_id)}</span>` : ''}
-          ${a.date_reception ? UI.html`<span>Reçu le ${UI.dateFr(a.date_reception)}</span>` : ''}</div>
+        <div class="carte-meta">${I18n.html('magasin.liste_achats.date_quantite_quantite_euro', { date: UI.dateFr(a.date), quantite: UI.nombreFr(a.quantite), euro: UI.euro(montant(a)) })}${a.fournisseur_id ? UI.html`<span>${libelleFournisseur(a.fournisseur_id)}</span>` : ''}
+          ${a.date_reception ? UI.html`<span>${I18n.t('magasin.liste_achats.recu_date_reception', { date_reception: UI.dateFr(a.date_reception) })}</span>` : ''}</div>
         ${actionAchat(a) ? UI.html`<div class="actions">${actionAchat(a)}</div>` : ''}</div>`,
     });
   }
@@ -177,11 +175,11 @@ Object.assign(Magasin, (() => {
     if (requete && requete.has('recherche')) memoire.rechercheAchats = requete.get('recherche');
     UI.remplir(panneau, UI.html`
       <div class="magasin-barre">
-        <form class="filtres magasin-filtres" id="magasin-filtres-achats" data-hors-saisie role="search" aria-label="Filtrer les achats">
-          <label class="visuellement-cache" for="magasin-recherche-achat">Rechercher un achat</label>
-          <input type="search" id="magasin-recherche-achat" name="recherche" value="${memoire.rechercheAchats}" placeholder="N°, article ou fournisseur" autocomplete="off">
+        <form class="filtres magasin-filtres" id="magasin-filtres-achats" data-hors-saisie role="search" aria-label="${I18n.t('magasin.onglet_achats.filtrer_achats')}">
+          <label class="visuellement-cache" for="magasin-recherche-achat">${I18n.t('magasin.onglet_achats.rechercher_achat')}</label>
+          <input type="search" id="magasin-recherche-achat" name="recherche" value="${memoire.rechercheAchats}" placeholder="${I18n.t('magasin.onglet_achats.article_fournisseur')}" autocomplete="off">
         </form>
-        ${App.estResponsable() ? UI.html`<button type="button" class="btn btn-primaire" id="magasin-nouvelle-demande">${UI.icone('ajouter')}Nouvelle demande d'achat</button>` : ''}
+        ${App.estResponsable() ? UI.html`<button type="button" class="btn btn-primaire" id="magasin-nouvelle-demande">${UI.icone('ajouter')}${I18n.t('magasin.ouvrir_nouvelle_demande.nouvelle_demande_achat')}</button>` : ''}
       </div>
       <div class="magasin-sections-achats"></div>`);
     const zone = UI.$('.magasin-sections-achats', panneau);
@@ -190,13 +188,13 @@ Object.assign(Magasin, (() => {
       const achats = Donnees.lignes('achats').filter((achat) => garderAchat(achat, recherche))
         .sort((a, b) => texte(b.date).localeCompare(texte(a.date)) || texte(b.id).localeCompare(texte(a.id), 'fr', { numeric: true }));
       zone.textContent = '';
-      SECTIONS_ACHATS.forEach((section) => {
+      sectionsAchats().forEach((section) => {
         const tous = achats.filter((achat) => achat.statut === section.statut);
         const limite = section.statut === 'reçue' && !memoire.toutesRecues;
         const carte = UI.element(UI.html`<section class="carte magasin-achats" data-statut="${section.statut}">
           <div class="entete-carte"><h2>${section.titre} <span class="badge">${tous.length}</span></h2><span class="muted">${section.aide}</span></div>
           <div class="magasin-zone"></div>
-          ${limite && tous.length > LIMITE_RECUES ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" data-action="voir-recues">Voir les ${tous.length} achats reçus</button></div>` : ''}
+          ${limite && tous.length > LIMITE_RECUES ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" data-action="voir-recues">${I18n.t('magasin.onglet_achats.voir_achats_recus', { n: tous.length })}</button></div>` : ''}
         </section>`);
         UI.$('.magasin-zone', carte).appendChild(listeAchats(limite ? tous.slice(0, LIMITE_RECUES) : tous, section.statut));
         zone.appendChild(carte);
@@ -218,7 +216,7 @@ Object.assign(Magasin, (() => {
   async function commanderAchat(achatId) {
     try {
       await Magasin.commander(achatId);
-      await apresEcriture('Achat ' + achatId + ' commandé.');
+      await apresEcriture(I18n.t('magasin.commander_achat.achat_commande', { achatId }));
     } catch (erreur) {
       App.signalerErreur(erreur, 'commande de l\'achat');
     }
@@ -227,17 +225,16 @@ Object.assign(Magasin, (() => {
   /** Fenêtre « Réceptionner » : quantité reçue (la quantité commandée par défaut). */
   async function ouvrirReception(achatId) {
     const achat = Donnees.trouver('achats', achatId);
-    if (!achat) { UI.toast('L\'achat ' + achatId + ' est introuvable : actualisez.', 'attention'); return; }
+    if (!achat) { UI.toast(I18n.t('magasin.ouvrir_reception.achat_introuvable_actualisez', { achatId }), 'attention'); return; }
     const article = Donnees.trouver('articles', achat.article_id);
     const unite = article && article.unite ? ' (' + article.unite + ')' : '';
-    const champs = [UI.champ({ nom: 'quantite_recue', type: 'decimal', libelle: 'Quantité reçue' + unite }, achat.quantite, { obligatoire: true })];
+    const champs = [UI.champ({ nom: 'quantite_recue', type: 'decimal', libelle: I18n.t('magasin.ouvrir_reception.quantite_recue', { unite }) }, achat.quantite, { obligatoire: true })];
     const id = await fenetreSaisie({
-      titre: 'Réceptionner ' + achatId, champs, libelleValider: 'Réceptionner',
-      introduction: UI.html`<p><b>${article ? libelleArticle(article) : achat.article_id}</b> — commandé : ${UI.nombreFr(achat.quantite)}${unite},
-        ${libelleFournisseur(achat.fournisseur_id)}.</p><p class="note">La quantité reçue entre en stock. Le prix de l'article ne change pas.</p>`,
+      titre: I18n.t('magasin.ouvrir_reception.receptionner_achat_id', { achatId }), champs, libelleValider: I18n.t('magasin.action_achat.receptionner'),
+      introduction: UI.html`<p>${I18n.html('magasin.ouvrir_reception.v1_commande_quantite_unite', { article: article ? libelleArticle(article) : achat.article_id, quantite: UI.nombreFr(achat.quantite), unite, libelleFournisseur: libelleFournisseur(achat.fournisseur_id) })}</p><p class="note">${I18n.t('magasin.ouvrir_reception.quantite_recue_entre_stock')}</p>`,
       action: (valeurs) => Magasin.recevoir(achatId, valeurs.quantite_recue),
     });
-    if (id) await apresEcriture('Achat ' + achatId + ' réceptionné : entrée en stock enregistrée.');
+    if (id) await apresEcriture(I18n.t('magasin.ouvrir_reception.achat_receptionne_entree_stock', { achatId }));
   }
 
   // ===========================================================================================
@@ -246,7 +243,7 @@ Object.assign(Magasin, (() => {
 
   async function ouvrirFournisseur(fournisseurId) {
     const existant = fournisseurId ? Donnees.trouver('fournisseurs', fournisseurId) : null;
-    if (fournisseurId && !existant) { UI.toast('Ce fournisseur n\'existe plus : actualisez.', 'attention'); return; }
+    if (fournisseurId && !existant) { UI.toast(I18n.t('magasin.ouvrir_fournisseur.fournisseur_existe_plus_actualisez'), 'attention'); return; }
     const valeur = (nom) => (existant ? existant[nom] : '');
     const champs = [
       UI.champ(definitionChamp('fournisseurs', 'nom'), valeur('nom'), { obligatoire: true, attributs: { maxlength: '120' } }),
@@ -255,39 +252,39 @@ Object.assign(Magasin, (() => {
       UI.champ(definitionChamp('fournisseurs', 'email'), valeur('email'), { attributs: { inputmode: 'email' } }),
     ];
     const resultat = await fenetreSaisie({
-      titre: existant ? 'Modifier le fournisseur' : 'Nouveau fournisseur', champs,
+      titre: existant ? I18n.t('magasin.ouvrir_fournisseur.modifier_fournisseur') : I18n.t('magasin.ouvrir_fournisseur.nouveau_fournisseur'), champs,
       verifier: (valeurs) => Magasin.interne.verifierFournisseur(valeurs, Donnees.lignes('fournisseurs'), existant ? existant.id : ''),
       action: async (valeurs) => (existant ? (await Magasin.modifierFournisseur(existant.id, valeurs), existant.id) : Magasin.creerFournisseur(valeurs)),
     });
-    if (resultat) await apresEcriture(existant ? 'Fournisseur enregistré.' : 'Fournisseur ' + resultat + ' créé.');
+    if (resultat) await apresEcriture(existant ? I18n.t('magasin.ouvrir_fournisseur.fournisseur_enregistre') : I18n.t('magasin.ouvrir_fournisseur.fournisseur_cree', { resultat }));
   }
 
   function afficherOngletFournisseurs(panneau) {
     const responsable = App.estResponsable();
     const nombreArticles = (id) => Donnees.lignes('articles').filter((article) => article.fournisseur_id === id).length;
     const lignes = Donnees.lignes('fournisseurs').map((f) => Object.assign({}, f, { articles: nombreArticles(f.id) }))
-      .sort((a, b) => texte(a.nom).localeCompare(texte(b.nom), 'fr'));
+      .sort((a, b) => UI.comparerTextes(texte(a.nom), texte(b.nom)));
     const telephone = (f) => (f.telephone ? UI.html`<a href="tel:${f.telephone.replace(/[^0-9+]/g, '')}">${f.telephone}</a>` : '');
     const email = (f) => (f.email ? UI.html`<a href="mailto:${f.email}">${f.email}</a>` : '');
-    const bouton = (f) => (responsable ? UI.html`<button type="button" class="btn btn-secondaire" data-action="modifier-fournisseur" data-fournisseur="${f.id}">Modifier</button>` : '');
+    const bouton = (f) => (responsable ? UI.html`<button type="button" class="btn btn-secondaire" data-action="modifier-fournisseur" data-fournisseur="${f.id}">${I18n.t('commun.bouton.modifier')}</button>` : '');
     const liste = listeAdaptative({
-      lignes, libelle: 'Fournisseurs', vide: 'Aucun fournisseur enregistré.',
+      lignes, libelle: I18n.t('magasin.onglet_fournisseurs.fournisseurs'), vide: I18n.t('magasin.onglet_fournisseurs.aucun_fournisseur_enregistre'),
       colonnes: [
-        { cle: 'nom', libelle: 'Nom', rendu: (f) => UI.html`<b>${f.nom || f.id}</b>` },
-        { cle: 'contact', libelle: 'Contact' },
-        { cle: 'telephone', libelle: 'Téléphone', classe: 'sans-coupure', rendu: telephone },
-        { cle: 'email', libelle: 'E-mail', rendu: email },
-        { cle: 'articles', libelle: 'Articles', type: 'nombre' },
+        { cle: 'nom', libelle: I18n.t('magasin.onglet_fournisseurs.nom'), rendu: (f) => UI.html`<b>${f.nom || f.id}</b>` },
+        { cle: 'contact', libelle: I18n.t('magasin.onglet_fournisseurs.contact') },
+        { cle: 'telephone', libelle: I18n.t('magasin.onglet_fournisseurs.telephone'), classe: 'sans-coupure', rendu: telephone },
+        { cle: 'email', libelle: I18n.t('magasin.onglet_fournisseurs.email'), rendu: email },
+        { cle: 'articles', libelle: I18n.t('magasin.onglet_fournisseurs.articles'), type: 'nombre' },
         { cle: 'action', libelle: '', triable: false, rendu: bouton },
       ],
-      carte: (f) => UI.html`<div class="carte-ligne"><div class="carte-tete"><b>${f.nom || f.id}</b><span class="badge neutre">${f.articles} article(s)</span></div>
+      carte: (f) => UI.html`<div class="carte-ligne"><div class="carte-tete">${I18n.html('magasin.onglet_fournisseurs.v1_n_article', { n: f.articles, nom: f.nom || f.id })}</div>
         <div class="carte-meta">${f.contact ? UI.html`<span>${f.contact}</span>` : ''}${f.telephone ? UI.html`<span>${telephone(f)}</span>` : ''}
           ${f.email ? UI.html`<span class="magasin-coupable">${email(f)}</span>` : ''}</div>
         ${responsable ? UI.html`<div class="actions">${bouton(f)}</div>` : ''}</div>`,
     });
     UI.remplir(panneau, UI.html`
       ${responsable ? UI.html`<div class="magasin-barre"><span class="espace"></span>
-        <button type="button" class="btn btn-primaire" id="magasin-nouveau-fournisseur">${UI.icone('ajouter')}Nouveau fournisseur</button></div>` : ''}
+        <button type="button" class="btn btn-primaire" id="magasin-nouveau-fournisseur">${UI.icone('ajouter')}${I18n.t('magasin.ouvrir_fournisseur.nouveau_fournisseur')}</button></div>` : ''}
       <div class="carte magasin-liste"></div>`);
     UI.$('.magasin-liste', panneau).appendChild(liste);
     const nouveau = UI.$('#magasin-nouveau-fournisseur', panneau);
@@ -305,20 +302,20 @@ Object.assign(Magasin, (() => {
   document.addEventListener('DOMContentLoaded', () => {
     const tables = ['articles', 'mouvements_stock', 'achats', 'fournisseurs', 'article_equipement', 'ordres_travail'];
     App.ecran({
-      id: 'magasin', route: /^#\/magasin$/, titre: 'Magasin',
-      menu: { libelle: 'Magasin', icone: 'magasin', ordre: 45 },
+      id: 'magasin', route: /^#\/magasin$/, get titre() { return I18n.t('magasin.titre.magasin'); },
+      menu: { get libelle() { return I18n.t('magasin.titre.magasin'); }, icone: 'magasin', ordre: 45 },
       profils: ['technicien', 'responsable'], tables,
       afficher: afficherMagasin,
     });
     // « nouveau » avant la fiche : la première route qui correspond gagne ; la route fiche
     // l'exclut en plus (ARCHITECTURE.md §14.2).
     App.ecran({
-      id: 'magasin-article-nouveau', route: /^#\/magasin\/article\/nouveau$/, titre: 'Nouvel article', parent: 'magasin',
+      id: 'magasin-article-nouveau', route: /^#\/magasin\/article\/nouveau$/, get titre() { return I18n.t('magasin.titre.nouvel_article'); }, parent: 'magasin',
       profils: ['responsable'], tables: [],
       afficher: afficherNouvelArticle,
     });
     App.ecran({
-      id: 'magasin-article', route: /^#\/magasin\/article\/(?!nouveau$)(?<id>[^/?]+)$/, titre: 'Article', parent: 'magasin',
+      id: 'magasin-article', route: /^#\/magasin\/article\/(?!nouveau$)(?<id>[^/?]+)$/, get titre() { return I18n.t('magasin.ecran_article.titre'); }, parent: 'magasin',
       profils: ['technicien', 'responsable'], tables: tables.concat(['equipements']),
       afficher: afficherFicheArticle,
     });

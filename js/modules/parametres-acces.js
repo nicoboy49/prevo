@@ -24,19 +24,20 @@ const ParametresAcces = (() => {
 
   const INTERVALLE_RELANCE_MS = 2000;
   const DELAI_RELANCE_MS = 60000;
-  const MESSAGE_SERVEUR_INJOIGNABLE = 'Le serveur Prévo ne répond pas. Vérifiez que la fenêtre du serveur est ouverte sur le PC.';
-  const AVERTISSEMENT_RELANCE = 'Prévo redémarre : les postes connectés se reconnecteront.';
-  const LIBELLES = {
-    demandeurs_avec_compte: 'Chaque demandeur a un mot de passe (sinon : appareil enrôlé par QR)',
-    session_heures: 'Durée d\'une session sans activité (heures)',
-    session_longue_jours: 'Durée de « rester connecté sur cet appareil » (jours)',
-    invitation_heures: 'Durée de validité d\'une invitation d\'appareils (heures)',
-    quota_documents_mo: 'Place maximale des documents joints (Mo)',
-    ia_fournisseur: 'Type du service d\'IA',
-    ia_url: 'Adresse du service d\'IA',
-    ia_en_ligne: 'Autoriser un service d\'IA en ligne',
-  };
-  const LIBELLES_FOURNISSEUR = { ollama: 'Ollama (local)', openai: 'API compatible OpenAI (LM Studio, Mistral…)' };
+  // Textes lus à l'affichage (fonctions), jamais figés au chargement du module.
+  const messageServeurInjoignable = () => I18n.t('parametres.message_serveur_injoignable.serveur_prevo_repond_pas');
+  const avertissementRelance = () => I18n.t('parametres.avertissement_relance.prevo_redemarre_postes_connectes');
+  const libelles = () => ({
+    demandeurs_avec_compte: I18n.t('parametres.libelles.chaque_demandeur_mot_passe'),
+    session_heures: I18n.t('parametres.libelles.duree_session_sans_activite'),
+    session_longue_jours: I18n.t('parametres.libelles.duree_rester_connecte_appareil'),
+    invitation_heures: I18n.t('parametres.libelles.duree_validite_invitation_appareils'),
+    quota_documents_mo: I18n.t('parametres.libelles.place_maximale_documents_joints'),
+    ia_fournisseur: I18n.t('parametres.libelles.type_service_ia'),
+    ia_url: I18n.t('parametres.libelles.adresse_service_ia'),
+    ia_en_ligne: I18n.t('parametres.libelles.autoriser_service_ia_ligne'),
+  });
+  const libellesFournisseur = () => ({ ollama: I18n.t('parametres.libelles_fournisseur.ollama_local'), openai: I18n.t('parametres.libelles_fournisseur.api_compatible_open_ai_lm') });
 
   // --- État -------------------------------------------------------------------------------
   let etat = null;                 // GET etat (configuration en cours, brouillon, étapes, Tailscale, mkcert…)
@@ -66,11 +67,11 @@ const ParametresAcces = (() => {
     try {
       reponse = await fetch(chemin, options);
     } catch (erreur) {
-      return { statut: 0, donnees: null, message: MESSAGE_SERVEUR_INJOIGNABLE };
+      return { statut: 0, donnees: null, message: messageServeurInjoignable() };
     }
     const donnees = await reponse.json().catch(() => null);
     const message = donnees && typeof donnees.erreur === 'string' && donnees.erreur
-      ? donnees.erreur : 'Le serveur a répondu « ' + reponse.status + ' ».';
+      ? StockageServeur.texte(donnees, 'erreur') : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
     return { statut: reponse.status, donnees: donnees, message: reponse.ok ? '' : message };
   }
 
@@ -138,19 +139,20 @@ const ParametresAcces = (() => {
   // ===========================================================================================
 
   function texteTailscale(t) {
-    if (!t || !t.present) return 'Non détecté sur ce PC' + (t && t.raison ? ' (' + t.raison + ')' : '') + '.';
-    if (!t.connecte) return 'Installé mais pas connecté : ouvrez Tailscale et connectez-vous.';
+    if (!t || !t.present) return t && t.raison ? I18n.t('parametres.texte_tailscale.non_detecte_pc', { raison: StockageServeur.texte(t, 'raison') }) : I18n.t('parametres.texte_tailscale.non_detecte_pc_2');
+    if (!t.connecte) return I18n.t('parametres.texte_tailscale.installe_mais_pas_connecte');
     const jours = t.jours_avant_expiration;
-    const cle = jours === null || jours === undefined ? '' : jours <= 14
-      ? ' La clé expire ' + (jours <= 0 ? 'aujourd\'hui ou a expiré' : 'dans ' + jours + ' jour' + (jours > 1 ? 's' : '')) + ' : désactivez l\'expiration dans la console Tailscale.'
-      : ' Clé valable ' + jours + ' jours.';
-    return 'Connecté : ' + (t.nom || '(nom inconnu)') + '.' + cle;
+    const nom = t.nom || I18n.t('parametres.texte_tailscale.nom_inconnu');
+    if (jours === null || jours === undefined) return I18n.t('parametres.texte_tailscale.connecte_nom', { nom });
+    if (jours > 14) return I18n.t('parametres.texte_tailscale.connecte_cle_valable_jours', { nom, jours });
+    if (jours <= 0) return I18n.t('parametres.texte_tailscale.connecte_cle_expire_aujourd', { nom });
+    return I18n.t('parametres.texte_tailscale.connecte_cle_expire_jours', { n: jours, nom });
   }
 
   function texteCopie(copie, dossier) {
-    if (!dossier) return 'Aucune copie réglée (la sauvegarde du jour reste sur ce disque).';
-    const derniere = copie && copie.derniere_reussie ? 'Dernière copie réussie le ' + UI.dateFr(copie.derniere_reussie) + '.' : 'Aucune copie réussie pour l\'instant.';
-    const erreur = copie && copie.erreur ? ' Dernier échec : ' + copie.erreur : '';
+    if (!dossier) return I18n.t('parametres.texte_copie.aucune_copie_reglee_sauvegarde');
+    const derniere = copie && copie.derniere_reussie ? I18n.t('parametres.texte_copie.derniere_copie_reussie', { derniere_reussie: UI.dateFr(copie.derniere_reussie) }) : I18n.t('parametres.texte_copie.aucune_copie_reussie_instant');
+    const erreur = copie && copie.erreur ? ' ' + I18n.t('parametres.texte_copie.dernier_echec', { erreur: StockageServeur.texte(copie, 'erreur') }) : '';
     return UI.html`${dossier} — ${derniere}${erreur}`;
   }
 
@@ -166,16 +168,16 @@ const ParametresAcces = (() => {
     const v = valeurs();
     const lignes = (journal && journal.lignes) || [];
     return UI.html`<dl class="valeurs acces-etat" id="acces-etat">
-      <dt>Actif depuis</dt><dd id="acces-actif-depuis">${info.actif_depuis ? UI.dateHeureFr(info.actif_depuis) : 'inconnu'}</dd>
-      <dt>Installation</dt><dd id="acces-installation">${etat.configuration_presente ? 'Terminée (prevo.config.json)'
-        : UI.html`Pas terminée : <a href="#/installation">ouvrir l'assistant</a>.`}</dd>
-      <dt>Portée</dt><dd id="acces-portee">${InstallationEtapes.LIBELLES_PORTEE[etat.portee] || etat.portee || '—'}${info.porte ? ' ; porte d\'entrée ouverte sur le réseau' : ''}</dd>
-      <dt>Adresses</dt><dd id="acces-adresses">${adressesDuServeur().map((adresse) => UI.html`<span class="acces-adresse">${adresse}</span>`)}</dd>
-      <dt>Tailscale</dt><dd id="acces-tailscale">${texteTailscale(etat.tailscale)}</dd>
-      <dt>Copie des sauvegardes</dt><dd id="acces-copie">${texteCopie(info.copie_externe, v.copie_sauvegardes)}</dd>
-      <dt>Journal du serveur</dt><dd id="acces-journal">${lignes.length
-        ? UI.html`<pre class="acces-journal">${lignes.join('\n')}</pre><span class="note">Dernières lignes de ${journal.fichier}.</span>`
-        : 'Aucune erreur notée.'}</dd>
+      <dt>${I18n.t('parametres.etat_serveur.actif_depuis')}</dt><dd id="acces-actif-depuis">${info.actif_depuis ? UI.dateHeureFr(info.actif_depuis) : 'inconnu'}</dd>
+      <dt>${I18n.t('parametres.etat_serveur.installation')}</dt><dd id="acces-installation">${etat.configuration_presente ? I18n.t('parametres.etat_serveur.terminee_prevo_config_json')
+        : UI.html`${I18n.html('parametres.etat_serveur.pas_terminee_ouvrir_assistant')}`}</dd>
+      <dt>${I18n.t('parametres.etat_serveur.portee')}</dt><dd id="acces-portee">${InstallationEtapes.LIBELLES_PORTEE[etat.portee] || etat.portee || '—'}${info.porte ? ' ' + I18n.t('parametres.etat_serveur.porte_entree_ouverte_reseau') : ''}</dd>
+      <dt>${I18n.t('parametres.etat_serveur.adresses')}</dt><dd id="acces-adresses">${adressesDuServeur().map((adresse) => UI.html`<span class="acces-adresse">${adresse}</span>`)}</dd>
+      <dt>${I18n.t('parametres.etat_serveur.tailscale')}</dt><dd id="acces-tailscale">${texteTailscale(etat.tailscale)}</dd>
+      <dt>${I18n.t('parametres.etat_serveur.copie_sauvegardes')}</dt><dd id="acces-copie">${texteCopie(info.copie_externe, v.copie_sauvegardes)}</dd>
+      <dt>${I18n.t('parametres.etat_serveur.journal_serveur')}</dt><dd id="acces-journal">${lignes.length
+        ? UI.html`<pre class="acces-journal">${lignes.join('\n')}</pre><span class="note">${I18n.t('parametres.etat_serveur.dernieres_lignes', { fichier: journal.fichier })}</span>`
+        : I18n.t('parametres.etat_serveur.aucune_erreur_notee')}</dd>
     </dl>`;
   }
 
@@ -188,32 +190,37 @@ const ParametresAcces = (() => {
   function formulaireDom(cle, champs) {
     const formulaire = UI.element(UI.html`<form class="form-colonne" id="acces-form-${cle}" novalidate></form>`);
     champs.forEach(([nom, type, valeur, options]) => {
-      formulaire.appendChild(UI.champ({ nom: nom, type: type, libelle: LIBELLES[nom] }, valeur, Object.assign({ aide: aideOption(nom) }, options || {})));
+      formulaire.appendChild(UI.champ({ nom: nom, type: type, libelle: libelles()[nom] }, valeur, Object.assign({ aide: aideOption(nom) }, options || {})));
     });
     return formulaire;
   }
 
   function resumePortee(v) {
-    return (InstallationEtapes.LIBELLES_PORTEE[v.portee] || v.portee) + ' ; http ' + v.port_http + ', https ' + v.port_https
-      + ((v.noms || []).length ? ' ; noms : ' + v.noms.join(', ') : '');
+    const portee = InstallationEtapes.LIBELLES_PORTEE[v.portee] || v.portee;
+    if ((v.noms || []).length) return I18n.t('parametres.resume_portee.http_https_noms', { portee, port_http: v.port_http, port_https: v.port_https, join: v.noms.join(', ') });
+    return I18n.t('parametres.resume_portee.http_https', { portee, port_http: v.port_http, port_https: v.port_https });
   }
 
   function resumeCertificat(v) {
-    if (v.portee === 'ce-pc') return 'Sans objet : Prévo reste sur ce PC, en http.';
-    return v.certificat_auto ? 'Automatique (mkcert)' : v.certificat ? 'Vos fichiers PEM' : v.mandataire ? 'Derrière un mandataire (Tailscale ou celui de l\'entreprise)' : 'À régler';
+    if (v.portee === 'ce-pc') return I18n.t('parametres.resume_certificat.sans_objet_prevo_reste');
+    return v.certificat_auto ? I18n.t('parametres.resume_certificat.automatique_mkcert') : v.certificat ? I18n.t('parametres.resume_certificat.fichiers_pem') : v.mandataire ? I18n.t('parametres.resume_certificat.derriere_mandataire_tailscale_celui') : I18n.t('parametres.resume_certificat.regler');
   }
 
   function resumeDemarrage(v) {
-    return (InstallationEtapes.LIBELLES_DEMARRAGE[v.demarrage] || v.demarrage) + ' ; veille ' + (v.veille_desactivee ? 'empêchée sur secteur' : 'inchangée');
+    const demarrage = InstallationEtapes.LIBELLES_DEMARRAGE[v.demarrage] || v.demarrage;
+    return v.veille_desactivee ? I18n.t('parametres.resume_demarrage.veille_empechee_secteur', { demarrage }) : I18n.t('parametres.resume_demarrage.veille_inchangee', { demarrage });
   }
 
   function resumeReglages(v) {
-    return (v.demandeurs_avec_compte ? 'demandeurs avec mot de passe' : 'demandeurs par appareil enrôlé') + ' ; session '
-      + v.session_heures + ' h, « rester connecté » ' + v.session_longue_jours + ' j, invitation ' + v.invitation_heures + ' h ; documents ' + v.quota_documents_mo + ' Mo';
+    if (v.demandeurs_avec_compte) {
+      return I18n.t('parametres.resume_reglages.demandeurs_mot_passe_session', { session_heures: v.session_heures, session_longue_jours: v.session_longue_jours, invitation_heures: v.invitation_heures, quota_documents_mo: v.quota_documents_mo });
+    }
+    return I18n.t('parametres.resume_reglages.demandeurs_appareil_enrole_session', { session_heures: v.session_heures, session_longue_jours: v.session_longue_jours, invitation_heures: v.invitation_heures, quota_documents_mo: v.quota_documents_mo });
   }
 
   function resumeIa(v) {
-    return (LIBELLES_FOURNISSEUR[v.ia_fournisseur] || v.ia_fournisseur) + ' ; ' + v.ia_url + ' ; en ligne : ' + (v.ia_en_ligne ? 'autorisé' : 'non');
+    const fournisseur = libellesFournisseur()[v.ia_fournisseur] || v.ia_fournisseur;
+    return v.ia_en_ligne ? I18n.t('parametres.resume_ia.ligne_autorise', { fournisseur, ia_url: v.ia_url }) : I18n.t('parametres.resume_ia.ligne_non', { fournisseur, ia_url: v.ia_url });
   }
 
   function formulaireReglages() {
@@ -230,7 +237,7 @@ const ParametresAcces = (() => {
     const corps = { demandeurs_avec_compte: valeursLues.demandeurs_avec_compte === '1' };
     for (const cle of ['session_heures', 'session_longue_jours', 'invitation_heures', 'quota_documents_mo']) {
       const nombre = Donnees.nombre(valeursLues[cle]);
-      if (nombre === null || !Number.isInteger(nombre)) return { probleme: 'Saisissez un nombre entier pour « ' + LIBELLES[cle] + ' ».' };
+      if (nombre === null || !Number.isInteger(nombre)) return { probleme: I18n.t('parametres.lire_reglages.saisissez_nombre_entier', { libelle: libelles()[cle] }) };
       corps[cle] = nombre;
     }
     return corps;
@@ -238,7 +245,7 @@ const ParametresAcces = (() => {
 
   function formulaireIa() {
     const v = valeurs();
-    const fournisseurs = Object.keys(LIBELLES_FOURNISSEUR).map((cle) => ({ valeur: cle, libelle: LIBELLES_FOURNISSEUR[cle] }));
+    const fournisseurs = Object.entries(libellesFournisseur()).map(([cle, libelle]) => ({ valeur: cle, libelle }));
     return formulaireDom('ia', [
       ['ia_fournisseur', 'ref', v.ia_fournisseur, { liste: fournisseurs, obligatoire: true }],
       ['ia_url', 'texte', v.ia_url], ['ia_en_ligne', 'booleen', v.ia_en_ligne ? '1' : '0'],
@@ -247,25 +254,27 @@ const ParametresAcces = (() => {
 
   function noteCleIa() {
     const serveur = typeof Ia !== 'undefined' && Ia.reglagesServeur ? Ia.reglagesServeur() : null;
-    return UI.html`<p class="note" id="acces-ia-cle">Clé du service : ${serveur && serveur.cleReglee ? 'réglée sur ce PC' : 'aucune'}. ${aideOption('ia_cle')}
-      Elle se règle dans prevo.config.json (ia_cle) ou par la variable PREVO_IA_CLE, jamais ici.</p>`;
+    if (serveur && serveur.cleReglee) {
+      return UI.html`<p class="note" id="acces-ia-cle">${I18n.t('parametres.note_cle_ia.cle_service_reglee_pc', { aideOption: aideOption('ia_cle') })}</p>`;
+    }
+    return UI.html`<p class="note" id="acces-ia-cle">${I18n.t('parametres.note_cle_ia.cle_service_aucune_regle', { aideOption: aideOption('ia_cle') })}</p>`;
   }
 
   function lireIa(zone) {
     const valeursLues = UI.lireFormulaire(UI.$('form', zone));
     const url = String(valeursLues.ia_url || '').trim();
-    if (!url) return { probleme: 'Donnez l\'adresse du service d\'IA.' };
+    if (!url) return { probleme: I18n.t('parametres.lire_ia.donnez_adresse_service_ia') };
     return { fournisseur: valeursLues.ia_fournisseur, url: url, en_ligne: valeursLues.ia_en_ligne === '1' };
   }
 
   function sansObjet(cle, v) {
-    if (cle === 'certificat' && v.portee === 'ce-pc') return 'Prévo reste sur ce PC, en http : aucun certificat à préparer. Changez d\'abord la portée.';
-    if (cle === 'tailscale' && v.portee !== 'dehors') return 'Prévo n\'est pas joignable hors de l\'atelier : rien à faire pour le réseau privé. Changez d\'abord la portée.';
+    if (cle === 'certificat' && v.portee === 'ce-pc') return I18n.t('parametres.sans_objet.prevo_reste_pc_http');
+    if (cle === 'tailscale' && v.portee !== 'dehors') return I18n.t('parametres.sans_objet.prevo_pas_joignable_hors');
     return '';
   }
 
   function autrement(contenu) {
-    return contenu ? UI.html`<details class="installation-autrement"><summary>Régler autrement</summary>
+    return contenu ? UI.html`<details class="installation-autrement"><summary>${I18n.t('parametres.autrement.regler_autrement')}</summary>
       <div class="installation-autrement-corps">${contenu}</div></details>` : '';
   }
 
@@ -275,15 +284,15 @@ const ParametresAcces = (() => {
     const windows = etat.systeme === 'windows';
     const enForce = etat.configuration || {};
     const liste = [
-      { cle: 'portee', etape: 'portee', titre: 'Portée, ports et noms acceptés', resume: resumePortee(v) },
-      { cle: 'certificat', etape: 'certificat', titre: 'Certificat (https)', resume: resumeCertificat(v) },
-      { cle: 'tailscale', etape: 'tailscale', titre: 'Hors de l\'atelier (Tailscale)', resume: texteTailscale(etat.tailscale), propresBoutons: true },
-      { cle: 'demarrage', etape: 'demarrage', titre: 'Démarrage avec le PC et veille', resume: resumeDemarrage(v) },
-      { cle: 'sauvegardes', etape: 'sauvegardes', titre: 'Copie des sauvegardes', resume: v.copie_sauvegardes || 'Aucune copie' },
+      { cle: 'portee', etape: 'portee', titre: I18n.t('parametres.sections.portee_ports_noms_acceptes'), resume: resumePortee(v) },
+      { cle: 'certificat', etape: 'certificat', titre: I18n.t('parametres.sections.certificat_https'), resume: resumeCertificat(v) },
+      { cle: 'tailscale', etape: 'tailscale', titre: I18n.t('parametres.sections.hors_atelier_tailscale'), resume: texteTailscale(etat.tailscale), propresBoutons: true },
+      { cle: 'demarrage', etape: 'demarrage', titre: I18n.t('parametres.sections.demarrage_pc_veille'), resume: resumeDemarrage(v) },
+      { cle: 'sauvegardes', etape: 'sauvegardes', titre: I18n.t('parametres.etat_serveur.copie_sauvegardes'), resume: v.copie_sauvegardes || I18n.t('parametres.sections.aucune_copie') },
       // Formulaires DOM, posés dans leur zone au rendu (rendreContenu) : construire() les crée.
-      { cle: 'reglages', etape: 'reglages', titre: 'Comptes des demandeurs, durées de session, documents', resume: resumeReglages(v),
+      { cle: 'reglages', etape: 'reglages', titre: I18n.t('parametres.sections.comptes_demandeurs_durees_session'), resume: resumeReglages(v),
         corps: UI.html`<div class="acces-formulaire" data-formulaire="reglages"></div>`, construire: formulaireReglages, lire: lireReglages },
-      { cle: 'ia', etape: 'ia', titre: 'Assistant IA', resume: resumeIa(v),
+      { cle: 'ia', etape: 'ia', titre: I18n.t('parametres.sections.assistant_ia'), resume: resumeIa(v),
         corps: UI.html`<div class="acces-formulaire" data-formulaire="ia"></div>${noteCleIa()}`, construire: formulaireIa, lire: lireIa },
     ];
     liste.forEach((section) => {
@@ -300,8 +309,7 @@ const ParametresAcces = (() => {
           const corps = formulaire.lire(zone);
           return corps && retrait && corps.demarrage === 'aucun' ? Object.assign(corps, { retirer: true }) : corps;
         };
-        section.corps = UI.html`${section.corps}${retrait && windows ? UI.html`<p class="note" id="acces-retrait-note">Passer à « À la main » retire la
-          tâche planifiée et la règle du pare-feu, et remet la veille comme avant (Retirer_demarrage.ps1, une invite d'administrateur).</p>` : ''}`;
+        section.corps = UI.html`${section.corps}${retrait && windows ? UI.html`<p class="note" id="acces-retrait-note">${I18n.t('parametres.sections.passer_main_retire_tache')}</p>` : ''}`;
       }
       if (section.cle === 'sauvegardes') {
         section.lire = (zone) => ({ dossier: UI.$('#inst-copie_sauvegardes', zone).value.trim() });
@@ -315,13 +323,13 @@ const ParametresAcces = (() => {
     const raison = sansObjet(section.cle, v);
     const ouverte = ouvertes.has(section.cle);
     const corps = raison
-      ? UI.html`<p class="installation-sautee">Sans objet : ${raison}</p>`
+      ? UI.html`<p class="installation-sautee">${I18n.t('parametres.rendre_section.sans_objet', { raison })}</p>`
       : UI.html`${section.corps}
         <p class="erreur-champ installation-erreur" id="acces-erreur-${section.cle}" role="alert" hidden></p>
         ${section.propresBoutons ? '' : UI.html`<div class="actions"><span class="espace"></span>
-          <button type="button" class="btn btn-secondaire" data-enregistrer="${section.cle}">${UI.icone('valider')}Enregistrer ce réglage</button></div>`}`;
+          <button type="button" class="btn btn-secondaire" data-enregistrer="${section.cle}">${UI.icone('valider')}${I18n.t('parametres.rendre_section.enregistrer_reglage')}</button></div>`}`;
     return UI.html`<details class="acces-section${raison ? ' sans-objet' : ''}" data-section="${section.cle}" ${UI.brut(ouverte ? 'open' : '')}>
-      <summary><span class="acces-titre">${section.titre}</span><span class="acces-resume">${raison ? 'Sans objet' : section.resume}</span></summary>
+      <summary><span class="acces-titre">${section.titre}</span><span class="acces-resume">${raison ? I18n.t('parametres.rendre_section.sans_objet_2') : section.resume}</span></summary>
       <div class="acces-corps">${corps}</div>
     </details>`;
   }
@@ -333,11 +341,10 @@ const ParametresAcces = (() => {
   function bandeauAttente() {
     if (!etat.brouillon) return '';
     return UI.html`<div class="alerte attention acces-attente" id="acces-attente"><div class="alerte-texte">
-      <p><b>Modifications en attente.</b> Elles ne prennent effet qu'après « Appliquer et relancer » (prevo.config.json est alors écrit).
-        ${AVERTISSEMENT_RELANCE}</p>
+      <p>${I18n.html('parametres.bandeau_attente.modifications_attente_elles_prennent', { avertissementRelance: avertissementRelance() })}</p>
       <div class="actions">
-        <button type="button" class="btn btn-primaire" id="acces-appliquer">${UI.icone('valider')}Appliquer et relancer</button>
-        <button type="button" class="btn btn-fantome" id="acces-annuler">Annuler</button>
+        <button type="button" class="btn btn-primaire" id="acces-appliquer">${UI.icone('valider')}${I18n.t('parametres.bandeau_attente.appliquer_relancer')}</button>
+        <button type="button" class="btn btn-fantome" id="acces-annuler">${I18n.t('commun.bouton.annuler')}</button>
       </div>
       <div class="installation-attente" id="acces-relance" hidden></div>
     </div></div>`;
@@ -353,7 +360,7 @@ const ParametresAcces = (() => {
     const reponse = await etape('annuler', {});
     if (!reponse.statut || reponse.statut >= 400) { montrerErreur('attente', reponse.message); return; }
     reprendre(reponse.donnees);
-    UI.toast('Modifications annulées : rien n\'a changé.', 'info');
+    UI.toast(I18n.t('parametres.annuler.modifications_annulees_rien_change'), 'info');
     await rafraichir(carte);
   }
 
@@ -369,8 +376,8 @@ const ParametresAcces = (() => {
     const zone = UI.$('#acces-relance', carte);
     UI.$$('.btn', carte).forEach((bouton) => { bouton.disabled = true; });
     zone.hidden = false;
-    UI.remplir(zone, UI.html`<p class="chargement" role="status">Configuration écrite. ${relance ? 'Prévo se relance : patientez…'
-      : 'Relancez Prévo à la main (Lancer_GMAO.bat ou lancer.sh dans son dossier) : cette page suivra.'}</p>`);
+    UI.remplir(zone, UI.html`<p class="chargement" role="status">${I18n.t('parametres.attendre_relance.configuration_ecrite')} ${relance ? I18n.t('parametres.attendre_relance.prevo_relance_patientez')
+      : I18n.t('parametres.attendre_relance.relancez_prevo_main_lancer')}</p>`);
     const debut = Date.now();
     while (Date.now() - debut < DELAI_RELANCE_MS) {
       await new Promise((suite) => { setTimeout(suite, INTERVALLE_RELANCE_MS); });
@@ -378,8 +385,7 @@ const ParametresAcces = (() => {
         if (await serveurRelance(avant)) { location.reload(); return; }
       } catch (erreur) { /* le serveur redémarre : on réessaie */ }
     }
-    UI.remplir(zone, UI.html`<p class="erreur-champ" role="alert">Le serveur ne revient pas. Relancez Prévo par son lanceur (Lancer_GMAO.bat ou lancer.sh)
-      dans son dossier, puis rouvrez cette page.</p>`);
+    UI.remplir(zone, UI.html`<p class="erreur-champ" role="alert">${I18n.t('parametres.attendre_relance.serveur_revient_pas_relancez')}</p>`);
     UI.$$('.btn', carte).forEach((bouton) => { bouton.disabled = false; });
   }
 
@@ -397,7 +403,7 @@ const ParametresAcces = (() => {
   async function enregistrer(section, zone, carte) {
     montrerErreur(section.cle, '');
     const corps = section.lire ? section.lire(zone) : {};
-    if (!corps) { montrerErreur(section.cle, section.message || 'Complétez ce réglage.'); return; }
+    if (!corps) { montrerErreur(section.cle, section.message || I18n.t('parametres.enregistrer.completez_reglage')); return; }
     if (corps.probleme) { montrerErreur(section.cle, corps.probleme); return; }
     const brouillon = await assurerBrouillon(section.cle);
     if (!brouillon) return;
@@ -406,14 +412,15 @@ const ParametresAcces = (() => {
     reprendre(reponse.donnees);
     const donnees = reponse.donnees || {};
     if (corps.retirer && donnees.lance && !donnees.lance.ok) {
-      montrerErreur(section.cle, 'Le retrait a été refusé ou a échoué (' + (donnees.lance.message || 'code ' + donnees.lance.code)
-        + ') : lancez Retirer_demarrage.ps1 en administrateur depuis le dossier de Prévo, puis appliquez.');
+      montrerErreur(section.cle, donnees.lance.message
+        ? I18n.t('parametres.enregistrer.retrait_ete_refuse_echoue', { lanceMessage: StockageServeur.texte(donnees.lance, 'message') })
+        : I18n.t('parametres.enregistrer.retrait_ete_refuse_echoue_2', { lanceCode: donnees.lance.code }));
       return;
     }
     const echec = section.formulaire && section.formulaire.echec ? section.formulaire.echec(donnees) : '';
     if (echec) { montrerErreur(section.cle, echec); return; }
     const texte = section.formulaire && section.formulaire.reussite ? section.formulaire.reussite(donnees) : '';
-    UI.toast(texte || 'Réglage enregistré : « Appliquer et relancer » pour qu\'il prenne effet.', 'succes');
+    UI.toast(texte || I18n.t('parametres.enregistrer.reglage_enregistre_appliquer_relancer'), 'succes');
     rendreContenu(carte);
   }
 
@@ -428,8 +435,9 @@ const ParametresAcces = (() => {
     const d = detection.donnees.detection || {};
     const proposition = detection.donnees.proposition || {};
     if (!d.present || !d.connecte) {
-      montrerErreur('tailscale', !d.present ? 'Tailscale n\'est toujours pas détecté' + (d.raison ? ' (' + d.raison + ')' : '') + ' : installez-le, connectez-vous, puis réessayez.'
-        : 'Tailscale est installé mais pas connecté : ouvrez Tailscale, connectez-vous, puis réessayez.');
+      montrerErreur('tailscale', !d.present ? (d.raison ? I18n.t('parametres.appliquer_tailscale.tailscale_toujours_pas_detecte', { raison: StockageServeur.texte(d, 'raison') })
+          : I18n.t('parametres.appliquer_tailscale.tailscale_toujours_pas_detecte_2'))
+        : I18n.t('parametres.appliquer_tailscale.tailscale_installe_mais_pas'));
       await jeterSiNeuf(brouillon);
       return;
     }
@@ -440,16 +448,16 @@ const ParametresAcces = (() => {
     rendreContenu(carte);
     const resultat = UI.$('#inst-tailscale-resultat', carte);
     if (!resultat) return;
-    UI.remplir(resultat, UI.html`<p><b>${application.donnees.message || 'Tailscale publie Prévo.'}</b> Adresse : <b>${application.donnees.adresse || ''}</b></p>
+    UI.remplir(resultat, UI.html`<p>${I18n.html('parametres.appliquer_tailscale.resultat_adresse', { message: StockageServeur.texte(application.donnees, 'message') || I18n.t('parametres.appliquer_tailscale.tailscale_publie_prevo'), adresse: application.donnees.adresse || '' })}</p>
       <ul>${(proposition.rappels || []).map((rappel) => UI.html`<li>${rappel}</li>`)}</ul>
-      ${proposition.unattended ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" id="inst-tailscale-unattended">Rester connecté même sans session Windows ouverte</button></div>` : ''}`);
+      ${proposition.unattended ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" id="inst-tailscale-unattended">${I18n.t('parametres.appliquer_tailscale.rester_connecte_meme_sans')}</button></div>` : ''}`);
     resultat.hidden = false;
     const unattended = UI.$('#inst-tailscale-unattended', resultat);
     if (unattended) {
       unattended.addEventListener('click', () => pendant(unattended, 'Tailscale sans session', async () => {
         const reponse = await etape('tailscale', { action: 'unattended' });
         if (!reponse.statut || reponse.statut >= 400) { montrerErreur('tailscale', reponse.message); return; }
-        UI.toast(reponse.donnees.message || 'Fait.', 'succes');
+        UI.toast(StockageServeur.texte(reponse.donnees, 'message') || I18n.t('parametres.appliquer_tailscale.fait'), 'succes');
         unattended.hidden = true;
       }));
     }
@@ -464,11 +472,10 @@ const ParametresAcces = (() => {
     if (!contenu) return;
     const liste = etat.configuration_presente ? sections() : [];
     UI.remplir(contenu, UI.html`${bandeauAttente()}${etatServeur()}
-      ${liste.length ? UI.html`<h3 class="acces-intertitre">Réglages de l'accès</h3>
-        <p class="note">Chaque réglage de l'assistant se refait ici ; les aides sont celles de l'assistant. Enregistrez, puis « Appliquer et relancer ».</p>
+      ${liste.length ? UI.html`<h3 class="acces-intertitre">${I18n.t('parametres.rendre_contenu.reglages_acces')}</h3>
+        <p class="note">${I18n.t('parametres.rendre_contenu.chaque_reglage_assistant_refait')}</p>
         <div class="acces-sections">${liste.map(rendreSection)}</div>`
-        : UI.html`<p class="note" id="acces-sans-configuration">Tant que l'installation n'est pas terminée, les réglages se font dans
-          <a href="#/installation">l'assistant d'installation</a>.</p>`}`);
+        : UI.html`<p class="note" id="acces-sans-configuration">${I18n.html('parametres.rendre_contenu.tant_installation_pas_terminee')}</p>`}`);
     contenu.dataset.lu = '1';
     UI.$$('details.acces-section', contenu).forEach((details) => {
       details.addEventListener('toggle', () => { if (details.open) ouvertes.add(details.dataset.section); else ouvertes.delete(details.dataset.section); });
@@ -487,7 +494,7 @@ const ParametresAcces = (() => {
       }
       const plusTardSauvegardes = UI.$('#inst-sauvegardes-plus-tard', zone);
       if (plusTardSauvegardes) {
-        plusTardSauvegardes.textContent = 'Ne plus copier';
+        plusTardSauvegardes.textContent = I18n.t('parametres.rendre_contenu.plus_copier');
         plusTardSauvegardes.addEventListener('click', () => pendant(plusTardSauvegardes, 'copie des sauvegardes', async () => {
           UI.$('#inst-copie_sauvegardes', zone).value = '';
           await enregistrer(section, zone, carte);
@@ -516,11 +523,10 @@ const ParametresAcces = (() => {
   function carteAcces() {
     if (!visible()) return '';
     return UI.html`<article class="carte" id="carte-acces">
-      <div class="entete-carte"><h2>Accès et installation</h2>
-        <button type="button" class="btn btn-secondaire" id="acces-actualiser">${UI.icone('actualiser')}Actualiser</button></div>
-      <p class="note">Ce que l'assistant d'installation a réglé se refait ici, depuis le PC serveur seulement (un autre poste ne voit pas cette carte).
-        <a href="#/installation/fiche" id="acces-fiche">Voir la fiche d'accès</a> : adresses, QR, arrêt et relance, mot de passe oublié.</p>
-      <div id="acces-contenu"><p class="chargement" role="status">Lecture de l'état du serveur…</p></div>
+      <div class="entete-carte"><h2>${I18n.t('parametres.carte_acces.acces_installation')}</h2>
+        <button type="button" class="btn btn-secondaire" id="acces-actualiser">${UI.icone('actualiser')}${I18n.t('commun.bouton.actualiser')}</button></div>
+      <p class="note">${I18n.html('parametres.carte_acces.assistant_installation_regle_refait')}</p>
+      <div id="acces-contenu"><p class="chargement" role="status">${I18n.t('parametres.carte_acces.lecture_etat_serveur')}</p></div>
     </article>`;
   }
 

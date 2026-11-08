@@ -412,6 +412,27 @@ SCRIPT_SANS_AIDE = """
 })();
 """
 
+# Vérification de nouvelle version (T305 : active par défaut) : aucun test ne sort sur Internet. Chaque contexte sert
+# lui-même https://prevo.pro/version.json (version 0.0.0 : jamais plus récente, aucun bandeau) et tient le bandeau
+# d'information unique pour lu (prevo.majInformee, sauf valeur déjà présente). La classe qui teste la vérification met
+# VERIFICATION_DE_VERSION = True (faux site local, window.PREVO_ADRESSE_VERSION).
+ADRESSE_VERSION_JSON = "https://prevo.pro/version.json"
+VERSION_JSON_DES_TESTS = json.dumps({"version": "0.0.0", "adresse": "https://prevo.pro/"})
+SCRIPT_MAJ_INFORMEE = """
+(() => {
+  try { if (localStorage.getItem('prevo.majInformee') === null) localStorage.setItem('prevo.majInformee', '1'); }
+  catch (erreur) { /* page sans stockage : rien à faire */ }
+})();
+"""
+
+
+def servir_version_des_tests(contexte):
+    """prevo.pro/version.json servi par le contexte (aucune sortie réseau) ; bandeau d'information tenu pour lu."""
+    contexte.route(ADRESSE_VERSION_JSON, lambda route: route.fulfill(
+        status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"},
+        body=VERSION_JSON_DES_TESTS))
+    contexte.add_init_script(SCRIPT_MAJ_INFORMEE)
+
 
 class CasNavigateur(unittest.TestCase):
     """Base des tests qui ouvrent un navigateur.
@@ -435,6 +456,8 @@ class CasNavigateur(unittest.TestCase):
     # que script-src 'self' interdit ; les contextes des tests la contournent donc (bypass_csp). La classe qui teste
     # la politique elle-même met CSP_REELLE = True et attend sans eval.
     CSP_REELLE = False
+    # T305 : voir servir_version_des_tests (aucun test ne lit le vrai prevo.pro).
+    VERIFICATION_DE_VERSION = False
 
     @classmethod
     def setUpClass(cls):
@@ -453,6 +476,8 @@ class CasNavigateur(unittest.TestCase):
             contexte = nouveau_contexte(*arguments, **options)
             if not cls.AIDE_ECRANS:
                 contexte.add_init_script(SCRIPT_SANS_AIDE)
+            if not cls.VERIFICATION_DE_VERSION:
+                servir_version_des_tests(contexte)
             return contexte
 
         cls.navigateur.new_context = contexte_des_tests
@@ -632,13 +657,23 @@ def installer_dossier_simule(contexte, nom="donnees-test"):
     contexte.add_init_script(script)
 
 
+# Moteur de traduction et textes français, chargés avant js/schema.js dans index.html (contrat du Lot 2) : les modules
+# lisent leurs textes par I18n.t au moment de les montrer.
+SCRIPTS_TRADUCTION = ["js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js"]
+
+
 def charger_scripts(page, chemins):
     """Ouvre tests/fixtures/page-vide.html en file:// et y ajoute les scripts du projet, dans l'ordre.
 
     chemins : chemins relatifs à la racine du projet, ex. ['js/schema.js', 'js/donnees.js'].
-    Les scripts sont chargés comme de vrais <script src> classiques (donc comme dans index.html).
+    Les scripts sont chargés comme de vrais <script src> classiques (donc comme dans index.html). Comme dans
+    index.html, le moteur de traduction et le français (SCRIPTS_TRADUCTION) passent d'abord, sauf si la liste
+    charge déjà js/i18n.js elle-même ou ne contient aucun script de js/ hors des bibliothèques (js/lib/).
     """
     page.goto(url_fichier(PAGE_VIDE))
+    if "js/i18n.js" not in chemins and any(str(chemin).startswith("js/") and not str(chemin).startswith("js/lib/")
+                                          for chemin in chemins):
+        chemins = SCRIPTS_TRADUCTION + list(chemins)
     for chemin in chemins:
         fichier = (RACINE / chemin)
         if not fichier.is_file():

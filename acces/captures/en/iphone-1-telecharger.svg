@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 640" width="360" height="640" font-family="Sora, system-ui, sans-serif">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2F5BEA"/><stop offset="1" stop-color="#22C3E6"/></linearGradient></defs>
+<rect width="360" height="640" rx="28" fill="#0B1226"/>
+<rect x="14" y="30" width="332" height="30" rx="8" fill="#172245"/>
+<text x="28" y="50" font-size="12" fill="#B7C1E6" font-weight="normal" text-anchor="start">192.168.x.x:8080</text>
+<rect x="24" y="80" width="40" height="40" rx="12" fill="url(#g)"/>
+<text x="76" y="98" font-size="20" fill="#E8EDFF" font-weight="bold" text-anchor="start">Prévo</text>
+<text x="76" y="116" font-size="12" fill="#B7C1E6" font-weight="normal" text-anchor="start">Workshop CMMS</text>
+<rect x="14" y="140" width="332" height="330" rx="20" fill="#121B36" stroke="#2A3558"/>
+<text x="30" y="172" font-size="15" fill="#E8EDFF" font-weight="bold" text-anchor="start">Trust the workshop PC</text>
+<text x="30" y="196" font-size="12" fill="#B7C1E6" font-weight="normal" text-anchor="start">Prévo runs on the workshop PC,</text>
+<text x="30" y="214" font-size="12" fill="#B7C1E6" font-weight="normal" text-anchor="start">not on the internet…</text>
+<circle cx="46" cy="256" r="16" fill="#3366E6"/>
+<text x="46" y="261" font-size="14" fill="#FFFFFF" font-weight="bold" text-anchor="middle">1</text>
+<text x="72" y="261" font-size="14" fill="#E8EDFF" font-weight="bold" text-anchor="start">Download the certificate</text>
+<rect x="72" y="282" width="200" height="44" rx="12" fill="#3366E6"/>
+<text x="172" y="309" font-size="13" fill="#FFFFFF" font-weight="bold" text-anchor="middle">Download the certificate</text>
+<circle cx="252" cy="304" r="22" fill="#22C3E6" fill-opacity=".18"/><circle cx="252" cy="304" r="11" fill="#22C3E6" stroke="#FFFFFF" stroke-width="3"/>
+<circle cx="46" cy="372" r="16" fill="#2A3558"/>
+<text x="46" y="377" font-size="14" fill="#B7C1E6" font-weight="bold" text-anchor="middle">2</text>
+<text x="72" y="377" font-size="14" fill="#B7C1E6" font-weight="bold" text-anchor="start">Open Settings…</text>
+<rect x="24" y="490" width="312" height="132" rx="16" fill="#FFFFFF" stroke="#E1E5EE"/>
+<text x="40" y="516" font-size="12" fill="#1C2033" font-weight="normal" text-anchor="start">This website is trying to download a</text>
+<text x="40" y="538" font-size="12" fill="#1C2033" font-weight="normal" text-anchor="start">configuration profile. Do you want to</text>
+<text x="40" y="560" font-size="12" fill="#1C2033" font-weight="normal" text-anchor="start">allow this?</text>
+<text x="40" y="582" font-size="12" fill="#1C2033" font-weight="bold" text-anchor="start">Ignore          Allow</text>
+<text x="180" y="626" font-size="11" fill="#7D89B5" font-weight="normal" text-anchor="middle">Illustration</text>
+</svg>

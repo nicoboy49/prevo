@@ -31,7 +31,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from commun import DOSSIER_DEMO, RACINE, CasNavigateur, ServeurPrevo, charger_scripts
+from commun import DOSSIER_DEMO, RACINE, SCRIPTS_TRADUCTION, CasNavigateur, ServeurPrevo, charger_scripts
 
 DOSSIER_V1 = RACINE / "tests" / "fixtures" / "v1"
 BOM = b"\xef\xbb\xbf"
@@ -52,7 +52,7 @@ MESSAGE_INFO = "ajoutée par la version %d du format, écrite au prochain enregi
 VERSION_COLONNE = {"astuce": 3}   # depuisVersion du schéma (js/schema.js) ; les autres colonnes : version 2
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js"]
-SCRIPTS_SERVEUR = SCRIPTS + ["js/stockage-serveur.js"]
+SCRIPTS_SERVEUR = SCRIPTS_TRADUCTION + SCRIPTS + ["js/stockage-serveur.js"]   # moteur de traduction d'abord (Lot 2)
 
 # Page vide servie (par interception Playwright) à l'adresse du serveur de test : les appels
 # /api/… de StockageServeur partent ainsi de la même origine, sans dépendre d'index.html ni des
@@ -260,17 +260,19 @@ class TestFormatV2ModeServeur(CasNavigateur):
 
     def setUp(self):
         super().setUp()
-        # Copie du jeu de démo où les quatre fichiers v1 remplacent ceux de la démo ; ServeurPrevo
-        # en refait une copie temporaire (jamais donnees/ réel).
+        # Copie du jeu de démo ; ServeurPrevo en refait une copie temporaire (jamais donnees/ réel), où ouvrir()
+        # pose les fichiers v1 APRÈS le démarrage : le serveur passe au format courant à son démarrage (T185) ;
+        # c'est le cas « le serveur n'a pas pu » (Excel ouvert) qui reste à lire et à réécrire par le navigateur.
         temporaire = tempfile.TemporaryDirectory(prefix="prevo-test-v2-")
         self.addCleanup(temporaire.cleanup)
         self.source = Path(temporaire.name) / "donnees"
         shutil.copytree(str(DOSSIER_DEMO), str(self.source))
-        for table in COLONNES_V2:
-            (self.source / (table + ".csv")).write_bytes(octets_v1(table))
 
     def ouvrir(self, serveur):
-        """Page vide à l'adresse du serveur, scripts de Donnees et StockageServeur, 22 tables chargées."""
+        """Les fichiers v1 à la place de ceux de la démo, puis page vide à l'adresse du serveur, scripts de Donnees
+        et StockageServeur, 22 tables chargées."""
+        for table in COLONNES_V2:
+            (serveur.dossier / (table + ".csv")).write_bytes(octets_v1(table))
         adresse = serveur.url + "/test-format-v2.html"
         self.page.route(adresse, lambda route: route.fulfill(
             status=200, content_type="text/html; charset=utf-8", body=PAGE_VIDE_HTML))

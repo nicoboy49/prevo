@@ -38,10 +38,13 @@ const Indicateurs = (() => {
   const TYPES_PREVENTIFS = ['préventif systématique', 'préventif conditionnel'];
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
   const PRIORITES = ['P1', 'P2', 'P3', 'P4'];
-  const PERIODES = Object.freeze({
-    mois: 'Mois en cours', 'mois-precedent': 'Mois précédent', '3-mois': '3 derniers mois',
-    '12-mois': '12 derniers mois', 'du-au': 'Période choisie',
-  });
+  // Fonction (et non constante) : les libellés sont lus au moment de l'affichage, jamais figés au chargement.
+  function libellesPeriodes() {
+    return {
+      mois: I18n.t('indicateurs.libelles_periodes.mois_cours'), 'mois-precedent': I18n.t('indicateurs.libelles_periodes.mois_precedent'), '3-mois': I18n.t('indicateurs.libelles_periodes.trois_derniers_mois'),
+      '12-mois': I18n.t('indicateurs.libelles_periodes.douze_derniers_mois'), 'du-au': I18n.t('indicateurs.libelles_periodes.periode_choisie'),
+    };
+  }
   const MILLISECONDES_PAR_JOUR = 86400000;
   const MILLISECONDES_PAR_HEURE = 3600000;
   const MOTIF_DATE_ISO = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -137,7 +140,7 @@ const Indicateurs = (() => {
     const propre = valeur === null || valeur === undefined || !Number.isFinite(valeur) ? null : valeur;
     return {
       valeur: propre,
-      raison: propre === null ? (raison || 'non calculable') : null,
+      raison: propre === null ? (raison || I18n.t('indicateurs.resultat.non_calculable')) : null,
       effectif: autres.effectif || 0,
       ots: autres.ots || [],
       exclus: autres.exclus || [],
@@ -173,7 +176,7 @@ const Indicateurs = (() => {
     const jour = dateDuJour(aujourdhui);
     let debut;
     let fin = jour;
-    let choisi = PERIODES[code] ? code : '12-mois';
+    let choisi = libellesPeriodes()[code] ? code : '12-mois';
     if (choisi === 'mois') debut = jour.slice(0, 8) + '01';
     else if (choisi === 'mois-precedent') {
       debut = ajouterMois(jour.slice(0, 8) + '01', -1);
@@ -186,7 +189,7 @@ const Indicateurs = (() => {
       choisi = '12-mois';
       debut = ajouterJours(ajouterMois(jour, -12), 1);
     }
-    return { code: choisi, debut, fin, libelle: PERIODES[choisi] + ' (du ' + UI.dateFr(debut) + ' au ' + UI.dateFr(fin) + ')' };
+    return { code: choisi, debut, fin, libelle: I18n.t('indicateurs.periode.v1_debut_fin', { periode: libellesPeriodes()[choisi], debut: UI.dateFr(debut), fin: UI.dateFr(fin) }) };
   }
 
   /** Période d'un mois 'AAAA-MM' (du 1er au dernier jour). */
@@ -357,15 +360,15 @@ const Indicateurs = (() => {
 
   /** Temps requis d'un équipement sur la période (heures), voir l'en-tête. */
   function tempsRequis(equipement, periodeChoisie) {
-    if (!equipement) return resultat(null, 'non calculable : équipement introuvable');
-    if (!estSuivi(equipement)) return resultat(null, 'non calculable : équipement désactivé ou au rebut');
+    if (!equipement) return resultat(null, I18n.t('indicateurs.temps_requis.non_calculable_equipement_introuvable'));
+    if (!estSuivi(equipement)) return resultat(null, I18n.t('indicateurs.temps_requis.non_calculable_equipement_desactive'));
     const heures = nombre(equipement.heures_fonct_jour);
-    if (heures === null || heures <= 0) return resultat(null, 'non calculable : heures de fonctionnement par jour non renseignées');
+    if (heures === null || heures <= 0) return resultat(null, I18n.t('indicateurs.temps_requis.non_calculable_heures_fonctionnement'));
     const miseEnService = jourDe(equipement.date_mes);
     const debut = miseEnService && miseEnService > periodeChoisie.debut ? miseEnService : periodeChoisie.debut;
-    if (debut > periodeChoisie.fin) return resultat(null, 'non calculable : mis en service après la période');
+    if (debut > periodeChoisie.fin) return resultat(null, I18n.t('indicateurs.temps_requis.non_calculable_mis_service'));
     const jours = joursDansPeriode(debut, periodeChoisie.fin);
-    return resultat(heures * jours, null, { effectif: jours, note: heures + ' h par jour × ' + jours + ' jours' });
+    return resultat(heures * jours, null, { effectif: jours, note: I18n.t('indicateurs.temps_requis.h_jour_jours', { heures, n: jours }) });
   }
 
   // ===========================================================================================
@@ -377,7 +380,7 @@ const Indicateurs = (() => {
   function fiabilite(liste, requis) {
     const ots = liste.map((panne) => panne.ot.id);
     const sansDuree = liste.filter((panne) => panne.duree === null)
-      .map((panne) => ({ id: panne.ot.id, raison: estCloture(panne.ot) ? 'sans durée d\'arrêt' : 'non clôturée' }));
+      .map((panne) => ({ id: panne.ot.id, raison: estCloture(panne.ot) ? I18n.t('indicateurs.fiabilite.sans_duree_arret') : I18n.t('indicateurs.fiabilite.non_cloturee') }));
     const avecDuree = liste.filter((panne) => panne.duree !== null);
     const sommeArret = avecDuree.reduce((somme, panne) => somme + panne.duree, 0);
     const dureeArret = resultat(sommeArret, null, { effectif: avecDuree.length, ots, exclus: sansDuree });
@@ -385,20 +388,19 @@ const Indicateurs = (() => {
     const mesurables = avecDuree.filter((panne) => estCloture(panne.ot));
     const idsMesurables = new Set(mesurables.map((panne) => panne.ot.id));
     const exclusMttr = liste.filter((panne) => !idsMesurables.has(panne.ot.id))
-      .map((panne) => ({ id: panne.ot.id, raison: estCloture(panne.ot) ? 'sans durée d\'arrêt' : 'non clôturée' }));
-    const mttr = liste.length === 0 ? resultat(null, 'aucune panne sur la période')
+      .map((panne) => ({ id: panne.ot.id, raison: estCloture(panne.ot) ? I18n.t('indicateurs.fiabilite.sans_duree_arret') : I18n.t('indicateurs.fiabilite.non_cloturee') }));
+    const mttr = liste.length === 0 ? resultat(null, I18n.t('indicateurs.fiabilite.aucune_panne_periode'))
       : resultat(mesurables.length ? mesurables.reduce((somme, panne) => somme + panne.duree, 0) / mesurables.length : null,
-        'non calculable : aucune panne clôturée avec une durée d\'arrêt',
+        I18n.t('indicateurs.fiabilite.non_calculable_aucune_panne'),
         { effectif: mesurables.length, ots: mesurables.map((panne) => panne.ot.id), exclus: exclusMttr });
 
     // Durée d'arrêt plus longue que le temps requis (panne à cheval sur une période courte, ou heures
     // par jour sous-estimées) : MTBF et disponibilité seraient négatifs → non calculables.
     const depasse = requis.valeur !== null && sommeArret > requis.valeur;
-    const raisonDepasse = 'non calculable : la durée d\'arrêt (' + UI.nombreFr(sommeArret, 1) + ' h) dépasse le temps requis de la période ('
-      + UI.nombreFr(requis.valeur, 1) + ' h) — période trop courte pour une panne à cheval, ou heures de fonctionnement par jour sous-estimées';
+    const raisonDepasse = I18n.t('indicateurs.fiabilite.non_calculable_duree_arret', { duree: UI.nombreFr(sommeArret, 1), requis: UI.nombreFr(requis.valeur, 1) });
     let mtbf;
     if (requis.valeur === null) mtbf = resultat(null, requis.raison, { ots });
-    else if (liste.length === 0) mtbf = resultat(null, 'aucune panne sur la période');
+    else if (liste.length === 0) mtbf = resultat(null, I18n.t('indicateurs.fiabilite.aucune_panne_periode'));
     else if (depasse) mtbf = resultat(null, raisonDepasse, { effectif: liste.length, ots });
     else mtbf = resultat((requis.valeur - sommeArret) / liste.length, null, { effectif: liste.length, ots, exclus: sansDuree });
 
@@ -406,9 +408,9 @@ const Indicateurs = (() => {
     // panne sans durée n'y est jamais comptée comme 0 h d'arrêt ; elle reste dans le nombre de pannes et le MTBF.
     let disponibilite;
     if (requis.valeur === null) disponibilite = resultat(null, requis.raison);
-    else if (liste.length === 0) disponibilite = resultat(1, null, { note: 'aucune panne sur la période' });
+    else if (liste.length === 0) disponibilite = resultat(1, null, { note: I18n.t('indicateurs.fiabilite.aucune_panne_periode') });
     else if (depasse) disponibilite = resultat(null, raisonDepasse);
-    else if (!avecDuree.length) disponibilite = resultat(null, 'non calculable : aucune panne avec une durée d\'arrêt', { exclus: sansDuree });
+    else if (!avecDuree.length) disponibilite = resultat(null, I18n.t('indicateurs.fiabilite.non_calculable_aucune_panne_2'), { exclus: sansDuree });
     else if (mttr.valeur === null) disponibilite = resultat(null, mttr.raison, { exclus: sansDuree });
     else {
       const mtbfAvecDuree = (requis.valeur - sommeArret) / avecDuree.length;
@@ -418,7 +420,7 @@ const Indicateurs = (() => {
 
     const completes = mesurables.filter((panne) => panne.attente.complet && panne.attente.heures !== null);
     const attente = resultat(completes.length ? completes.reduce((somme, panne) => somme + panne.attente.heures, 0) / completes.length : null,
-      liste.length === 0 ? 'aucune panne sur la période' : 'historique des statuts absent du journal',
+      liste.length === 0 ? I18n.t('indicateurs.fiabilite.aucune_panne_periode') : I18n.t('indicateurs.fiabilite.historique_statuts_absent_journal'),
       { effectif: completes.length, ots: completes.map((panne) => panne.ot.id) });
     return { pannes: resultat(liste.length, null, { effectif: liste.length, ots }), dureeArret, mtbf, mttr, disponibilite, attentePieces: attente };
   }
@@ -427,7 +429,7 @@ const Indicateurs = (() => {
   function coutDesOrdres(ordres, periodeChoisie, ctx) {
     const comptes = ordres.filter((ot) => estCloture(ot) && dansPeriode(ot.date_fin, periodeChoisie));
     return resultat(arrondi(comptes.reduce((somme, ot) => somme + coutDeLOt(ot, ctx), 0)), null,
-      { effectif: comptes.length, ots: comptes.map((ot) => ot.id), note: 'prix actuel des pièces (limite D24)' });
+      { effectif: comptes.length, ots: comptes.map((ot) => ot.id), note: I18n.t('indicateurs.cout_des_ordres.prix_actuel_pieces_limite') });
   }
 
   /** Indicateurs d'un équipement : { tempsRequis, pannes, dureeArret, mtbf, mttr, disponibilite,
@@ -460,7 +462,7 @@ const Indicateurs = (() => {
     const ids = new Set(retenus);
     const liste = pannes(periodeChoisie, {}, ctx).filter((panne) => ids.has(texte(panne.ot.equipement_id)));
     const requisGlobal = retenus.length ? resultat(sommeRequis, null, { effectif: retenus.length, exclus })
-      : resultat(null, 'non calculable : aucun équipement n\'a ses heures de fonctionnement par jour', { exclus });
+      : resultat(null, I18n.t('indicateurs.global.non_calculable_aucun_equipement'), { exclus });
     return Object.assign({ tempsRequis: requisGlobal }, fiabilite(liste, requisGlobal), {
       // Coût : tous les OT des équipements filtrés, au rebut ou désactivés compris (l'argent a été
       // dépensé ; même périmètre que coutParEquipement — correction de relecture).
@@ -499,12 +501,12 @@ const Indicateurs = (() => {
       total += heures;
       if (TYPES_PREVENTIFS.includes(texte(ot.type))) preventif += heures;
     });
-    return resultat(total > 0 ? preventif / total : null, 'non calculable : aucune heure passée sur la période',
-      { effectif: saisies, note: UI.nombreFr(preventif, 1) + ' h de préventif sur ' + UI.nombreFr(total, 1) + ' h' });
+    return resultat(total > 0 ? preventif / total : null, I18n.t('indicateurs.part_preventif.non_calculable_aucune_heure'),
+      { effectif: saisies, note: I18n.t('indicateurs.part_preventif.h_preventif_h', { preventif: UI.nombreFr(preventif, 1), total: UI.nombreFr(total, 1) }) });
   }
 
   function estUniteHeure(unite) {
-    return /^(h|heures?)$/.test(texte(unite).toLowerCase().replace(/\.$/, ''));
+    return /^(h|heures?|hours?|hrs?)$/.test(texte(unite).toLowerCase().replace(/\.$/, ''));   // anglais aussi (T287)
   }
 
   /** Période d'une gamme en jours (date : periodicite_jours ; compteur en heures :
@@ -539,7 +541,7 @@ const Indicateurs = (() => {
       const jours = gamme ? periodeGammeJours(gamme, ctx) : null;
       if (jours === null || !jourDe(ot.date_prevue)) {
         // Exclus listés seulement s'ils concernent la période (date prévue dedans, ou inconnue).
-        if (!jourDe(ot.date_prevue) || dansPeriode(ot.date_prevue, periodeChoisie)) exclus.push({ id: ot.id, raison: !jourDe(ot.date_prevue) ? 'sans date prévue' : 'période de la gamme inconnue' });
+        if (!jourDe(ot.date_prevue) || dansPeriode(ot.date_prevue, periodeChoisie)) exclus.push({ id: ot.id, raison: !jourDe(ot.date_prevue) ? I18n.t('indicateurs.respect_preventif.sans_date_prevue') : I18n.t('indicateurs.respect_preventif.periode_gamme_inconnue') });
         return;
       }
       const limite = ajouterJours(jourDe(ot.date_prevue), Math.max(1, Math.ceil(tolerancePct * jours / 100)));
@@ -548,8 +550,8 @@ const Indicateurs = (() => {
       if (estCloture(ot) && jourDe(ot.date_fin) && jourDe(ot.date_fin) <= limite) respectes.push(ot.id);
     });
     return resultat(comptes.length ? respectes.length / comptes.length : null,
-      'non calculable : aucun préventif à échéance sur la période',
-      { effectif: comptes.length, ots: comptes, exclus, note: respectes.length + ' respecté(s) sur ' + comptes.length });
+      I18n.t('indicateurs.respect_preventif.non_calculable_aucun_preventif'),
+      { effectif: comptes.length, ots: comptes, exclus, note: I18n.t('indicateurs.respect_preventif.n_respecte_nb_comptes', { n: respectes.length, nbComptes: comptes.length }) });
   }
 
   /** OT en retard (définition du lot 1) à une date, sur les équipements filtrés. */
@@ -572,7 +574,7 @@ const Indicateurs = (() => {
       const di = ctx.diParOt.get(ot.id);
       const delai = heuresEntre(texte(di && di.date_heure) || ot.date_creation, ot.date_debut);
       if (delai !== null && delai >= 0) parPriorite[texte(ot.priorite)].push({ id: ot.id, delai });
-      else exclusParPriorite[texte(ot.priorite)].push({ id: ot.id, raison: delai === null ? 'date illisible' : 'début avant la demande' });
+      else exclusParPriorite[texte(ot.priorite)].push({ id: ot.id, raison: delai === null ? I18n.t('indicateurs.delais_prise_en_charge.date_illisible') : I18n.t('indicateurs.delais_prise_en_charge.debut_avant_demande') });
     });
     const resultatParPriorite = {};
     PRIORITES.forEach((priorite) => {
@@ -625,7 +627,7 @@ const Indicateurs = (() => {
     let effectif = 0;
     Donnees.lignes('articles').filter((article) => texte(article.actif) !== '0').forEach((article) => {
       const prix = nombre(article.prix_unitaire);
-      if (prix === null) { exclus.push({ id: article.id, raison: 'sans prix unitaire' }); return; }
+      if (prix === null) { exclus.push({ id: article.id, raison: I18n.t('indicateurs.valeur_stock.sans_prix_unitaire') }); return; }
       total += Donnees.stockArticle(article.id) * prix;
       effectif += 1;
     });
@@ -633,7 +635,7 @@ const Indicateurs = (() => {
   }
 
   return {
-    PERIODES,
+    libellesPeriodes,
     // règles pures (ARCHITECTURE.md §15.3) ; les séries des graphiques sont dans indicateurs-series.js
     periode, periodeDuMois, pannes, tempsRequis, attentePieces, parEquipement, global,
     partPreventif, respectPreventif, otEnRetard, delaisPriseEnCharge, coutParEquipement, coutsParMois, valeurStock,

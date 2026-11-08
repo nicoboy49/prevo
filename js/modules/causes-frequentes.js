@@ -19,10 +19,18 @@ const CausesFrequentes = (() => {
   const NOMBRE_CAUSES = 3;            // au plus 3 causes affichées
   const LIENS_PAR_CAUSE = 5;          // au plus 5 liens « voir les OT » par cause (les plus récents)
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
-  const MENTION = 'Statistique de l\'historique, pas un diagnostic';
   const Z_95 = 1.96;                  // fourchette à 95 % (loi normale)
   const DEMI_LARGEUR_PISTE = 0.20;    // au-delà de ± 20 points : « peu de cas »
-  const MENTION_PISTE = 'Peu de cas : à prendre comme une piste.';
+
+  /** Mention de l'encart (jamais un diagnostic) ; lue à l'affichage. */
+  function mention() {
+    return I18n.t('causes.mention.statistique_historique_pas_diagnostic');
+  }
+
+  /** Mention « peu de cas » (fourchette de plus de ± 20 points) ; lue à l'affichage. */
+  function mentionPiste() {
+    return I18n.t('causes.mention_piste.peu_cas_prendre_comme');
+  }
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -72,7 +80,7 @@ const CausesFrequentes = (() => {
   /** « entre 32 % et 81 % des cas » (vide si n = 0). */
   function texteFourchette(k, n) {
     const resultat = fourchette(k, n);
-    return resultat ? 'entre ' + pourcent(resultat.bas) + ' et ' + pourcent(resultat.haut) + ' des cas' : '';
+    return resultat ? I18n.t('causes.texte_fourchette.entre_cas', { bas: pourcent(resultat.bas), haut: pourcent(resultat.haut) }) : '';
   }
 
   /** Vrai si au moins une cause affichée a une fourchette de plus de ± 20 points. */
@@ -86,11 +94,10 @@ const CausesFrequentes = (() => {
   /** Détail replié « Précision de ces chiffres » : la fourchette de chaque cause affichée. */
   function precisionHtml(resultat) {
     return UI.html`<details class="causes-precision">
-      <summary>Précision de ces chiffres</summary>
+      <summary>${I18n.t('causes.precision.precision_chiffres')}</summary>
       <dl class="causes-fourchettes">${resultat.causes.map((cause) => UI.html`<div><dt>${cause.libelle} :</dt>
         <dd>${texteFourchette(cause.nombre, resultat.total)}</dd></div>`)}</dl>
-      <p class="causes-explication">Calculée ainsi (méthode de Wilson), une fourchette contient la vraie part de la cause
-        95 fois sur 100 ; elle se resserre quand les cas s'accumulent.</p>
+      <p class="causes-explication">${I18n.t('causes.precision.calculee_ainsi_methode_wilson')}</p>
     </details>`;
   }
 
@@ -180,7 +187,7 @@ const CausesFrequentes = (() => {
 
     const tousLesCas = Donnees.lignes('ordres_travail').filter((ot) => estUnCas(ot, symptome));
     const casEquipement = tousLesCas.filter((ot) => ot.equipement_id === equipementId);
-    if (casEquipement.length >= minimum) return resultatSuffisant('equipement', 'cet équipement', casEquipement);
+    if (casEquipement.length >= minimum) return resultatSuffisant('equipement', I18n.t('causes.calculer.equipement'), casEquipement);
 
     const equipement = Donnees.trouver('equipements', equipementId);
     if (!equipement || !texte(equipement.marque) || !texte(equipement.modele)) {
@@ -189,8 +196,7 @@ const CausesFrequentes = (() => {
     const memeModele = equipementsDeMemeModele(equipement);
     const casModele = tousLesCas.filter((ot) => memeModele.has(ot.equipement_id));
     if (casModele.length >= minimum) {
-      return resultatSuffisant('modele', 'équipements de même marque et modèle ('
-        + texte(equipement.marque) + ' ' + texte(equipement.modele) + ')', casModele);
+      return resultatSuffisant('modele', I18n.t('causes.calculer.equipements_meme_marque_modele', { marque: texte(equipement.marque), modele: texte(equipement.modele) }), casModele);
     }
     return Object.assign(insuffisant, { total: casModele.length });
   }
@@ -211,7 +217,7 @@ const CausesFrequentes = (() => {
    */
   function suiteDesLiens(reste, portee, equipementId) {
     if (reste <= 0) return '';
-    const texteSuite = 'et ' + reste + (reste > 1 ? ' autres' : ' autre');
+    const texteSuite = I18n.t('causes.suite_des_liens.n_autres', { n: reste });
     if (portee !== 'equipement' || sansLienVersLesOt()) return UI.html` ${texteSuite}`;
     return UI.html` <a class="causes-autres" href="#/ot?equipement=${encodeURIComponent(equipementId)}&amp;etat=clotures">${texteSuite}</a>`;
   }
@@ -228,9 +234,9 @@ const CausesFrequentes = (() => {
       ? UI.html`${position ? ', ' : ''}${id}`
       : UI.html`${position ? ', ' : ''}<a href="#/ot/${id}">${id}</a>`));
     const suite = suiteDesLiens(cause.ots.length - montres.length, resultat.portee, equipementId);
-    const remede = cause.remede ? UI.html` · remède le plus utilisé : ${cause.remede.libelle}` : '';
-    const dernier = cause.dernierCas ? UI.html` · dernier cas : ${UI.dateFr(cause.dernierCas)}` : '';
-    return UI.html`<li><b>${cause.libelle}</b> — ${cause.nombre} cas sur ${resultat.total}${remede}${dernier} · voir les OT : ${liens}${suite}</li>`;
+    const remede = cause.remede ? UI.html` ${I18n.t('causes.ligne_cause.remede_plus_utilise', { remedeLibelle: cause.remede.libelle })}` : '';
+    const dernier = cause.dernierCas ? UI.html` ${I18n.t('causes.ligne_cause.dernier_cas', { dernierCas: UI.dateFr(cause.dernierCas) })}` : '';
+    return UI.html`<li>${I18n.html('causes.ligne_cause.cause_libelle_nombre_cas_total', { causeLibelle: cause.libelle, n: cause.nombre, total: resultat.total })}${remede}${dernier} ${I18n.t('causes.ligne_cause.voir_ot')} ${liens}${suite}</li>`;
   }
 
   /**
@@ -243,18 +249,23 @@ const CausesFrequentes = (() => {
     const resultat = calculer(equipementId, symptomeCode);
     if (!resultat.suffisant) {
       return UI.element(UI.html`<div class="encadre causes-frequentes">
-        <p>Pas encore assez de cas pour ce symptôme (${resultat.total} sur ${MINIMUM_PAR_DEFAUT})</p>
+        <p>${I18n.t('causes.encart.pas_encore_assez_cas', { total: resultat.total, minimum: MINIMUM_PAR_DEFAUT })}</p>
       </div>`);
     }
     return UI.element(UI.html`<div class="encadre causes-frequentes">
-      <h3>Causes fréquentes ici — ${resultat.total} cas</h3>
-      <p class="aide">Portée : ${resultat.libellePortee}</p>
-      ${peuDeCas(resultat) ? UI.html`<p class="causes-piste"><b>${MENTION_PISTE}</b></p>` : ''}
+      <h3>${I18n.t('causes.encart.causes_frequentes_ici_cas', { n: resultat.total })}</h3>
+      <p class="aide">${I18n.t('causes.encart.portee_libelle_portee', { libellePortee: resultat.libellePortee })}</p>
+      ${peuDeCas(resultat) ? UI.html`<p class="causes-piste"><b>${mentionPiste()}</b></p>` : ''}
       <ul>${resultat.causes.map((cause) => ligneCause(cause, resultat, equipementId))}</ul>
-      <p class="note">${MENTION}</p>
+      <p class="note">${mention()}</p>
       ${precisionHtml(resultat)}
     </div>`);
   }
 
-  return { MINIMUM_PAR_DEFAUT, MENTION, MENTION_PISTE, calculer, encart, fourchette, texteFourchette };
+  return {
+    MINIMUM_PAR_DEFAUT, calculer, encart, fourchette, texteFourchette,
+    /** Mentions de l'encart, lues dans la langue du moment (accesseurs : jamais figées au chargement). */
+    get MENTION() { return mention(); },
+    get MENTION_PISTE() { return mentionPiste(); },
+  };
 })();

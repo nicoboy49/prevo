@@ -112,9 +112,9 @@ Object.assign(Wiki, (() => {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
   }
 
-  /** Forme comparable : minuscules, sans accents, tout ce qui n'est ni lettre ni chiffre → espace. */
+  /** Forme comparable : pliage de toute recherche (UI.normaliserRecherche, D154), ni lettre ni chiffre → espace. */
   function comparable(valeur) {
-    return texte(valeur).normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase()
+    return UI.normaliserRecherche(valeur)
       .replace(/œ/g, 'oe').replace(/æ/g, 'ae')
       .replace(/[^a-z0-9]+/g, ' ').trim();
   }
@@ -417,14 +417,14 @@ Object.assign(Wiki, (() => {
 
   /** Portées, dans l'ordre : sans équipement, le parc seul ; sinon équipement, même modèle, reste du parc. */
   function porteesDe(equipementId) {
-    if (!equipementId) return [{ portee: 'parc', libelle: 'Dans tout le parc', contient: () => true }];
+    if (!equipementId) return [{ portee: 'parc', libelle: I18n.t('wiki.portees_de.tout_parc'), contient: () => true }];
     const equipement = Donnees.trouver('equipements', equipementId);
     const jumeaux = equipementsDeMemeModele(equipement);
-    const precision = jumeaux.size ? ' (' + texte(equipement.marque) + ' ' + texte(equipement.modele) + ')' : '';
+    const marqueModele = jumeaux.size ? texte(equipement.marque) + ' ' + texte(equipement.modele) : '';
     return [
-      { portee: 'equipement', libelle: 'Sur cet équipement', contient: (id) => id === equipementId },
-      { portee: 'modele', libelle: 'Même marque et modèle' + precision, contient: (id) => jumeaux.has(id) },
-      { portee: 'parc', libelle: 'Ailleurs dans le parc', contient: () => true },
+      { portee: 'equipement', libelle: I18n.t('wiki.portees_de.equipement'), contient: (id) => id === equipementId },
+      { portee: 'modele', libelle: jumeaux.size ? I18n.t('wiki.portees_de.meme_marque_modele', { marqueModele }) : I18n.t('wiki.portees_de.meme_marque_modele_seul'), contient: (id) => jumeaux.has(id) },
+      { portee: 'parc', libelle: I18n.t('wiki.portees_de.ailleurs_parc'), contient: () => true },
     ];
   }
 
@@ -498,7 +498,7 @@ Object.assign(Wiki, (() => {
       const espace = valeur.lastIndexOf(' ', fin);
       if (espace > Math.max(debut, finMot)) fin = espace;
     }
-    return (debut > 0 ? '…' : '') + valeur.slice(debut, fin).trim() + (fin < valeur.length ? '…' : '');
+    return (debut > 0 ? I18n.t('wiki.couper.points_suspension') : '') + valeur.slice(debut, fin).trim() + (fin < valeur.length ? I18n.t('wiki.couper.points_suspension') : '');
   }
 
   /**

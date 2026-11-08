@@ -583,7 +583,8 @@ class TestCasesDeLAppareil(JoueurDeCases, unittest.TestCase):
     def changer_et_rechanger(self, role):
         reponse = self.client.requete("POST", "/api/mot-de-passe", {"actuel": "a" * 12, "nouveau": "b" * 12},
                                       cookie=self.cookies[role])
-        self.assertEqual(reponse.json(), {"erreur": serveur.MESSAGE_ACTUEL_FAUX})
+        self.assertEqual(reponse.json(), {"erreur": serveur.MESSAGE_ACTUEL_FAUX,
+                                          "erreur_code": "sessions.mot_de_passe_actuel_faux"})
         return reponse, (403,)
 
     def test_cases_de_l_appareil(self):
@@ -900,7 +901,8 @@ class TestComptesDuResponsable(unittest.TestCase):
         self.assertEqual(entree.statut, 200, entree.octets)
         self.assertTrue(entree.json()["session"]["a_changer"])
         self.assertEqual(self.client.requete("GET", "/api/versions", cookie=entree.cookie).json(),
-                         {"erreur": serveur.MESSAGE_MOT_DE_PASSE_PROVISOIRE})
+                         {"erreur": serveur.MESSAGE_MOT_DE_PASSE_PROVISOIRE,
+                          "erreur_code": "sessions.mot_de_passe_provisoire"})
         creations = [ligne for ligne in self.journal() if ligne["resultat"] == "creation"
                      and ligne["qui"] == "marie.curie"]
         self.assertEqual([(ligne["adresse"], ligne["agent"]) for ligne in creations], [("127.0.0.1", AGENT)])
@@ -966,7 +968,8 @@ class TestComptesDuResponsable(unittest.TestCase):
                                                                                             "role": "responsable"})):
                 with self.subTest(role=role, chemin=chemin, methode=methode):
                     reponse = self.requete(methode, chemin, corps, role=role)
-                    self.assertEqual(reponse.json(), {"erreur": serveur.MESSAGE_RESERVE_AU_RESPONSABLE})
+                    self.assertEqual(reponse.json(), {"erreur": serveur.MESSAGE_RESERVE_AU_RESPONSABLE,
+                                                      "erreur_code": "acces.reserve_au_responsable"})
 
     def test_journal_des_connexions_en_csv(self):
         reponse = self.requete("GET", "/api/acces/journal")
@@ -1008,7 +1011,8 @@ class TestSansComptes(unittest.TestCase):
                                         ("POST", "/api/acces/comptes/paul.essai", {"action": "activer"})):
             with self.subTest(adresse=adresse, methode=methode):
                 reponse = client.requete(methode, adresse, corps)
-                self.assertEqual((reponse.statut, reponse.json()), (400, {"erreur": serveur.MESSAGE_SANS_COMPTES}))
+                self.assertEqual((reponse.statut, reponse.json()), (400, {"erreur": serveur.MESSAGE_SANS_COMPTES,
+                                                                          "erreur_code": "sessions.sans_comptes"}))
 
 
 # ---------------------------------------------------------------------------

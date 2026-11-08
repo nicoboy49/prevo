@@ -24,37 +24,36 @@
 Object.assign(Wiki, (() => {
 
   const TABLES = ['wiki_journal', 'wiki_pages', 'ordres_travail', 'equipements', 'articles'];
-  const VUES = [
-    { id: '', libelle: 'Journal' }, { id: 'a-valider', libelle: 'À valider' },
-    { id: 'contradictions', libelle: 'Contradictions' }, { id: 'file', libelle: 'File' },
-    { id: 'echecs', libelle: 'En échec' }, { id: 'hors', libelle: 'Hors du wiki' },
-    { id: 'controle', libelle: 'Contrôle du wiki' },
+  const VUES = [   // libellés lus à l'affichage
+    { id: '', get libelle() { return I18n.t('wiki.libelle.journal'); } }, { id: 'a-valider', get libelle() { return I18n.t('wiki.libelle.valider'); } },
+    { id: 'contradictions', get libelle() { return I18n.t('wiki.libelle.contradictions'); } }, { id: 'file', get libelle() { return I18n.t('wiki.libelle.file'); } },
+    { id: 'echecs', get libelle() { return I18n.t('wiki.libelle.vue_echecs'); } }, { id: 'hors', get libelle() { return I18n.t('wiki.libelle.hors_wiki'); } },
+    { id: 'controle', get libelle() { return I18n.t('wiki.libelle.controle_wiki'); } },
   ];
   const TONS = { 'en file': 'neutre', 'à valider': 'info', 'validée': 'ok', 'rejetée': 'ko', 'à refaire': 'attention',
     'refusée': 'ko', 'rien à ajouter': 'neutre', 'appliquée': 'ok' };
-  const NATURES = { ingestion: 'OT ingéré', manuel: 'Écriture à la main', 'décision': 'Décision' };
-  const DECISIONS = { ancien: 'l\'ancien reste', nouveau: 'le nouveau remplace', 'les deux': 'les deux sont vrais' };
-  const COMPTEURS = [['enCours', 'En cours'], ['restants', 'Restants'], ['acceptees', 'Acceptées'],
-    ['rien', 'Rien à ajouter'], ['refusees', 'Refusées'], ['rejouees', 'Rejouées']];
+  const natures = () => ({ ingestion: I18n.t('wiki.natures.ot_ingere'), manuel: I18n.t('wiki.natures.ecriture_main'), 'décision': I18n.t('wiki.natures.decision') });
+  const decisions = () => ({ ancien: I18n.t('wiki.decisions.ancien_reste'), nouveau: I18n.t('wiki.decisions.nouveau_remplace'), 'les deux': I18n.t('wiki.decisions.deux_sont_vrais') });
+  const libellesCompteurs = () => [['enCours', I18n.t('wiki.compteurs.en_cours')], ['restants', I18n.t('wiki.compteurs.restants')], ['acceptees', I18n.t('wiki.compteurs.acceptees')],
+    ['rien', I18n.t('wiki.compteurs.rien_ajouter')], ['refusees', I18n.t('wiki.compteurs.refusees')], ['rejouees', I18n.t('wiki.compteurs.rejouees')]];
   const S = Wiki.SEUILS;
   // Limites des textes rédigés en clair (Wiki.LIMITES, §20.12) : « « En bref » 5 phrases et 120 mots, …, un savoir-faire … ».
-  const LIMITES = Object.entries(Wiki.LIMITES).flatMap(([type, l]) => (l.page ? [['un ' + type, l.page]]
-    : Object.entries(l.rubriques).map(([rubrique, x]) => ['« ' + rubrique + ' »', x])))
-    .map(([nom, x]) => nom + ' ' + x.phrases + ' phrases' + (x.mots === null ? '' : ' et ' + x.mots + ' mots')).join(', ');
+  const limites = () => Object.entries(Wiki.LIMITES).flatMap(([type, l]) => (l.page ? [[type === 'savoir-faire' ? I18n.t('wiki.limites.un_savoir_faire') : type, l.page]]
+    : Object.entries(l.rubriques).map(([rubrique, x]) => ['« ' + rubrique + ' »', x]))).map(([nom, x]) => nom + ' ' + (x.mots === null
+      ? I18n.t('wiki.longueur.phrases', { n: x.phrases }) : I18n.t('wiki.longueur.phrases_mots', { phrases: x.phrases, mots: x.mots }))).join(', ');
   const TYPES_CONTROLE = [
-    { type: 'lien-casse', libelle: 'Liens cassés',
-      aide: 'Un lien [[titre]] vers une page inconnue (ni page, ni machine, ni article, ni panne), ou vers une page inexistante ou archivée.' },
-    { type: 'orpheline', libelle: 'Pages orphelines', aide: 'Savoir-faire sans machine, article ni rattachement, vers lequel aucune page ne renvoie.' },
-    { type: 'sans-ot', libelle: 'Pages sans OT cité', aide: 'Chaque phrase du wiki cite au moins un OT.' },
-    { type: 'titre-proche', libelle: 'Titres trop proches', aide: 'Même titre une fois les mots vides et les pluriels retirés.' },
-    { type: 'trop-longue', libelle: 'Textes trop longs', aide: 'Au plus ' + LIMITES + ' (au-delà, en sous-pages).' },
-    { type: 'anciennes-rubriques', libelle: 'Anciennes rubriques', aide: 'Texte écrit avant la refonte du wiki : à réécrire dans ses rubriques.' },
-    { type: 'type-retire', libelle: 'Types de page retirés', aide: 'Page de mode, sous-page de machine ou d\'article : à archiver.' },
-    { type: 'contradiction-ancienne', libelle: 'Contradictions anciennes',
-      aide: 'Ouvertes depuis plus de ' + S.contradictionAncienneJours + ' jours : à trancher sur leur page.' },
-    { type: 'ancrage-disparu', libelle: 'Ancrages disparus',
-      aide: 'La page est ancrée sur un équipement ou un article retiré ou désactivé, ou rattachée à une page (sa mère, '
-        + 'pour une sous-page) archivée ou absente.' },
+    { type: 'lien-casse', get libelle() { return I18n.t('wiki.libelle.liens_casses'); },
+      get aide() { return I18n.t('wiki.aide.lien_titre_vers_page'); } },
+    { type: 'orpheline', get libelle() { return I18n.t('wiki.libelle.pages_orphelines'); }, get aide() { return I18n.t('wiki.aide.savoir_faire_sans_machine'); } },
+    { type: 'sans-ot', get libelle() { return I18n.t('wiki.libelle.pages_sans_ot_cite'); }, get aide() { return I18n.t('wiki.aide.chaque_phrase_wiki_cite'); } },
+    { type: 'titre-proche', get libelle() { return I18n.t('wiki.libelle.titres_trop_proches'); }, get aide() { return I18n.t('wiki.aide.meme_titre_fois_mots'); } },
+    { type: 'trop-longue', get libelle() { return I18n.t('wiki.libelle.textes_trop_longs'); }, get aide() { return I18n.t('wiki.aide.plus_dela_sous_pages', { limites: limites() }); } },
+    { type: 'anciennes-rubriques', get libelle() { return I18n.t('wiki.libelle.anciennes_rubriques'); }, get aide() { return I18n.t('wiki.aide.texte_ecrit_avant_refonte'); } },
+    { type: 'type-retire', get libelle() { return I18n.t('wiki.libelle.types_page_retires'); }, get aide() { return I18n.t('wiki.aide.page_mode_sous_page'); } },
+    { type: 'contradiction-ancienne', get libelle() { return I18n.t('wiki.libelle.contradictions_anciennes'); },
+      get aide() { return I18n.t('wiki.aide.ouvertes_depuis_plus_jours', { n: S.contradictionAncienneJours }); } },
+    { type: 'ancrage-disparu', get libelle() { return I18n.t('wiki.libelle.ancrages_disparus'); },
+      get aide() { return I18n.t('wiki.aide.page_ancree_equipement_article'); } },
   ];
   const ACCEPTEES = ['à valider', 'rien à ajouter', 'validée', 'rejetée', 'à refaire'];   // ses raisons : le refus d'avant la relance
 
@@ -72,10 +71,6 @@ Object.assign(Wiki, (() => {
   function json(valeur) {
     try { const lu = JSON.parse(valeur); return Array.isArray(lu) ? lu.filter((x) => x && typeof x === 'object') : []; }
     catch (erreur) { return []; }
-  }
-
-  function pluriel(nombre, singulier, formePlurielle) {
-    return nombre + ' ' + (nombre > 1 ? formePlurielle : singulier);
   }
 
   function rang(entree) {
@@ -98,7 +93,7 @@ Object.assign(Wiki, (() => {
   }
 
   function badge(statut) {
-    return UI.badgeStatut(statut, TONS[texte(statut)] || 'neutre');
+    return UI.badgeValeur('wiki_journal', 'statut', statut, TONS[texte(statut)] || 'neutre');
   }
 
   function lienOt(id) {
@@ -183,16 +178,15 @@ Object.assign(Wiki, (() => {
     const ligne = (phrase) => {
       const anciennes = genres.get(phrase.texte);
       return anciennes
-        ? UI.html`<li class="wj-reprise"><span class="wj-etiquette">Reprise</span> <ins>${phraseHtml(phrase)}</ins>
-            <span class="wj-avant">avant : ${anciennes.map((a) => UI.html`<del>${phraseHtml(a)}</del>`)}</span></li>`
-        : UI.html`<li class="wj-nouvelle"><span class="wj-etiquette">Nouvelle</span> <mark>${phraseHtml(phrase)}</mark></li>`;
+        ? UI.html`<li class="wj-reprise"><span class="wj-etiquette">${I18n.t('wiki.diff.reprise')}</span> <ins>${phraseHtml(phrase)}</ins>
+            <span class="wj-avant">${I18n.t('wiki.diff.avant')} ${anciennes.map((a) => UI.html`<del>${phraseHtml(a)}</del>`)}</span></li>`
+        : UI.html`<li class="wj-nouvelle"><span class="wj-etiquette">${I18n.t('wiki.diff.nouvelle')}</span> <mark>${phraseHtml(phrase)}</mark></li>`;
     };
     return UI.html`${groupes.map((g) => UI.html`<h5 class="wj-rubrique">${g.nom}</h5><ul class="wj-phrases">${g.phrases.map(ligne)}</ul>`)}
       ${c.retirees.length ? UI.html`<ul class="wj-phrases">${c.retirees.map((p) => UI.html`<li class="wj-retiree">
-        <span class="wj-etiquette">Retirée</span> <del>${phraseHtml(p)}</del></li>`)}</ul>` : ''}
-      ${!groupes.length && !c.retirees.length ? UI.html`<p class="aide">Aucune phrase nouvelle ni reprise.</p>` : ''}
-      ${c.identiques.length ? UI.html`<details class="wj-identiques"><summary>${pluriel(c.identiques.length, 'phrase inchangée',
-        'phrases inchangées')}</summary><ul class="wj-phrases">${c.identiques.map((p) => UI.html`<li>${phraseHtml(p)}</li>`)}</ul></details>` : ''}`;
+        <span class="wj-etiquette">${I18n.t('wiki.diff.retiree')}</span> <del>${phraseHtml(p)}</del></li>`)}</ul>` : ''}
+      ${!groupes.length && !c.retirees.length ? UI.html`<p class="aide">${I18n.t('wiki.diff.aucune_phrase_nouvelle_ni')}</p>` : ''}
+      ${c.identiques.length ? UI.html`<details class="wj-identiques"><summary>${I18n.t('wiki.diff.phrases_inchangees', { n: c.identiques.length })}</summary><ul class="wj-phrases">${c.identiques.map((p) => UI.html`<li>${phraseHtml(p)}</li>`)}</ul></details>` : ''}`;
   }
 
   function texteEntierHtml(valeur) {
@@ -201,32 +195,40 @@ Object.assign(Wiki, (() => {
   }
 
   function changementHtml(c) {
-    const genre = c.archivage ? 'Page archivée' : (c.creation ? 'Page créée' : 'Page modifiée');
+    const genre = c.archivage ? I18n.t('wiki.changement.page_archivee') : (c.creation ? I18n.t('wiki.changement.page_creee') : I18n.t('wiki.changement.page_modifiee'));
     return UI.html`<section class="wj-changement" data-cle="${texte(c.cle)}" data-creation="${c.creation ? 'oui' : 'non'}">
       <h4><span class="wj-page-titre">${texte(c.titre) || texte(c.cle)}</span>
-        <span class="badge ${c.creation ? 'violet' : 'neutre'}">${genre}</span>${texte(c.type) ? UI.html` <span class="wj-type">${c.type}</span>` : ''}</h4>
-      ${c.archivage ? UI.html`<p class="aide">La page sort du wiki ; son texte reste au journal.</p>`
+        <span class="badge ${c.creation ? 'violet' : 'neutre'}">${genre}</span>${texte(c.type) ? UI.html` <span class="wj-type">${Schema.libelleValeur('wiki_pages', 'type', c.type)}</span>` : ''}</h4>
+      ${c.archivage ? UI.html`<p class="aide">${I18n.t('wiki.changement.page_sort_wiki_texte')}</p>`
         : (c.creation ? texteEntierHtml(c.apres) : diffHtml(c.avant || '', c.apres || ''))}
     </section>`;
   }
 
   function contradictionsHtml(entree, liste) {
-    const libelle = texte(entree.anterieure) === '1' ? 'Observation antérieure aux faits de la page' : 'Ce que dit le nouvel OT';
-    return UI.html`<section class="wj-contradictions" aria-label="Contradictions">
-      <h4>${UI.icone('alerte')}<span>${liste.length > 1 ? liste.length + ' contradictions' : 'Contradiction'} : jamais écrasée, à lire d'abord</span></h4>
+    const libelle = texte(entree.anterieure) === '1' ? I18n.t('wiki.contradictions.observation_anterieure_faits_page') : I18n.t('wiki.contradictions.dit_nouvel_ot');
+    return UI.html`<section class="wj-contradictions" aria-label="${I18n.t('wiki.libelle.contradictions')}">
+      <h4>${UI.icone('alerte')}<span>${I18n.t('wiki.contradictions.jamais_ecrasee_lire', { n: liste.length })}</span></h4>
       <ul>${liste.map((c) => UI.html`<li data-statut="${texte(c.statut) || 'ouverte'}">
-        <p class="wj-contradiction-page">Page « ${c.page} »</p>
-        <p>Ce que dit la page : <q>${c.phrase}</q></p>
+        <p class="wj-contradiction-page">${I18n.t('wiki.contradictions.page_page', { page: c.page })}</p>
+        <p>${I18n.html('wiki.contradictions.dit_page', { phrase: c.phrase })}</p>
         <p><b>${libelle}</b> : ${c.observation}${(c.ot || []).map((id) => UI.html` <span class="wj-citation">[${id}]</span>`)}</p>
-        ${texte(c.statut) === 'fermée' ? UI.html`<p class="aide">Tranchée : ${DECISIONS[c.decision] || c.decision}${texte(c.decide_par)
-          ? ' — ' + c.decide_par : ''}${texte(c.decide_le) ? ', le ' + UI.dateFr(c.decide_le) : ''}${texte(c.note) ? ' — ' + c.note : ''}</p>` : ''}
+        ${texte(c.statut) === 'fermée' ? UI.html`<p class="aide">${tranchee(c)}${texte(c.note) ? ' — ' + c.note : ''}</p>` : ''}
       </li>`)}</ul></section>`;
+  }
+
+  /** « Tranchée : <décision> — <par>, le <date> » (qui et quand, s'ils sont connus) : une phrase par forme. */
+  function tranchee(c) {
+    const decision = decisions()[c.decision] || c.decision;
+    const par = texte(c.decide_par);
+    const date = texte(c.decide_le) ? UI.dateFr(c.decide_le) : '';
+    if (par) return date ? I18n.t('wiki.tranchee.tranchee_decision_par_date', { decision, par, date }) : I18n.t('wiki.tranchee.tranchee_decision_par', { decision, par });
+    return date ? I18n.t('wiki.tranchee.tranchee_decision_date', { decision, date }) : I18n.t('wiki.tranchee.tranchee_decision', { decision });
   }
 
   function quoiDe(entree) {
     if (texte(entree.nature) === 'ingestion') return titreOt(entree.ot_id);
     const decision = texte(entree.nature) === 'décision' ? contradictionsDe(entree)[0] : null;
-    if (decision) return 'Page « ' + texte(decision.page) + ' » : ' + (DECISIONS[decision.decision] || texte(decision.decision));
+    if (decision) return I18n.t('wiki.quoi_de.decision_page', { page: texte(decision.page), decision: (decisions()[decision.decision] || texte(decision.decision)) });
     return changementsDe(entree).map((c) => texte(c.titre)).filter(Boolean).join(', ');
   }
 
@@ -234,21 +236,21 @@ Object.assign(Wiki, (() => {
     const date = texte(entree.date_intervention);
     if (texte(entree.nature) === 'ingestion') {
       return UI.html`<h3 class="wj-entree-titre">${lienOt(entree.ot_id)} <span>${titreOt(entree.ot_id)}</span></h3>
-        <p class="wj-meta">${badge(entree.statut)}${date ? UI.html`<span>Intervention du ${UI.dateFr(date)}</span>` : ''}
-          ${texte(entree.anterieure) === '1' ? UI.html`<span class="badge attention wj-anterieure">Intervention antérieure</span>` : ''}
-          ${texte(entree.modele) ? UI.html`<span>Modèle : ${entree.modele}</span>` : ''}${rang(entree) ? UI.html`<span>Rang ${rang(entree)}</span>` : ''}
+        <p class="wj-meta">${badge(entree.statut)}${date ? UI.html`<span>${I18n.t('wiki.tete.intervention_date', { date: UI.dateFr(date) })}</span>` : ''}
+          ${texte(entree.anterieure) === '1' ? UI.html`<span class="badge attention wj-anterieure">${I18n.t('wiki.tete.intervention_anterieure')}</span>` : ''}
+          ${texte(entree.modele) ? UI.html`<span>${I18n.t('wiki.tete.modele_modele', { modele: entree.modele })}</span>` : ''}${rang(entree) ? UI.html`<span>${I18n.t('wiki.tete.rang_rang', { rang: rang(entree) })}</span>` : ''}
           <span class="wj-id">${entree.id}</span></p>`;
     }
-    return UI.html`<h3 class="wj-entree-titre">${NATURES[texte(entree.nature)] || texte(entree.nature)}${quoiDe(entree) ? ' — ' + quoiDe(entree) : ''}</h3>
-      <p class="wj-meta">${badge(entree.statut)}${texte(entree.decide_par) ? UI.html`<span>Par ${entree.decide_par}</span>` : ''}
-        ${texte(entree.decide_le) ? UI.html`<span>le ${UI.dateHeureFr(entree.decide_le)}</span>` : ''}<span class="wj-id">${entree.id}</span></p>`;
+    return UI.html`<h3 class="wj-entree-titre">${natures()[texte(entree.nature)] || texte(entree.nature)}${quoiDe(entree) ? ' — ' + quoiDe(entree) : ''}</h3>
+      <p class="wj-meta">${badge(entree.statut)}${texte(entree.decide_par) ? UI.html`<span>${I18n.t('wiki.tete.decide_par', { decide_par: entree.decide_par })}</span>` : ''}
+        ${texte(entree.decide_le) ? UI.html`<span>${I18n.t('wiki.tete.decide_le', { decide_le: UI.dateHeureFr(entree.decide_le) })}</span>` : ''}<span class="wj-id">${entree.id}</span></p>`;
   }
 
   /** Raisons, une par ligne ; titrées « Acceptée à la relance, après le refus : » (D106), ou « Raisons du refus : » (carte). */
   function raisonsHtml(entree, carte) {
     const raisons = texte(entree.raisons).split('\n').map(texte).filter(Boolean);
     const relance = texte(entree.nature) === 'ingestion' && ACCEPTEES.includes(texte(entree.statut));
-    const titre = relance ? 'Acceptée à la relance, après le refus :' : (carte ? 'Raisons du refus :' : '');
+    const titre = relance ? I18n.t('wiki.raisons.acceptee_relance_apres_refus') : (carte ? I18n.t('wiki.raisons.raisons_refus') : '');
     return raisons.length ? UI.html`${titre ? UI.html`<p class="wj-raisons-titre${relance ? ' wj-relance' : ''}"><b>${titre}</b></p>` : ''}
       <ul class="wj-raisons">${raisons.map((r) => UI.html`<li>${r}</li>`)}</ul>` : '';
   }
@@ -256,15 +258,15 @@ Object.assign(Wiki, (() => {
   function actionsHtml(entree) {
     const id = UI.identifiantUnique('wj-motif');
     return UI.html`<div class="actions wj-actions">
-        <button type="button" class="btn btn-primaire wj-valider" data-entree="${entree.id}">${UI.icone('valider')}Valider</button>
-        <button type="button" class="btn btn-danger wj-rejeter" data-entree="${entree.id}">Rejeter</button></div>
+        <button type="button" class="btn btn-primaire wj-valider" data-entree="${entree.id}">${UI.icone('valider')}${I18n.t('wiki.actions.valider')}</button>
+        <button type="button" class="btn btn-danger wj-rejeter" data-entree="${entree.id}">${I18n.t('wiki.actions.rejeter')}</button></div>
       <div class="wj-rejet" hidden>
-        <div class="champ"><label class="libelle" for="${id}">Motif du rejet <span class="requis" aria-hidden="true">*</span></label>
+        <div class="champ"><label class="libelle" for="${id}">${I18n.t('wiki.actions.motif_rejet')} <span class="requis" aria-hidden="true">*</span></label>
           <textarea id="${id}" class="wj-motif" rows="3" aria-required="true" aria-describedby="${id}-erreur"
-            placeholder="Ex. phrase mal tournée, cause non établie"></textarea>
+            placeholder="${I18n.t('wiki.actions.ex_phrase_mal_tournee')}"></textarea>
           <p class="erreur-champ" id="${id}-erreur" role="alert" hidden></p></div>
-        <div class="actions"><button type="button" class="btn btn-danger wj-confirmer-rejet" data-entree="${entree.id}">Confirmer le rejet</button>
-          <button type="button" class="btn btn-fantome wj-annuler-rejet">Annuler</button></div>
+        <div class="actions"><button type="button" class="btn btn-danger wj-confirmer-rejet" data-entree="${entree.id}">${I18n.t('wiki.actions.confirmer_rejet')}</button>
+          <button type="button" class="btn btn-fantome wj-annuler-rejet">${I18n.t('commun.bouton.annuler')}</button></div>
       </div>`;
   }
 
@@ -277,13 +279,13 @@ Object.assign(Wiki, (() => {
     const relance = options.actions && ['rejetée', 'refusée'].includes(statut) && relancables().some((e) => e.id === entree.id);
     return UI.html`<article class="carte wj-entree" data-entree="${entree.id}" data-statut="${statut}">
       <div class="wj-entree-tete">${choix ? UI.html`<label class="case wj-choisir"><input type="checkbox" class="wj-choix"
-        value="${entree.id}" data-hors-saisie><span>Sélectionner</span></label>` : ''}<div class="wj-entree-titres">${teteHtml(entree)}</div></div>
+        value="${entree.id}" data-hors-saisie><span>${I18n.t('wiki.carte.selectionner')}</span></label>` : ''}<div class="wj-entree-titres">${teteHtml(entree)}</div></div>
       ${contradictions.length ? contradictionsHtml(entree, contradictions) : ''}
       ${changementsDe(entree).map(changementHtml)}
-      ${texte(entree.motif) ? UI.html`<p class="wj-motif-lu"><b>Motif :</b> ${entree.motif}</p>` : ''}
+      ${texte(entree.motif) ? UI.html`<p class="wj-motif-lu">${I18n.html('wiki.carte.motif_motif', { motif: entree.motif })}</p>` : ''}
       ${raisonsHtml(entree, true)}
       ${actions ? actionsHtml(entree) : ''}
-      ${relance ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire wj-relancer" data-entree="${entree.id}">${UI.icone('actualiser')}Relancer</button></div>` : ''}
+      ${relance ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire wj-relancer" data-entree="${entree.id}">${UI.icone('actualiser')}${I18n.t('wiki.carte.relancer')}</button></div>` : ''}
     </article>`;
   }
 
@@ -291,10 +293,10 @@ Object.assign(Wiki, (() => {
     const date = texte(entree.decide_le) || texte(entree.traite_le) || texte(entree.cree_le);
     return UI.html`<li class="wj-ligne" data-entree="${entree.id}" data-statut="${texte(entree.statut)}">
       <div class="wj-ligne-tete"><a class="wj-lien-entree" href="#/wiki-journal?entree=${encodeURIComponent(entree.id)}">${entree.id}</a>${badge(entree.statut)}
-        <span class="wj-nature">${NATURES[texte(entree.nature)] || texte(entree.nature)}</span>${texte(entree.nature) === 'ingestion' ? lienOt(entree.ot_id) : ''}
+        <span class="wj-nature">${natures()[texte(entree.nature)] || texte(entree.nature)}</span>${texte(entree.nature) === 'ingestion' ? lienOt(entree.ot_id) : ''}
         ${date ? UI.html`<span class="wj-date">${UI.dateFr(date)}</span>` : ''}</div>
       ${quoiDe(entree) ? UI.html`<p class="wj-ligne-quoi">${quoiDe(entree)}</p>` : ''}
-      ${texte(entree.motif) ? UI.html`<p class="wj-ligne-motif">Motif : ${entree.motif}</p>` : ''}${raisonsHtml(entree)}
+      ${texte(entree.motif) ? UI.html`<p class="wj-ligne-motif">${I18n.t('wiki.ligne.motif_motif', { motif: entree.motif })}</p>` : ''}${raisonsHtml(entree)}
     </li>`;
   }
 
@@ -309,31 +311,29 @@ Object.assign(Wiki, (() => {
   function sectionAValider(liste) {
     const avec = liste.filter((e) => contradictionsDe(e).length);
     return UI.html`<section class="wj-section" id="wj-a-valider" aria-labelledby="wj-titre-a-valider">
-      ${enteteSection('wj-titre-a-valider', 'À valider', liste.length)}
-      ${liste.length ? UI.html`<p class="aide">Dans l'ordre où elles ont été construites : chacune s'appuie sur les précédentes.
-          Valider applique la proposition d'un bloc ; rejeter demande un motif et renvoie les suivantes qui touchent les mêmes pages dans la file.</p>
+      ${enteteSection('wj-titre-a-valider', I18n.t('wiki.libelle.valider'), liste.length)}
+      ${liste.length ? UI.html`<p class="aide">${I18n.t('wiki.section_avalider.ordre_ou_elles_ont')}</p>
         ${avec.length ? UI.html`<div class="alerte attention wj-alerte-contradictions" role="status">${UI.icone('alerte')}<div class="alerte-texte">
-          <p><b>${pluriel(avec.length, 'proposition porte', 'propositions portent')} une contradiction</b> (${avec.map((e) => e.id + ', ' + e.ot_id).join(' ; ')}) :
-          à lire en tête de sa carte, à valider seule.</p></div></div>` : ''}
-        <div class="actions wj-selection"><button type="button" class="btn btn-secondaire wj-valider-selection" disabled>Valider les propositions sélectionnées</button>
-          <span class="aide">Une proposition avec une contradiction n'a pas de case : elle se valide seule.</span></div>
+          <p>${I18n.html('wiki.section_avalider.propositions_portent_contradiction', { n: avec.length, liste: avec.map((e) => e.id + ', ' + e.ot_id).join(' ; ') })}</p></div></div>` : ''}
+        <div class="actions wj-selection"><button type="button" class="btn btn-secondaire wj-valider-selection" disabled>${I18n.t('wiki.section_avalider.valider_propositions_selectionnees')}</button>
+          <span class="aide">${I18n.t('wiki.section_avalider.proposition_contradiction_pas_case')}</span></div>
         <div class="wj-liste">${liste.map((e) => carteHtml(e, { actions: true, selection: true }))}</div>`
-        : UI.vide('Aucune proposition à valider', 'Les propositions de l\'IA arrivent ici quand la file est traitée.', 'wiki')}
+        : UI.vide(I18n.t('wiki.section_avalider.aucune_proposition_valider'), I18n.t('wiki.section_avalider.propositions_ia_arrivent_ici'), 'wiki')}
     </section>`;
   }
 
   function sectionEchecs(liste, titre, id) {
     return UI.html`<section class="wj-section" id="${id}" aria-labelledby="${id}-titre">${enteteSection(id + '-titre', titre, liste.length)}
       ${liste.length ? UI.html`<div class="wj-liste">${liste.map((e) => carteHtml(e, { actions: true }))}</div>`
-        : UI.html`<p class="muted">Aucune.</p>`}</section>`;
+        : UI.html`<p class="muted">${I18n.t('wiki.section_echecs.aucune')}</p>`}</section>`;
   }
 
   function vueJournal() {
     const toutes = journal().slice().sort((a, b) => (texte(a.id) < texte(b.id) ? 1 : -1));
     return UI.html`${sectionAValider(aValider())}
-      ${sectionEchecs(relancables().filter((e) => texte(e.statut) === 'refusée'), 'Refusées par les contrôles', 'wj-refusees')}
-      <section class="wj-section" id="wj-toutes" aria-labelledby="wj-titre-toutes">${enteteSection('wj-titre-toutes', 'Toutes les entrées', toutes.length)}
-        ${toutes.length ? UI.html`<ul class="wj-lignes">${toutes.map(ligneHtml)}</ul>` : UI.html`<p class="muted">Le journal est vide.</p>`}
+      ${sectionEchecs(relancables().filter((e) => texte(e.statut) === 'refusée'), I18n.t('wiki.vue_journal.refusees_controles'), 'wj-refusees')}
+      <section class="wj-section" id="wj-toutes" aria-labelledby="wj-titre-toutes">${enteteSection('wj-titre-toutes', I18n.t('wiki.vue_journal.toutes_entrees'), toutes.length)}
+        ${toutes.length ? UI.html`<ul class="wj-lignes">${toutes.map(ligneHtml)}</ul>` : UI.html`<p class="muted">${I18n.t('wiki.vue_journal.journal_vide')}</p>`}
       </section>`;
   }
 
@@ -341,27 +341,27 @@ Object.assign(Wiki, (() => {
     const ouvertes = contradictionsOuvertes();
     const propositions = aValider().filter((e) => contradictionsDe(e).length);
     return UI.html`<section class="wj-section" id="wj-contradictions" aria-labelledby="wj-titre-contradictions">
-      ${enteteSection('wj-titre-contradictions', 'Contradictions ouvertes', ouvertes.length)}
-      <p class="aide">Signalées, jamais écrasées : la page garde sa phrase et montre « À trancher » jusqu'à votre décision, prise sur la page.</p>
+      ${enteteSection('wj-titre-contradictions', I18n.t('wiki.vue_contradictions.contradictions_ouvertes'), ouvertes.length)}
+      <p class="aide">${I18n.t('wiki.vue_contradictions.signalees_jamais_ecrasees_page')}</p>
       ${ouvertes.length ? UI.html`<ul class="wj-lignes">${ouvertes.map(({ entree, c }) => {
         const id = idDePage(c.pageCle, c.page);
         return UI.html`<li class="wj-ligne wj-contradiction" data-entree="${entree.id}">
           <div class="wj-ligne-tete">${id ? UI.html`<a class="wj-lien-page" href="#/wiki/${encodeURIComponent(id)}">${c.page}</a>` : UI.html`<b>${c.page}</b>`}
-            ${lienOt(entree.ot_id)}<span class="wj-date">depuis le ${UI.dateFr(entree.decide_le || entree.traite_le)}</span></div>
-          <p>Ce que dit la page : <q>${c.phrase}</q></p>
-          <p><b>${texte(entree.anterieure) === '1' ? 'Observation antérieure aux faits de la page' : 'Ce que dit le nouvel OT'}</b> : ${c.observation}</p>
-        </li>`; })}</ul>` : UI.html`<p class="muted">Aucune contradiction ouverte.</p>`}
+            ${lienOt(entree.ot_id)}<span class="wj-date">${I18n.t('wiki.vue_contradictions.depuis', { date: UI.dateFr(entree.decide_le || entree.traite_le) })}</span></div>
+          <p>${I18n.html('wiki.contradictions.dit_page', { phrase: c.phrase })}</p>
+          <p><b>${texte(entree.anterieure) === '1' ? I18n.t('wiki.contradictions.observation_anterieure_faits_page') : I18n.t('wiki.contradictions.dit_nouvel_ot')}</b> : ${c.observation}</p>
+        </li>`; })}</ul>` : UI.html`<p class="muted">${I18n.t('wiki.vue_contradictions.aucune_contradiction_ouverte')}</p>`}
     </section>
     ${propositions.length ? UI.html`<section class="wj-section" aria-labelledby="wj-titre-propositions-contradiction">
-      ${enteteSection('wj-titre-propositions-contradiction', 'Propositions avec une contradiction', propositions.length)}
+      ${enteteSection('wj-titre-propositions-contradiction', I18n.t('wiki.vue_contradictions.propositions_contradiction'), propositions.length)}
       <div class="wj-liste">${propositions.map((e) => carteHtml(e, { actions: true }))}</div></section>` : ''}`;
   }
 
   function ligneFileHtml(entree) {
     const essais = Number(entree.essais) || 0;
     return UI.html`<li class="wj-ligne" data-entree="${entree.id}" data-ot="${texte(entree.ot_id)}">
-      <div class="wj-ligne-tete">${lienOt(entree.ot_id)}${badge(entree.statut)}<span class="wj-date">Intervention du ${UI.dateFr(entree.date_intervention)}</span>
-        ${essais ? UI.html`<span class="wj-essais">${pluriel(essais, 'essai', 'essais')}</span>` : ''}</div>
+      <div class="wj-ligne-tete">${lienOt(entree.ot_id)}${badge(entree.statut)}<span class="wj-date">${I18n.t('wiki.ligne_file.intervention_date_intervention', { date_intervention: UI.dateFr(entree.date_intervention) })}</span>
+        ${essais ? UI.html`<span class="wj-essais">${I18n.t('wiki.compte.essais', { n: essais })}</span>` : ''}</div>
       ${titreOt(entree.ot_id) ? UI.html`<p class="wj-ligne-quoi">${titreOt(entree.ot_id)}</p>` : ''}
       ${texte(entree.motif) ? UI.html`<p class="wj-ligne-motif">${entree.motif}</p>` : ''}
     </li>`;
@@ -383,15 +383,14 @@ Object.assign(Wiki, (() => {
     const file = Wiki.file();
     const sansIa = await raisonSansIa();
     const bouton = !sansIa && file.length && !traitement
-      ? UI.html`<button type="button" class="btn btn-primaire wj-traiter">${UI.icone('wiki')}Traiter la file</button>` : '';
+      ? UI.html`<button type="button" class="btn btn-primaire wj-traiter">${UI.icone('wiki')}${I18n.t('wiki.vue_file.traiter_file')}</button>` : '';
     return UI.html`<section class="wj-section" id="wj-file" aria-labelledby="wj-titre-file">
-      ${enteteSection('wj-titre-file', 'File du wiki', file.length, bouton)}
-      <p class="aide">Une requête neuve par OT, du plus ancien au plus récent par date d'intervention puis par numéro d'OT, jusqu'à
-        ${S.agentsSimultanes} en même temps quand ils ne touchent aucune page commune. Une réponse acceptée devient une proposition à valider.</p>
+      ${enteteSection('wj-titre-file', I18n.t('wiki.vue_file.file_wiki'), file.length, bouton)}
+      <p class="aide">${I18n.t('wiki.vue_file.requete_neuve_ot_plus', { agentsSimultanes: S.agentsSimultanes })}</p>
       ${sansIa ? UI.html`<div class="alerte attention wj-sans-ia" role="status">${UI.icone('alerte')}<div class="alerte-texte"><p>${sansIa}</p></div></div>` : ''}
       <div class="carte wj-progression" id="wj-progression" role="status" hidden></div>
       ${file.length ? UI.html`<ol class="wj-lignes wj-file">${file.map(ligneFileHtml)}</ol>`
-        : UI.vide('La file est vide', 'Un OT y entre à sa clôture administrative ; l\'historique s\'y ajoute depuis « Hors du wiki ».', 'wiki')}
+        : UI.vide(I18n.t('wiki.vue_file.file_vide'), I18n.t('wiki.vue_file.ot_entre_cloture_administrative'), 'wiki')}
     </section>`;
   }
 
@@ -402,32 +401,30 @@ Object.assign(Wiki, (() => {
     const groupes = Array.from(parEquipement, ([id, nombre]) => ({ id, nombre, equipement: Donnees.trouver('equipements', id) || {} }))
       .sort((a, b) => b.nombre - a.nombre || (texte(a.equipement.repere) < texte(b.equipement.repere) ? -1 : 1));
     return UI.html`<section class="wj-section" id="wj-hors" aria-labelledby="wj-titre-hors">
-      ${enteteSection('wj-titre-hors', 'Hors du wiki', hors.length)}
-      ${hors.length ? UI.html`<p class="wj-hors-total" data-nombre="${hors.length}"><b>${pluriel(hors.length,
-        'OT clôturé administrativement n\'est pas', 'OT clôturés administrativement ne sont pas')} dans le wiki</b> (historique, import).
-        Ils n'entrent dans la file que si vous les y ajoutez ; leur traitement envoie une requête à l'IA par OT.</p>
+      ${enteteSection('wj-titre-hors', I18n.t('wiki.libelle.hors_wiki'), hors.length)}
+      ${hors.length ? UI.html`<p class="wj-hors-total" data-nombre="${hors.length}">${I18n.html('wiki.vue_hors.ot_clotures_administrativement_sont', { n: hors.length })}</p>
         <div class="actions"><button type="button" class="btn btn-primaire wj-ajouter" data-tout="1" data-equipement="" data-nombre="${hors.length}">
-          ${UI.icone('ajouter')}Ajouter ${hors.length > 1 ? 'les ' + hors.length + ' OT' : 'cet OT'} à la file</button></div>
+          ${UI.icone('ajouter')}${I18n.t('wiki.vue_hors.ajouter_ot_file', { n: hors.length })}</button></div>
         <ul class="wj-lignes wj-hors">${groupes.map((g) => UI.html`<li class="wj-ligne wj-hors-equipement" data-equipement="${g.id}" data-nombre="${g.nombre}">
-          <div class="wj-hors-ligne"><span class="wj-hors-nom"><b>${texte(g.equipement.repere) || g.id || 'Sans équipement'}</b>
-            ${texte(g.equipement.designation)}</span><span class="badge info">${pluriel(g.nombre, 'OT', 'OT')}</span>
-            <button type="button" class="btn btn-secondaire wj-ajouter" data-equipement="${g.id}" data-nombre="${g.nombre}">Ajouter ${g.nombre > 1 ? 'ces ' + g.nombre + ' OT' : 'cet OT'}</button></div>
+          <div class="wj-hors-ligne"><span class="wj-hors-nom"><b>${texte(g.equipement.repere) || g.id || I18n.t('wiki.vue_hors.sans_equipement')}</b>
+            ${texte(g.equipement.designation)}</span><span class="badge info">${I18n.t('wiki.compte.ot', { n: g.nombre })}</span>
+            <button type="button" class="btn btn-secondaire wj-ajouter" data-equipement="${g.id}" data-nombre="${g.nombre}">${I18n.t('wiki.vue_hors.ajouter_ot', { n: g.nombre })}</button></div>
         </li>`)}</ul>`
-        : UI.vide('Tous les OT clôturés administrativement sont dans le wiki', 'Ils y entrent à leur clôture administrative.', 'wiki')}
+        : UI.vide(I18n.t('wiki.vue_hors.tous_ot_clotures_administrativement'), I18n.t('wiki.vue_hors.ils_entrent_cloture_administrative'), 'wiki')}
     </section>`;
   }
 
   function vueEchecs() {
     const liste = relancables();
-    return UI.html`${sectionEchecs(liste.filter((e) => texte(e.statut) === 'refusée'), 'En échec : refusées par les contrôles', 'wj-echecs')}
-      ${sectionEchecs(liste.filter((e) => texte(e.statut) === 'rejetée'), 'Rejetées par vous', 'wj-rejetees')}`;
+    return UI.html`${sectionEchecs(liste.filter((e) => texte(e.statut) === 'refusée'), I18n.t('wiki.vue_echecs.echec_refusees_controles'), 'wj-echecs')}
+      ${sectionEchecs(liste.filter((e) => texte(e.statut) === 'rejetée'), I18n.t('wiki.vue_echecs.rejetees'), 'wj-rejetees')}`;
   }
 
   function vueControle() {
     const problemes = Wiki.controleDuWiki();
     return UI.html`<section class="wj-section" id="wj-controle" aria-labelledby="wj-titre-controle">
-      ${enteteSection('wj-titre-controle', 'Contrôle du wiki', problemes.length)}
-      <p class="aide">Calculé à l'ouverture de cet écran, sans IA. Rien n'est corrigé tout seul : ouvrez la page pour la reprendre.</p>
+      ${enteteSection('wj-titre-controle', I18n.t('wiki.libelle.controle_wiki'), problemes.length)}
+      <p class="aide">${I18n.t('wiki.vue_controle.calcule_ouverture_ecran_sans')}</p>
       ${TYPES_CONTROLE.map((t) => {
         const liste = problemes.filter((p) => p.type === t.type);
         return UI.html`<section class="carte wj-controle-type" data-type="${t.type}" aria-labelledby="wj-controle-${t.type}">
@@ -435,17 +432,17 @@ Object.assign(Wiki, (() => {
           <p class="aide">${t.aide}</p>
           ${liste.length ? UI.html`<ul class="wj-lignes wj-problemes">${liste.map((p) => UI.html`<li class="wj-ligne" data-page="${p.page}">
             <div class="wj-ligne-tete"><a class="wj-lien-page" href="#/wiki/${encodeURIComponent(p.page)}">${p.titre || p.page}</a>
-              <a class="wj-modifier" href="#/wiki-ecrire/${encodeURIComponent(p.page)}">Modifier</a></div>
-            <p class="wj-probleme">${p.message}</p></li>`)}</ul>` : UI.html`<p class="muted">Aucun.</p>`}
+              <a class="wj-modifier" href="#/wiki-ecrire/${encodeURIComponent(p.page)}">${I18n.t('commun.bouton.modifier')}</a></div>
+            <p class="wj-probleme">${p.message}</p></li>`)}</ul>` : UI.html`<p class="muted">${I18n.t('wiki.vue_controle.aucun')}</p>`}
         </section>`; })}
     </section>`;
   }
 
   function vueEntree(id) {
     const entree = Donnees.trouver('wiki_journal', id);
-    const retour = UI.html`<p><a class="btn btn-fantome" href="#/wiki-journal">${UI.icone('retour')}Tout le journal</a></p>`;
+    const retour = UI.html`<p><a class="btn btn-fantome" href="#/wiki-journal">${UI.icone('retour')}${I18n.t('wiki.vue_entree.tout_journal')}</a></p>`;
     return entree ? UI.html`${retour}${carteHtml(entree, { actions: true })}`
-      : UI.html`${retour}${UI.vide('Entrée introuvable', 'Aucune entrée du journal ne porte l\'identifiant « ' + id + ' ».', 'wiki')}`;
+      : UI.html`${retour}${UI.vide(I18n.t('wiki.vue_entree.entree_introuvable'), I18n.t('wiki.vue_entree.aucune_entree_journal_porte', { id }), 'wiki')}`;
   }
 
   const RENDUS = { '': vueJournal, 'a-valider': () => sectionAValider(aValider()), contradictions: vueContradictions,
@@ -476,9 +473,9 @@ Object.assign(Wiki, (() => {
     try {
       await action();
     } catch (erreur) {
-      if (erreur instanceof Donnees.ErreurValidation) annoncer('important', UI.html`<b>Refusé :</b> ${erreur.message}`);
+      if (erreur instanceof Donnees.ErreurValidation) annoncer('important', UI.html`${I18n.html('wiki.agir.refuse_erreur_message', { erreurMessage: erreur.message })}`);
       else {
-        annoncer('important', UI.html`<b>L'action n'a pas abouti :</b> ${(erreur && erreur.message) || String(erreur)}`);
+        annoncer('important', UI.html`${I18n.html('wiki.agir.action_pas_abouti', { raisonErreur: App.raisonErreur(erreur) })}`);
         App.signalerErreur(erreur, 'journal du wiki');
       }
     }
@@ -502,9 +499,8 @@ Object.assign(Wiki, (() => {
     const bilan = await Wiki.valider(ids);
     const nombre = bilan.validees.length;
     annoncer(bilan.aRefaire.length ? 'attention' : 'succes', UI.html`${nombre
-      ? UI.html`<b>${nombre > 1 ? nombre + ' propositions validées' : 'Proposition validée'}</b> : ${bilan.validees.join(', ')}.`
-      : UI.html`<b>Aucune proposition validée.</b>`}${bilan.aRefaire.length ? UI.html` <span class="wj-bilan-a-refaire">Passées « à refaire »
-      (une page avait changé ; leurs OT reviennent dans la file) : ${bilan.aRefaire.join(', ')}.</span>` : ''}`);
+      ? UI.html`<b>${I18n.t('wiki.valider_ids.propositions_validees', { n: nombre })}</b> : ${bilan.validees.join(', ')}.`
+      : UI.html`<b>${I18n.t('wiki.valider_ids.aucune_proposition_validee')}</b>`}${bilan.aRefaire.length ? UI.html` <span class="wj-bilan-a-refaire">${I18n.t('wiki.valider_ids.passees_refaire_page_avait', { propositions: bilan.aRefaire.join(', ') })}</span>` : ''}`);
   }
 
   function ouvrirRejet(bouton, ouvrir) {
@@ -520,7 +516,7 @@ Object.assign(Wiki, (() => {
     const erreur = UI.$('.wj-rejet .erreur-champ', carte);
     const motif = texte(champ.value);
     if (!motif) {
-      erreur.textContent = 'Le motif du rejet est obligatoire.';
+      erreur.textContent = I18n.t('wiki.confirmer_rejet.motif_rejet_obligatoire');
       erreur.hidden = false;
       champ.setAttribute('aria-invalid', 'true');
       champ.focus();
@@ -528,22 +524,22 @@ Object.assign(Wiki, (() => {
     }
     agir(bouton, async () => {
       const resultat = await Wiki.rejeter(bouton.dataset.entree, motif);
-      annoncer('succes', UI.html`<b>Proposition ${resultat.rejetee} rejetée</b> (motif : ${motif}).${resultat.aRefaire.length
-        ? UI.html` <span class="wj-bilan-a-refaire">Passées « à refaire » : ${resultat.aRefaire.join(', ')} ; leurs OT reviennent dans la file.</span>` : ''}`);
+      annoncer('succes', UI.html`${I18n.html('wiki.confirmer_rejet.proposition_rejetee_motif', { rejetee: resultat.rejetee, motif })}${resultat.aRefaire.length
+        ? UI.html` <span class="wj-bilan-a-refaire">${I18n.t('wiki.confirmer_rejet.passees_refaire_ot_reviennent', { propositions: resultat.aRefaire.join(', ') })}</span>` : ''}`);
     });
   }
 
   async function relancer(id) {
     const nouvelle = await Wiki.remettreEnFile(id);
     const entree = Donnees.trouver('wiki_journal', nouvelle) || {};
-    annoncer('succes', UI.html`<b>OT ${entree.ot_id} remis dans la file</b> (${nouvelle}) : il sera traité avec « Traiter la file ».`);
+    annoncer('succes', UI.html`${I18n.html('wiki.relancer.ot_remis_file_sera', { ot_id: entree.ot_id, nouvelle })}`);
   }
 
   // tout : tous les OT hors du wiki ; sinon ceux de cet équipement (« Sans équipement » : equipementId vide).
   async function ajouterALaFile(tout, equipementId) {
     const ids = Wiki.horsDuWiki().filter((ot) => tout || texte(ot.equipement_id) === texte(equipementId)).map((ot) => ot.id);
     const nombre = await Wiki.mettreEnFile(ids);
-    annoncer('succes', UI.html`<b>${pluriel(nombre, 'OT ajouté', 'OT ajoutés')} à la file du wiki.</b> Ils seront traités avec « Traiter la file ».`);
+    annoncer('succes', UI.html`${I18n.html('wiki.ajouter_ala_file.ot_ajoutes', { n: nombre })}`);
   }
 
   function majSelection(racine) {
@@ -551,7 +547,7 @@ Object.assign(Wiki, (() => {
     if (!bouton) return;
     const nombre = UI.$$('.wj-choix:checked', racine).length;
     bouton.disabled = !nombre;
-    bouton.textContent = 'Valider les propositions sélectionnées' + (nombre ? ' (' + nombre + ')' : '');
+    bouton.textContent = nombre ? I18n.t('wiki.maj_selection.valider_propositions_selectionnees', { nombre }) : I18n.t('wiki.section_avalider.valider_propositions_selectionnees');
   }
 
   // ===========================================================================================
@@ -559,12 +555,12 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   function progressionHtml() {
-    return UI.html`<div class="wj-progression-tete"><b>Traitement de la file en cours…</b>
-        <button type="button" class="btn btn-danger wj-arreter">Arrêter</button></div>
-      <progress class="wj-barre" max="1" value="0" aria-label="OT traités"></progress>
-      <dl class="wj-compteurs">${COMPTEURS.map(([cle, libelle]) => UI.html`<div data-compteur="${cle}"><dt>${libelle}</dt>
-        <dd><b class="wj-nombre">0</b>${cle === 'enCours' ? UI.html` <small>au plus ${S.agentsSimultanes}</small>` : ''}</dd></div>`)}</dl>
-      <p class="aide wj-arret" hidden>Arrêt demandé : les envois déjà partis finissent, aucun autre ne part.</p>`;
+    return UI.html`<div class="wj-progression-tete"><b>${I18n.t('wiki.progression.traitement_file_cours')}</b>
+        <button type="button" class="btn btn-danger wj-arreter">${I18n.t('wiki.progression.arreter')}</button></div>
+      <progress class="wj-barre" max="1" value="0" aria-label="${I18n.t('wiki.progression.ot_traites')}"></progress>
+      <dl class="wj-compteurs">${libellesCompteurs().map(([cle, libelle]) => UI.html`<div data-compteur="${cle}"><dt>${libelle}</dt>
+        <dd><b class="wj-nombre">0</b>${cle === 'enCours' ? UI.html` <small>${I18n.t('wiki.progression.plus_agents_simultanes', { agentsSimultanes: S.agentsSimultanes })}</small>` : ''}</dd></div>`)}</dl>
+      <p class="aide wj-arret" hidden>${I18n.t('wiki.progression.arret_demande_envois_deja')}</p>`;
   }
 
   function majProgression() {
@@ -574,7 +570,7 @@ Object.assign(Wiki, (() => {
     if (!traitement) return;
     if (!UI.$('.wj-compteurs', zone)) UI.remplir(zone, progressionHtml());
     const etat = traitement.etat;
-    COMPTEURS.forEach(([cle]) => { UI.$('[data-compteur="' + cle + '"] .wj-nombre', zone).textContent = String(etat[cle] || 0); });
+    libellesCompteurs().forEach(([cle]) => { UI.$('[data-compteur="' + cle + '"] .wj-nombre', zone).textContent = String(etat[cle] || 0); });
     const faits = (etat.acceptees || 0) + (etat.rien || 0) + (etat.refusees || 0);
     const barre = UI.$('.wj-barre', zone);
     barre.max = Math.max(1, faits + (etat.restants || 0) + (etat.enCours || 0));
@@ -585,11 +581,15 @@ Object.assign(Wiki, (() => {
 
   function bilanHtml(bilan, arret) {
     const reste = Wiki.file().length;
-    const titre = bilan.erreur ? 'Traitement interrompu' : (arret ? 'Traitement arrêté à votre demande' : 'Traitement de la file terminé');
-    return UI.html`<b>${titre}</b> : ${pluriel(bilan.acceptees || 0, 'proposition à valider', 'propositions à valider')},
-      ${bilan.rien || 0} sans rien à ajouter, ${pluriel(bilan.refusees || 0, 'refusée', 'refusées')}, ${pluriel(bilan.rejouees || 0,
-      'rejouée', 'rejouées')} ; ${pluriel(reste, 'OT reste', 'OT restent')} dans la file.${bilan.erreur ? UI.html`
-      <span class="wj-erreur-ia">${(bilan.erreur && bilan.erreur.message) || String(bilan.erreur)} Les OT non traités restent dans la file.</span>` : ''}`;
+    const titre = bilan.erreur ? I18n.t('wiki.bilan.traitement_interrompu') : (arret ? I18n.t('wiki.bilan.traitement_arrete_demande') : I18n.t('wiki.bilan.traitement_file_termine'));
+    const acceptees = I18n.t('wiki.bilan.propositions_valider', { n: bilan.acceptees || 0 });
+    const refusees = I18n.t('wiki.bilan.n_refusees', { n: bilan.refusees || 0 });
+    const rejouees = I18n.t('wiki.bilan.n_rejouees', { n: bilan.rejouees || 0 });
+    const restent = I18n.t('wiki.bilan.ot_restent', { n: reste });
+    const rien = bilan.rien || 0;
+    const message = (bilan.erreur && bilan.erreur.message) || String(bilan.erreur);
+    return UI.html`${I18n.html('wiki.bilan.sans_rien_ajouter_file', { titre, acceptees, rien, refusees, rejouees, restent })}${bilan.erreur ? UI.html`
+      <span class="wj-erreur-ia">${I18n.t('wiki.bilan.ot_non_traites_restent', { message })}</span>` : ''}`;
   }
 
   async function lancerTraitement() {
@@ -609,7 +609,7 @@ Object.assign(Wiki, (() => {
     const arret = traitement.arret;
     traitement = null;
     annoncer(bilan.erreur ? 'important' : (bilan.refusees ? 'attention' : 'succes'), bilanHtml(bilan, arret));
-    UI.toast(bilan.erreur ? 'Traitement de la file interrompu.' : 'Traitement de la file terminé.', bilan.erreur ? 'attention' : 'succes');
+    UI.toast(bilan.erreur ? I18n.t('wiki.lancer_traitement.traitement_file_interrompu') : I18n.t('wiki.lancer_traitement.traitement_file_termine'), bilan.erreur ? 'attention' : 'succes');
     if (UI.$('.wj[data-vue="file"]')) await App.reafficher();
   }
 
@@ -625,7 +625,7 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   function navigation(vue, nombres) {
-    return UI.html`<nav class="wj-vues" aria-label="Vues du journal du wiki">${VUES.map((v) => UI.html`<a class="wj-vue"
+    return UI.html`<nav class="wj-vues" aria-label="${I18n.t('wiki.navigation.vues_journal_wiki')}">${VUES.map((v) => UI.html`<a class="wj-vue"
       href="#/wiki-journal${v.id ? '?vue=' + v.id : ''}" data-vue="${v.id || 'journal'}"${v.id === vue ? UI.brut(' aria-current="page"') : ''}>${v.libelle}${v.id
       ? UI.html` <span class="badge">${nombres[v.id]}</span>` : ''}</a>`)}</nav>`;
   }
@@ -653,7 +653,7 @@ Object.assign(Wiki, (() => {
   }
 
   async function afficherJournal(conteneur, parametres) {
-    App.definirTitre('Journal du wiki');
+    App.definirTitre(I18n.t('wiki.journal.journal_wiki'));
     try {
       await Wiki.rattraper({ relire: true });     // à l'ouverture du journal seulement : pages relues (§20.7)
     } catch (erreur) {
@@ -666,9 +666,9 @@ Object.assign(Wiki, (() => {
     const corps = entreeId ? vueEntree(entreeId) : await RENDUS[vue]();
     UI.remplir(conteneur, UI.html`<div class="wiki wiki-journal wj" data-vue="${entreeId ? 'entree' : (vue || 'journal')}">
       <div class="entete-page"><div>
-        <div class="fil"><a href="#/wiki">Wiki</a></div>
-        <h1>Journal du wiki</h1>
-        <p>Les propositions de l'IA à valider, la file des OT à intégrer, les écritures à la main et le contrôle du wiki.</p>
+        <div class="fil"><a href="#/wiki">${I18n.t('wiki.journal.wiki')}</a></div>
+        <h1>${I18n.t('wiki.journal.journal_wiki')}</h1>
+        <p>${I18n.t('wiki.journal.propositions_ia_valider_file')}</p>
       </div></div>
       ${navigation(entreeId ? null : vue, compteurs())}
       <div class="wj-annonce"></div>
@@ -685,13 +685,8 @@ Object.assign(Wiki, (() => {
 
   document.addEventListener('DOMContentLoaded', () => {
     App.ecran({
-      id: 'wiki-journal',
-      route: /^#\/wiki-journal$/,
-      titre: 'Journal du wiki',
-      parent: 'wiki',
-      profils: ['responsable'],
-      tables: TABLES,
-      afficher: afficherJournal,
+      id: 'wiki-journal', route: /^#\/wiki-journal$/, get titre() { return I18n.t('wiki.ecran.titre_journal'); },
+      parent: 'wiki', profils: ['responsable'], tables: TABLES, afficher: afficherJournal,
     });
   });
 

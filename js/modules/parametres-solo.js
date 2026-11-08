@@ -39,16 +39,16 @@ Object.assign(Parametres.interne, (() => {
     const technicienId = App.technicienSolo();
     const technicien = technicienId ? Donnees.trouver('techniciens', technicienId) : null;
     return UI.html`<article class="carte" id="carte-solo">
-      <div class="entete-carte"><h2>Mode Solo</h2>${actif ? UI.html`<span class="badge ok" id="solo-etat">Activé</span>` : ''}</div>
+      <div class="entete-carte"><h2>${I18n.t('parametres.carte_solo.mode_solo')}</h2>${actif ? UI.html`<span class="badge ok" id="solo-etat">${I18n.t('parametres.carte_solo.active')}</span>` : ''}</div>
       <p>${reglage('mode_solo').aide}</p>
       ${actif ? UI.html`<dl class="valeurs">
           <dt>${reglage('solo_technicien_id').libelle}</dt>
-          <dd id="solo-technicien">${technicien ? UI.html`<a href="#/equipe/${encodeURIComponent(technicien.id)}">${nomTechnicien(technicien) || technicien.id}</a> (${technicien.id})` : 'aucun'}</dd>
+          <dd id="solo-technicien">${technicien ? UI.html`<a href="#/equipe/${encodeURIComponent(technicien.id)}">${nomTechnicien(technicien) || technicien.id}</a> (${technicien.id})` : I18n.t('parametres.carte_solo.aucun')}</dd>
         </dl>
-        <p class="note">${reglage('solo_technicien_id').aide} Les profils Demandeur et Technicien restent proposés sur les autres postes.</p>
-        <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-quitter-solo">${UI.icone('fermer')}Quitter le mode Solo</button></div>`
-      : UI.html`<p class="note">Seul à la maintenance ? Prévo crée votre fiche de technicien et vous propose comme technicien de chaque nouvel OT.</p>
-        <div class="actions"><button type="button" class="btn btn-primaire" id="btn-passer-solo">${UI.icone('utilisateur')}Passer en mode Solo</button></div>`}
+        <p class="note">${I18n.t('parametres.carte_solo.profils_demandeur_technicien_restent', { aide: reglage('solo_technicien_id').aide })}</p>
+        <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-quitter-solo">${UI.icone('fermer')}${I18n.t('parametres.carte_solo.quitter_mode_solo')}</button></div>`
+      : UI.html`<p class="note">${I18n.t('parametres.carte_solo.seul_maintenance_prevo_cree')}</p>
+        <div class="actions"><button type="button" class="btn btn-primaire" id="btn-passer-solo">${UI.icone('utilisateur')}${I18n.t('parametres.carte_solo.passer_mode_solo')}</button></div>`}
     </article>`;
   }
 
@@ -61,32 +61,70 @@ Object.assign(Parametres.interne, (() => {
 
   async function passerEnSolo() {
     const fait = await UI.fenetreAction({
-      titre: 'Passer en mode Solo', libelleValider: 'Passer en mode Solo',
-      introduction: UI.html`<p>Vous faites la maintenance vous-même : Prévo vous ajoute à l'équipe et vous propose comme technicien de chaque nouvel OT.</p>`,
+      titre: I18n.t('parametres.carte_solo.passer_mode_solo'), libelleValider: I18n.t('parametres.carte_solo.passer_mode_solo'),
+      introduction: UI.html`<p>${I18n.t('parametres.passer_en_solo.faites_maintenance_meme_prevo')}</p>`,
       champs: [
-        UI.champ({ nom: 'prenom', type: 'texte', libelle: 'Prénom' }, '', { obligatoire: true }),
-        UI.champ({ nom: 'nom', type: 'texte', libelle: 'Nom' }, '', { obligatoire: true }),
-        UI.champ({ nom: 'metier', type: 'texte', libelle: 'Métier (facultatif)' }, ''),
+        UI.champ({ nom: 'prenom', type: 'texte', libelle: I18n.t('commun.champ.prenom') }, '', { obligatoire: true }),
+        UI.champ({ nom: 'nom', type: 'texte', libelle: I18n.t('parametres.passer_en_solo.nom') }, '', { obligatoire: true }),
+        UI.champ({ nom: 'metier', type: 'texte', libelle: I18n.t('parametres.passer_en_solo.metier_facultatif') }, ''),
       ],
       verifier: () => [],
       action: async (valeurs) => {
         const existant = technicienExistant(valeurs);
         const technicienId = existant ? existant.id
           : await Equipe.creerTechnicien({ prenom: valeurs.prenom, nom: valeurs.nom, metier: valeurs.metier });
-        await ecrireParametres({ mode_solo: '1', solo_technicien_id: technicienId, cloture_une_etape: '1' }, 'passage en mode Solo');
+        await ecrireParametres({ mode_solo: '1', solo_technicien_id: technicienId, cloture_une_etape: '1' }, I18n.donnees('parametres.passer_en_solo.passage_mode_solo'));   // journal (D156)
       },
     });
     if (!fait) return;
     App.marquerSaisie(false);
-    UI.toast('Mode Solo activé.', 'succes');
+    UI.toast(I18n.t('parametres.passer_en_solo.mode_solo_active'), 'succes');
     await App.reafficher();
   }
 
   async function quitterSolo() {
-    await ecrireParametres({ mode_solo: '0' }, 'fin du mode Solo');
+    await ecrireParametres({ mode_solo: '0' }, I18n.donnees('parametres.quitter_solo.fin_mode_solo'));      // journal (D156)
     App.marquerSaisie(false);
-    UI.toast('Mode Solo quitté : rien n\'a été supprimé.', 'succes');
+    UI.toast(I18n.t('parametres.quitter_solo.mode_solo_quitte_rien'), 'succes');
     await App.reafficher();
+  }
+
+  /**
+   * T323 (Nicolas, 07/11) : mode Solo dont le technicien « moi » n'est plus reconnu (vidé par un import ZIP, fiche
+   * supprimée) : Prévo demande au responsable qui est « moi » au lieu de deviner : une fiche de l'équipe, ou une fiche
+   * à créer (prénom, nom). Appelé par js/app.js une fois l'application prête ; Annuler laisse la question pour la
+   * prochaine ouverture. Rend vrai si « moi » a été posé.
+   */
+  async function demanderMoiSolo() {
+    const actifs = Donnees.lignes('techniciens').filter((t) => t.actif !== '0');
+    const liste = UI.champ({ nom: 'technicien', type: 'choix', libelle: I18n.t('parametres.demander_moi_solo.ma_fiche'),
+      valeurs: actifs.map((t) => t.id) }, '');          // l'option vide de la liste : « la créer »
+    UI.$$('option', liste).forEach((option) => {
+      const fiche = actifs.find((t) => t.id === option.value);
+      option.textContent = fiche ? (nomTechnicien(fiche) || fiche.id) + ' (' + fiche.id + ')' : I18n.t('parametres.demander_moi_solo.pas_dans_la_liste');
+    });
+    const fait = await UI.fenetreAction({
+      titre: I18n.t('parametres.demander_moi_solo.qui_est_moi'), libelleValider: I18n.t('parametres.demander_moi_solo.c_est_moi'),
+      introduction: UI.html`<p id="solo-moi-question">${I18n.t('parametres.demander_moi_solo.prevo_ne_devine_pas')}</p>`,
+      champs: [liste,
+        UI.champ({ nom: 'prenom', type: 'texte', libelle: I18n.t('commun.champ.prenom') }, ''),
+        UI.champ({ nom: 'nom', type: 'texte', libelle: I18n.t('parametres.passer_en_solo.nom') }, '')],
+      verifier: (valeurs) => (valeurs.technicien || String(valeurs.nom || '').trim() ? []
+        : [{ nom: 'nom', message: I18n.t('parametres.demander_moi_solo.choisir_ou_creer') }]),
+      action: async (valeurs) => {
+        let technicienId = valeurs.technicien;
+        if (!technicienId) {
+          const existant = technicienExistant(valeurs);
+          technicienId = existant ? existant.id : await Equipe.creerTechnicien({ prenom: valeurs.prenom, nom: valeurs.nom });
+        }
+        await ecrireParametres({ solo_technicien_id: technicienId }, I18n.donnees('parametres.demander_moi_solo.moi_choisi'));   // journal (D156)
+      },
+    });
+    if (!fait) return false;
+    App.marquerSaisie(false);
+    UI.toast(I18n.t('parametres.demander_moi_solo.moi_enregistre'), 'succes');
+    await App.reafficher();
+    return true;
   }
 
   /** Branche les boutons de la carte ; `pendant(bouton, contexte, action)` : outil de parametres.js. */
@@ -97,5 +135,5 @@ Object.assign(Parametres.interne, (() => {
     if (quitter) quitter.addEventListener('click', () => pendant(quitter, 'fin du mode Solo', quitterSolo));
   }
 
-  return { carteSolo, brancherSolo };
+  return { carteSolo, brancherSolo, demanderMoiSolo };
 })());

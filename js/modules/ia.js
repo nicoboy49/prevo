@@ -30,10 +30,10 @@
 
 const Ia = (() => {
 
-  // Fournisseurs reconnus (brief §10) : Ollama local, ou toute API compatible OpenAI.
+  // Fournisseurs reconnus (brief §10) : Ollama local, ou toute API compatible OpenAI (libellé lu à l'affichage).
   const FOURNISSEURS = {
-    ollama: 'Ollama',
-    openai: 'API compatible OpenAI',
+    get ollama() { return I18n.t('ia.ollama.ollama'); },
+    get openai() { return I18n.t('ia.openai.api_compatible_open_ai'); },
   };
 
   const CLE_REGLAGES = 'prevo.ia';
@@ -54,19 +54,18 @@ const Ia = (() => {
     ollama: { modeles: 'api/tags', chat: 'api/chat' },
     openai: { modeles: 'models', chat: 'chat/completions' },
   };
-  const MESSAGE_DISTANT_REFUSE = 'Le responsable n\'a pas autorisé les fournisseurs en ligne (Paramètres, '
-    + '« Assistant IA »). L\'IA locale reste possible.';
-  const MESSAGE_DISTANT_REFUSE_SERVEUR = 'Les fournisseurs d\'IA en ligne ne sont pas autorisés sur le PC serveur '
-    + '(Paramètres › Accès et installation). L\'IA locale reste possible.';
-  const MENTIONS = { poste: 'reste sur ce PC', 'pc-atelier': 'reste sur le PC atelier', atelier: 'reste dans l\'atelier' };
+  function messageDistantRefuse() {
+    if (modeCourant() !== 'serveur') {
+      return I18n.t('ia.message_distant_refuse.responsable_pas_autorise_fournisseurs');
+    }
+    return I18n.t('ia.message_distant_refuse.fournisseurs_ia_ligne_sont');
+  }
   // Version web (démo en ligne, App.versionWeb) : l'assistant reste visible mais n'appelle rien ; tout
   // appel rend ce message (texte du brief de lancement, point 7, mot pour mot ; la section du guide est
   // nommée comme dans GUIDE.html, à la demande de Nicolas).
-  const MESSAGE_VERSION_WEB = 'L\'assistant IA n\'est pas proposé dans cette démo en ligne : Prévo fonctionne '
-    + 'entièrement sans lui. Sur votre installation, vous choisirez de l\'activer ou non, entre deux options : '
-    + 'un assistant local et gratuit (Ollama, sur un PC de l\'atelier ; vos textes ne quittent pas l\'entreprise), '
-    + 'ou un service en ligne via une clé d\'API (plus rapide, mais les textes envoyés partent chez le fournisseur '
-    + 'choisi). Tout est expliqué dans le guide, section « 5. L\'assistant IA ».';
+  function messageVersionWeb() {
+    return I18n.t('ia.message_version_web.assistant_ia_pas_propose');
+  }
 
   const evenements = new EventTarget();
   let etatCourant = 'inconnu';
@@ -98,16 +97,15 @@ const Ia = (() => {
   }
 
   // Fournisseur injoignable, IA non activée, adresse invalide, accès refusé par le fournisseur.
-  const IaIndisponible = erreurNommee('IaIndisponible', 'L\'assistant IA ne répond pas : aucune proposition.');
+  const IaIndisponible = erreurNommee('IaIndisponible', () => I18n.t('ia.module.assistant_ia_repond_pas'));
   // Pas de réponse dans le délai réglé sur le poste.
-  const IaDelai = erreurNommee('IaDelai', 'L\'IA n\'a pas répondu dans le délai prévu.');
+  const IaDelai = erreurNommee('IaDelai', () => I18n.t('ia.module.ia_pas_repondu_delai'));
   // « Annuler » cliqué pendant que l'IA travaillait.
-  const IaAnnulee = erreurNommee('IaAnnulee', 'Demande à l\'IA annulée.');
+  const IaAnnulee = erreurNommee('IaAnnulee', () => I18n.t('ia.module.demande_ia_annulee'));
   // Réponse illisible (pas du JSON) ou hors du schéma attendu : aucune proposition.
-  const IaReponseInvalide = erreurNommee('IaReponseInvalide', 'Réponse de l\'IA illisible : aucune proposition.');
+  const IaReponseInvalide = erreurNommee('IaReponseInvalide', () => I18n.t('ia.module.reponse_ia_illisible_aucune'));
   // Portée non autorisée : fournisseur en ligne sans l'accord du responsable (D67), ou du PC serveur (M2).
-  const IaRefusee = erreurNommee('IaRefusee',
-    () => (modeCourant() === 'serveur' ? MESSAGE_DISTANT_REFUSE_SERVEUR : MESSAGE_DISTANT_REFUSE));
+  const IaRefusee = erreurNommee('IaRefusee', messageDistantRefuse);
 
   // Fournisseur qu'on n'atteint pas (réseau, serveur arrêté) : l'état passe à « injoignable ».
   function erreurReseau(message, cause) {
@@ -226,7 +224,7 @@ const Ia = (() => {
   function enregistrerReglages(modifications) {
     const anciens = reglages();
     const nouveaux = selonLeServeur(normaliser(avecCle(anciens, modifications)));
-    if (nouveaux.actif && versionWeb()) throw new IaRefusee(MESSAGE_VERSION_WEB);
+    if (nouveaux.actif && versionWeb()) throw new IaRefusee(messageVersionWeb());
     if (nouveaux.actif && !porteeAutorisee(nouveaux.url)) throw new IaRefusee();
     if (!ecrireMemoire(JSON.stringify(aMemoriser(nouveaux)))) {
       console.warn('Prévo : réglages de l\'assistant IA non mémorisés (stockage du navigateur refusé).');
@@ -330,8 +328,11 @@ const Ia = (() => {
   function mention(porteeConnue, url) {
     const adresse = url === undefined ? reglages().url : url;
     const laPortee = porteeConnue || portee(adresse);
-    if (MENTIONS[laPortee]) return MENTIONS[laPortee];
-    return 'données envoyées à ' + (hoteAffiche(adresse) || 'un service en ligne');
+    if (laPortee === 'poste') return I18n.t('ia.mention.reste_pc');
+    if (laPortee === 'pc-atelier') return I18n.t('ia.mention.reste_pc_atelier');
+    if (laPortee === 'atelier') return I18n.t('ia.mention.reste_atelier');
+    const hote = hoteAffiche(adresse);
+    return hote ? I18n.t('ia.mention.donnees_envoyees', { hote }) : I18n.t('ia.mention.donnees_envoyees_service_ligne');
   }
 
   function porteeAutorisee(url) {
@@ -379,8 +380,7 @@ const Ia = (() => {
   }
 
   function messageDelai(delaiS) {
-    return new IaDelai('L\'IA n\'a pas répondu en ' + delaiS + '\u00a0s (délai du poste). Un PC sans carte '
-      + 'graphique peut être lent : réessayez, ou allongez le délai dans « Ce poste ».');
+    return new IaDelai(I18n.t('ia.message_delai.pas_repondu', { n: delaiS }));
   }
 
   // Corps d'une réponse : objet JSON si possible, sinon texte.
@@ -390,20 +390,19 @@ const Ia = (() => {
       brut = await reponse.text();
     } catch (erreur) {
       if (signal.aborted) throw erreur;
-      throw erreurReseau('La réponse du fournisseur d\'IA a été coupée.', erreur);
+      throw erreurReseau(I18n.t('ia.lire_corps.reponse_fournisseur_ia_ete'), erreur);
     }
     try { return JSON.parse(brut); } catch (erreur) { return brut; }
   }
 
   function messageInjoignable(r) {
-    const hote = hoteAffiche(r.url) || 'adresse inconnue';
+    const hote = hoteAffiche(r.url) || I18n.t('ia.message_injoignable.adresse_inconnue');
     if (r.fournisseur === 'ollama' && portee(r.url) === 'poste') {
-      return 'Ollama ne répond pas (' + hote + ') : vérifiez qu\'il est lancé et, pour une page ouverte sans '
-        + 'serveur, que OLLAMA_ORIGINS l\'autorise (voir le guide).';
+      return I18n.t('ia.message_injoignable.ollama_repond_pas_verifiez', { hote });
     }
     // D66 : beaucoup de fournisseurs en ligne refusent les appels directs d'une page (CORS).
-    if (portee(r.url) === 'distant') return 'Le fournisseur d\'IA ne répond pas à ce navigateur (' + hote + ') : passez par le mode serveur (voir le guide).';
-    return 'Le fournisseur d\'IA ne répond pas (' + hote + ').';
+    if (portee(r.url) === 'distant') return I18n.t('ia.message_injoignable.fournisseur_repond_pas_navigateur', { hote });
+    return I18n.t('ia.message_injoignable.fournisseur_repond_pas', { hote });
   }
 
   // Appel direct (modes dossier et démo) : fetch vers le fournisseur, sans cookie, sans redirection.
@@ -427,7 +426,7 @@ const Ia = (() => {
   // Seul point de sortie vers le fournisseur : appel direct, ou relais du serveur en mode serveur (toujours,
   // téléphones compris : ia-serveur.js, §17.2 et §22.12) ; en version web, aucune requête.
   function envoyer(r, chemin, methode, corps, signal) {
-    if (versionWeb()) return Promise.reject(new IaIndisponible(MESSAGE_VERSION_WEB));
+    if (versionWeb()) return Promise.reject(new IaIndisponible(messageVersionWeb()));
     return modeCourant() === 'serveur' ? interne.appelRelais(r, chemin, methode, corps, signal)
       : appelDirect(r, chemin, methode, corps, signal);
   }
@@ -441,14 +440,14 @@ const Ia = (() => {
   // Message d'un code HTTP du fournisseur (jamais le texte du fournisseur : il pourrait citer la clé).
   function messageStatut(statut, r) {
     if (statut === 403 && r.fournisseur === 'ollama' && modeCourant() !== 'serveur') {
-      return 'Ollama refuse cette page (403) : autorisez-la avec OLLAMA_ORIGINS (voir le guide).';
+      return I18n.t('ia.message_statut.ollama_refuse_page_403');
     }
-    if (statut === 401 || statut === 403) return 'Le fournisseur d\'IA refuse l\'accès (' + statut + ') : vérifiez la clé.';
-    if (statut === 404) return 'Adresse ou modèle « ' + r.modele + ' » introuvable chez le fournisseur d\'IA (404).';
-    if (statut === 429) return 'Le fournisseur d\'IA limite les demandes (429) : réessayez plus tard.';
-    if (statut === 0 || (statut >= 300 && statut < 400)) return 'Le fournisseur d\'IA répond par une redirection : vérifiez l\'adresse.';
-    if (statut >= 500) return 'Le fournisseur d\'IA est en difficulté (' + statut + ') : réessayez plus tard.';
-    return 'Le fournisseur d\'IA a refusé la demande (' + statut + ').';
+    if (statut === 401 || statut === 403) return I18n.t('ia.message_statut.fournisseur_ia_refuse_acces', { statut });
+    if (statut === 404) return I18n.t('ia.message_statut.adresse_modele_introuvable_chez', { modele: r.modele });
+    if (statut === 429) return I18n.t('ia.message_statut.fournisseur_ia_limite_demandes');
+    if (statut === 0 || (statut >= 300 && statut < 400)) return I18n.t('ia.message_statut.fournisseur_ia_repond_redirection');
+    if (statut >= 500) return I18n.t('ia.message_statut.fournisseur_ia_difficulte_reessayez', { statut });
+    return I18n.t('ia.message_statut.fournisseur_ia_refuse_demande', { statut });
   }
 
   function verifierStatut(statut, r) {
@@ -471,16 +470,15 @@ const Ia = (() => {
   }
 
   function messageConnexion(modeles, modele) {
-    const nombre = modeles.length + ' modèle' + (modeles.length > 1 ? 's' : '') + ' disponible' + (modeles.length > 1 ? 's' : '');
     if (modeles.length && !modeleDansListe(modele, modeles)) {
-      return 'Connexion réussie (' + nombre + '), mais le modèle « ' + modele + ' » n\'est pas dans la liste.';
+      return I18n.t('ia.message_connexion.reussie_modele_absent', { n: modeles.length, modele });
     }
-    return 'Connexion réussie : ' + nombre + '.';
+    return I18n.t('ia.message_connexion.reussie', { n: modeles.length });
   }
 
   async function testerAvec(r) {
     if (!urlValide(r.url)) {
-      return { ok: false, modeles: [], message: 'Adresse du fournisseur invalide : http://… ou https://… attendu.' };
+      return { ok: false, modeles: [], message: I18n.t('ia.tester_avec.adresse_fournisseur_invalide_http') };
     }
     if (!porteeAutorisee(r.url)) return { ok: false, modeles: [], message: new IaRefusee().message };
     const delaiS = Math.min(r.delaiS, DELAI_TEST_S);
@@ -503,7 +501,7 @@ const Ia = (() => {
    */
   async function tester(reglagesEssai) {
     // Version web : rien n'est appelé (ni liste des modèles, ni détection d'Ollama), l'état ne change pas.
-    if (versionWeb()) return { ok: false, modeles: [], message: MESSAGE_VERSION_WEB };
+    if (versionWeb()) return { ok: false, modeles: [], message: messageVersionWeb() };
     await reglagesServeurLus();
     const pourLePoste = !reglagesEssai;
     const r = pourLePoste ? reglages() : selonLeServeur(normaliser(avecCle(reglages(), reglagesEssai)));
@@ -540,7 +538,7 @@ const Ia = (() => {
     }
     const message = corps && Array.isArray(corps.choices) && corps.choices[0] && corps.choices[0].message;
     if (message && typeof message.content === 'string') return message.content;
-    if (message && message.refusal) throw new IaReponseInvalide('L\'IA a refusé de répondre : aucune proposition.');
+    if (message && message.refusal) throw new IaReponseInvalide(I18n.t('ia.contenu_recu.ia_refuse_repondre_aucune'));
     throw new IaReponseInvalide();
   }
 
@@ -586,7 +584,7 @@ const Ia = (() => {
 
   function consigneDe(fonction, appelant) {
     const consigne = Ia.PROMPTS && Object.prototype.hasOwnProperty.call(Ia.PROMPTS, fonction) ? Ia.PROMPTS[fonction] : null;
-    if (!consigne) throw new Error(appelant + ' : fonction inconnue « ' + fonction + ' ».');
+    if (!consigne) throw new Error(I18n.t('ia.consigne_de.fonction_inconnue', { appelant, fonction }));
     return consigne;
   }
 
@@ -599,12 +597,13 @@ const Ia = (() => {
    * exactement ce que Ia.demander envoie au fournisseur (même construction : demander l'appelle). Sert
    * aussi à exporter les requêtes de la démo (§20.8). Aucun appel réseau, rien n'est écrit.
    */
-  function requete(fonction, donnees) {
+  function requete(fonction, donnees, options) {
     const consigne = consigneDe(fonction, 'Ia.requete');
     const valeurs = valeursDe(donnees);
+    const langue = (options && options.langue) || consigne.langue || I18n.langue;      // D159
     return {
       fonction,
-      messages: [{ role: 'system', content: consigne.systeme }, { role: 'user', content: consigne.utilisateur(valeurs) }],
+      messages: [{ role: 'system', content: consigne.systeme + '\n\n' + Ia.consigneLangue(langue) }, { role: 'user', content: consigne.utilisateur(valeurs) }],
       schema: consigne.schema(valeurs),
       temperature: TEMPERATURE,
     };
@@ -622,13 +621,13 @@ const Ia = (() => {
   /**
    * Demande une proposition à l'IA pour une fonction de Ia.PROMPTS. Renvoie
    * { resultat, modele, fournisseur } (resultat contrôlé par Ia.PROMPTS[fonction].verifier) ; sinon une
-   * erreur nommée. options.signal : AbortSignal du bouton « Annuler ». Rien n'est écrit.
+   * erreur nommée. options.signal : AbortSignal du bouton « Annuler » ; options.langue : langue de la réponse (défaut : écran). Rien n'est écrit.
    */
   async function demander(fonction, donnees, options) {
     consigneDe(fonction, 'Ia.demander');
     await reglagesServeurLus();
     reglagesUtilisables();                        // refus (version web, IA inactive, portée D67) avant tout
-    const envoi = await envoyerRequete(requete(fonction, donnees), options && options.signal);
+    const envoi = await envoyerRequete(requete(fonction, donnees, options), options && options.signal);
     return { resultat: lireReponse(fonction, envoi.contenu, donnees), modele: envoi.modele, fournisseur: envoi.fournisseur };
   }
 
@@ -650,10 +649,10 @@ const Ia = (() => {
 
   // Réglages du poste s'ils permettent un appel, sinon l'erreur nommée (version web : rien n'est appelé).
   function reglagesUtilisables() {
-    if (versionWeb()) throw new IaIndisponible(MESSAGE_VERSION_WEB);
+    if (versionWeb()) throw new IaIndisponible(messageVersionWeb());
     const r = reglages();
-    if (!r.actif) throw new IaIndisponible('L\'assistant IA n\'est pas activé sur ce poste (« Ce poste »).');
-    if (!urlValide(r.url)) throw new IaIndisponible('Adresse du fournisseur d\'IA invalide (« Ce poste »).');
+    if (!r.actif) throw new IaIndisponible(I18n.t('ia.reglages_utilisables.assistant_ia_pas_active'));
+    if (!urlValide(r.url)) throw new IaIndisponible(I18n.t('ia.reglages_utilisables.adresse_fournisseur_ia_invalide'));
     if (!porteeAutorisee(r.url)) throw new IaRefusee();
     return r;
   }
@@ -690,7 +689,8 @@ const Ia = (() => {
     memoriser: () => ecrireMemoire(JSON.stringify(aMemoriser(reglages()))), oublierEtat: () => { etatCourant = 'inconnu'; } };
 
   return {
-    FOURNISSEURS, DEFAUTS, IMPACTS, FAMILLES_CODES, TEXTE_MAX, MESSAGE_VERSION_WEB,
+    FOURNISSEURS, DEFAUTS, IMPACTS, FAMILLES_CODES, TEXTE_MAX,
+    get MESSAGE_VERSION_WEB() { return messageVersionWeb(); },
     ErreurIa, IaIndisponible, IaDelai, IaAnnulee, IaReponseInvalide, IaRefusee,
     evenements,
     reglages, enregistrerReglages, distantAutorise, urlValide, portee, mention, active, etat, versionWeb,

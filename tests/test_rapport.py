@@ -53,7 +53,17 @@ NOM = "rapport-mensuel-%s.html" % MOIS
 
 
 def lire_csv(dossier, nom):
-    return list(csv.DictReader(io.StringIO((Path(dossier) / nom).read_text(encoding="utf-8-sig")), delimiter=";"))
+    # Windows refuse un instant l'ouverture d'un fichier que le serveur remplace (écriture atomique, os.replace) :
+    # quelques essais rapprochés au lieu d'une erreur (T199 : PermissionError vu dans la suite complète du 2026-11-04).
+    for essai in range(20):
+        try:
+            texte = (Path(dossier) / nom).read_text(encoding="utf-8-sig")
+            break
+        except PermissionError:
+            if essai == 19:
+                raise
+            time.sleep(0.05)
+    return list(csv.DictReader(io.StringIO(texte), delimiter=";"))
 
 
 def ecrire_parametre(dossier, cle, valeur):
@@ -228,6 +238,9 @@ class TestRevisions(CasRapport):
         self.ouvrir()
         premier = self.figer_depuis_l_accueil()
         nom = self.rapport(NOM).name
+        # Après « figer », l'accueil est réaffiché (App.reafficher) et la tuile disparaît : l'attendre avant d'injecter
+        # l'onglet, sinon ce réaffichage peut le remplacer sous la charge (T259 ; même attente que TestFiger).
+        self.page.wait_for_function("!document.querySelector('#bandeau-rapport')")
         # Onglet « Rapports mensuels » affiché dans la page (indépendamment de l'écran Indicateurs)
         self.page.evaluate("Rapport.afficherOnglet(document.querySelector('#contenu'))")
         self.assertEqual(self.page.locator('.rapports-liste tr[data-nom="%s"]' % nom).count(), 1)

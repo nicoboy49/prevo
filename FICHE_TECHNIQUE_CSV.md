@@ -704,7 +704,7 @@ Les interventions passées d'une autre GMAO : chacune devient un OT clôturé ; 
 
 ## 5. Prévo 2 : accès et installation
 
-Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le format des fichiers CSV ne change pas. Le détail pour l'informaticien est dans `docs/INSTALLATION.md` (dépôt).
+Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le format des fichiers CSV ne change pas. Le détail pour l'informaticien est dans `docs/INSTALLATION.fr.md` (dépôt ; en anglais : `docs/INSTALLATION.md`).
 
 ### 5.1 Le dossier `acces/` (mode serveur)
 
@@ -713,15 +713,15 @@ Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le fo
 - **Jamais à modifier à la main** (Excel compris) : le serveur seul les lit et les écrit. Ne les joignez jamais à un signalement.
 - **Jamais servis** : ni par l'API des tables, ni dans l'export ZIP. Seul le journal des connexions sort, quand le responsable l'exporte (Équipe › Accès).
 - **Sauvegardes** : les sauvegardes du serveur copient les fichiers de `acces/` (pas le dossier `autorite/`), sauf `sessions.json` (une session ne se restaure jamais) et `cle.pem` (la clé privée du certificat de l'atelier ne quitte pas le PC ; Prévo la refabrique au démarrage si elle manque) ; une restauration ne les remet jamais en place.
-- **`journal-acces.csv`**, le journal des connexions, suit les règles de la section 1 (UTF-8 avec BOM, `;`, CRLF, apostrophe de protection). Colonnes : `date`, `qui`, `adresse`, `agent`, `resultat`, `tailscale`. `date` est écrite `AAAA-MM-JJTHH:MM:SS` ; `resultat` vaut `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`, `reinitialisation`, `creation`, `modification` ; `tailscale` porte le compte Tailscale d'une session venue par `tailscale serve`. Les lignes de plus de 366 jours sont effacées. Le responsable l'exporte depuis Équipe › Accès.
+- **`journal-acces.csv`**, le journal des connexions, suit les règles de la section 1 (UTF-8 avec BOM, `;`, CRLF, apostrophe de protection). Colonnes : `date`, `qui`, `adresse`, `agent`, `resultat`, `tailscale`. `date` est écrite `AAAA-MM-JJTHH:MM:SS` ; `resultat` vaut `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`, `reinitialisation`, `creation`, `modification`, `langue` ; `tailscale` porte le compte Tailscale d'une session venue par `tailscale serve`. Les lignes de plus de 366 jours sont effacées. Le responsable l'exporte depuis Équipe › Accès.
 
-À côté, dans le dossier des données : `installation.json` (brouillon de l'assistant d'installation, supprimé à la fin), `journal-serveur.log` (journal du serveur) et `copie-externe.json` (état de la copie externe des sauvegardes). La configuration, `prevo.config.json`, est à côté de `serveur.py`, jamais dans le dossier des données.
+À côté, dans le dossier des données : `installation.json` (brouillon de l'assistant d'installation, supprimé à la fin), `journal-serveur.log` (journal du serveur), `copie-externe.json` (état de la copie externe des sauvegardes) et `derniere-version.json` (version de Prévo qui a ouvert ces données en dernier ; une autre version fait d'abord une sauvegarde `…_avant-mise-a-jour`). Chaque sauvegarde contient un `manifeste.json` (ses fichiers, avec leur taille et leur empreinte SHA-256). La configuration, `prevo.config.json`, est à côté de `serveur.py`, jamais dans le dossier des données.
 
 ### 5.2 Les documents joints (`documents/`)
 
 - **Nom imposé par le serveur** : en mode serveur, chaque document envoyé est enregistré sous `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules), et c'est ce nom qui est écrit dans la colonne (type `document`). Les documents déjà présents gardent leur nom ; en mode dossier, le nom n'a pas de préfixe.
 - **Extensions acceptées** : `.csv`, `.docx`, `.gif`, `.html`, `.jpeg`, `.jpg`, `.ods`, `.odt`, `.pdf`, `.png`, `.txt`, `.webp`, `.xlsx`. Toute autre est refusée, dont `.doc` et `.xls` depuis Prévo 2 : enregistrez en `.docx` ou `.xlsx`.
-- **Place** : 2048 Mo au plus pour tout le dossier, par défaut (`quota_documents_mo` de `prevo.config.json`).
+- **Place** : 4096 Mo au plus pour tout le dossier, par défaut (`quota_documents_mo` de `prevo.config.json`).
 
 ### 5.3 Nouveaux réglages de `parametres.csv`
 
@@ -730,5 +730,7 @@ Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le fo
 | `mode_solo` | Mode Solo : je fais tout moi-même | `0`, `1` | `0` | `1` : mode Solo (menu allégé, « Nouvel OT » en premier). Posé par l'assistant en Solo ou par « Passer en mode Solo » (Paramètres), remis à `0` par « Quitter le mode Solo ». |
 | `cloture_une_etape` | Clôture en une étape (bouton « Clore » pour le responsable) | `0`, `1` | `0` | `1` : bouton « Clore » du responsable (clôtures technique et administrative d'un coup). Posé à `1` avec le mode Solo ; réglable dans Paramètres, section Ordres de travail. |
 | `solo_technicien_id` | Technicien « moi » du mode Solo | texte | vide | Identifiant (`TEC-…`) du technicien « moi » du mode Solo, pré-rempli sur les OT ; il reste dans l'équipe si l'on quitte ce mode. |
+| `langue_defaut` | Langue de l'installation | `fr`, `en` | `fr` | Langue de l'installation (chantier multilingue, D149) : langue des postes qui n'ont pas choisi la leur, et des textes que Prévo écrit dans les données (journal, motifs, rapport figé). Code d'une langue déclarée ; réglable dans Paramètres, section Entreprise. |
+| `devise` | Devise | `EUR`, `CHF`, `GBP`, `USD`, `TRY` | `EUR` | Devise d'affichage des montants (chantier multilingue, D152) : code ISO 4217, `EUR` par défaut. La liste de Paramètres propose ces codes et « Autre code ISO 4217 » : tout code ISO connu s'écrit ici. Change seulement l'affichage : aucun montant des fichiers n'est converti (les montants des CSV restent des nombres sans symbole). Réglable dans Paramètres, section Entreprise. |
 
 `ia_distant_autorise` (« Autoriser les fournisseurs d'IA en ligne (OpenAI, Mistral, Groq…) ») ne décide plus rien en mode serveur : un fournisseur d'IA en ligne n'y est permis que par `ia_en_ligne` dans `prevo.config.json` du PC serveur, et la case de Paramètres montre cette décision. En mode dossier, la case décide comme avant.

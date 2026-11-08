@@ -51,10 +51,10 @@ Object.assign(Preventif, (() => {
       <span class="pv-date sans-coupure">${UI.dateFr(element.date)}</span>
       <span class="pv-quoi"><b>${repere(element.equipementId)}</b> ${titre}</span>
       <span class="pv-marques">
-        ${ot ? UI.html`<a class="pv-lien-ot" href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>${UI.badgeStatut(ot.statut)}`
-          : UI.html`<span class="badge info">échéance</span>`}
-        ${element.estimee ? UI.html`<span class="badge neutre" title="Date estimée d'après les heures de fonctionnement par jour">estimée</span>` : ''}
-        ${enRetard ? UI.html`<span class="badge ko">en retard</span>` : ''}
+        ${ot ? UI.html`<a class="pv-lien-ot" href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}`
+          : UI.html`<span class="badge info">${I18n.t('preventif.element.echeance')}</span>`}
+        ${element.estimee ? UI.html`<span class="badge neutre" title="${I18n.t('preventif.element.date_estimee_apres_heures')}">${I18n.t('preventif.element.estimee')}</span>` : ''}
+        ${enRetard ? UI.html`<span class="badge ko">${I18n.t('preventif.element.retard')}</span>` : ''}
       </span>
     </li>`;
   }
@@ -64,13 +64,12 @@ Object.assign(Preventif, (() => {
     const elements = semaine.elements;
     return UI.html`<li class="pv-semaine${courante ? ' pv-semaine-courante' : ''}" data-lundi="${semaine.lundi}">
       <div class="pv-semaine-tete">
-        <b>Semaine ${numeroSemaine(semaine.lundi)}</b>
-        <span class="pv-semaine-dates">du ${jourMois(semaine.lundi)} au ${UI.dateFr(semaine.dimanche)}</span>
-        ${courante ? UI.html`<span class="badge info">cette semaine</span>` : ''}
-        <span class="badge ${elements.length ? 'cyan' : 'neutre'}" title="Éléments prévus">${elements.length}</span>
+        ${I18n.html('preventif.semaine.semaine_numero_semaine_jour_mois_dimanche', { numeroSemaine: numeroSemaine(semaine.lundi), jourMois: jourMois(semaine.lundi), dimanche: UI.dateFr(semaine.dimanche) })}
+        ${courante ? UI.html`<span class="badge info">${I18n.t('preventif.semaine.semaine')}</span>` : ''}
+        <span class="badge ${elements.length ? 'cyan' : 'neutre'}" title="${I18n.t('preventif.semaine.elements_prevus')}">${elements.length}</span>
       </div>
       ${elements.length ? UI.html`<ul class="pv-elements">${elements.map((element) => elementHtml(element, jour))}</ul>`
-        : UI.html`<p class="pv-rien">Rien de prévu.</p>`}
+        : UI.html`<p class="pv-rien">${I18n.t('preventif.semaine.rien_prevu')}</p>`}
     </li>`;
   }
 
@@ -80,10 +79,9 @@ Object.assign(Preventif, (() => {
     const semaines = Preventif.calendrier(jour);
     const enRetard = semaines.length ? semaines[0].elements.filter((e) => joursEntre(e.date, semaines[0].lundi) > 0).length : 0;
     UI.remplir(panneau, UI.html`
-      <p class="note pv-legende">Échéances des gammes et OT préventifs ouverts, semaine par semaine. Une gamme au compteur
-        a une date <b>estimée</b> (heures de fonctionnement par jour). Ce qui est en retard est rangé dans la semaine en cours.</p>
-      ${enRetard ? UI.html`<p class="note">${enRetard} élément(s) en retard d'une semaine précédente.</p>` : ''}
-      <ol class="pv-calendrier" aria-label="Calendrier du préventif sur ${semaines.length} semaines">
+      <p class="note pv-legende">${I18n.html('preventif.calendrier.echeances_gammes_ot_preventifs')}</p>
+      ${enRetard ? UI.html`<p class="note">${I18n.t('preventif.calendrier.element_retard_semaine_precedente', { n: enRetard })}</p>` : ''}
+      <ol class="pv-calendrier" aria-label="${I18n.t('preventif.calendrier.calendrier_preventif_semaines', { n: semaines.length })}">
         ${semaines.map((semaine, rang) => semaineHtml(semaine, rang, jour))}
       </ol>`);
   }

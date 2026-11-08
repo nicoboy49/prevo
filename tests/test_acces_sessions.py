@@ -267,7 +267,8 @@ class TestEchecs(CasDansLeProcessus):
     def test_dix_echecs_bloquent_quinze_minutes_sans_verifier_le_mot_de_passe(self):
         for numero in range(1, 10):
             reponse = self.client.connecter("julien.moreau", FAUX_MOT_DE_PASSE)
-            self.assertEqual((reponse.statut, reponse.json()), (401, {"erreur": MESSAGE_REFUS}), numero)
+            self.assertEqual((reponse.statut, reponse.json()), (401, {"erreur": MESSAGE_REFUS,
+                                                                      "erreur_code": "sessions.connexion_refusee"}), numero)
         self.assertEqual(self.serveur.attentes, [1, 2, 4, 8, 8])               # du 5e au 9e échec
         dixieme = self.client.connecter("julien.moreau", FAUX_MOT_DE_PASSE)
         self.assertEqual(dixieme.statut, 429)
@@ -307,7 +308,8 @@ class TestEchecs(CasDansLeProcessus):
             self.assertEqual((inconnu.statut, inconnu.octets), (faux.statut, faux.octets))
             self.assertEqual(sans_date(inconnu.entetes), sans_date(faux.entetes))
         self.assertEqual([r.statut for r in reponses["inconnu"]], [401] * 9 + [429])
-        self.assertEqual(reponses["inconnu"][0].json(), {"erreur": MESSAGE_REFUS})
+        self.assertEqual(reponses["inconnu"][0].json(), {"erreur": MESSAGE_REFUS,
+                                                         "erreur_code": "sessions.connexion_refusee"})
         self.assertEqual(self.serveur.attentes, [1, 1, 2, 2, 4, 4, 8, 8, 8, 8])
         # Le journal ne recopie jamais un identifiant sans compte (un mot de passe tapé dans la mauvaise case).
         qui = {ligne["qui"] for ligne in lignes_du_journal(self.donnees)}
@@ -411,7 +413,8 @@ class TestMotDePasseEtComptes(CasDansLeProcessus):
         self.assertIn("12 caractères", trop_court.json()["erreur"])
         self.assertEqual(self.changer(premiere, MOT_DE_PASSE_TECHNICIEN, MOT_DE_PASSE_TECHNICIEN).statut, 400)
         faux = self.changer(premiere, FAUX_MOT_DE_PASSE, NOUVEAU_MOT_DE_PASSE)
-        self.assertEqual((faux.statut, faux.json()), (403, {"erreur": "Mot de passe actuel incorrect."}))
+        self.assertEqual((faux.statut, faux.json()), (403, {"erreur": "Mot de passe actuel incorrect.",
+                                                           "erreur_code": "sessions.mot_de_passe_actuel_faux"}))
         change = self.changer(premiere, MOT_DE_PASSE_TECHNICIEN, NOUVEAU_MOT_DE_PASSE)
         self.assertEqual(change.statut, 200, change.octets)
         self.assertFalse(change.json()["session"]["a_changer"])
@@ -433,7 +436,8 @@ class TestMotDePasseEtComptes(CasDansLeProcessus):
         # Compte désactivé : la même réponse qu'un mot de passe faux, après le même calcul d'empreinte.
         with mock.patch.object(serveur, "hacher_mot_de_passe", wraps=serveur.hacher_mot_de_passe) as hachage:
             refus = self.client.connecter("julien.moreau", MOT_DE_PASSE_TECHNICIEN)
-        self.assertEqual((refus.statut, refus.json()), (401, {"erreur": MESSAGE_REFUS}))
+        self.assertEqual((refus.statut, refus.json()), (401, {"erreur": MESSAGE_REFUS,
+                                                              "erreur_code": "sessions.connexion_refusee"}))
         self.assertEqual(hachage.call_count, 1)
         serveur.modifier_compte(self.serveur.config, "julien.moreau", actif=True)
         cookie = self.connecter("julien.moreau", MOT_DE_PASSE_TECHNICIEN)
@@ -443,7 +447,8 @@ class TestMotDePasseEtComptes(CasDansLeProcessus):
         self.assertEqual(reponse.statut, 200)
         self.assertTrue(reponse.json()["session"]["a_changer"])
         refus = self.client.requete("GET", "/api/versions", cookie=reponse.cookie)
-        self.assertEqual((refus.statut, refus.json()), (403, {"erreur": MESSAGE_PROVISOIRE}))
+        self.assertEqual((refus.statut, refus.json()), (403, {"erreur": MESSAGE_PROVISOIRE,
+                                                              "erreur_code": "sessions.mot_de_passe_provisoire"}))
 
     def test_compte_change_par_un_autre_processus_refuse_ses_sessions(self):
         """comptes.json réécrit ailleurs sans toucher aux sessions (--reinitialiser lancé pendant que le serveur
@@ -471,7 +476,8 @@ class TestMotDePasseEtComptes(CasDansLeProcessus):
                          {"comptes": True, "session": None})
         self.assertEqual(self.client.statut(cookie), 401)
         refus = self.client.connecter("nicolas.briand", MOT_DE_PASSE_RESPONSABLE)
-        self.assertEqual((refus.statut, refus.json()), (500, {"erreur": serveur.MESSAGE_COMPTES_ILLISIBLES}))
+        self.assertEqual((refus.statut, refus.json()), (500, {"erreur": serveur.MESSAGE_COMPTES_ILLISIBLES,
+                                                           "erreur_code": "comptes.fichier_illisible"}))
 
     def test_colonne_tailscale_seulement_derriere_un_mandataire_sur_ce_pc(self):
         entetes = {"Tailscale-User-Login": "julien@github"}
@@ -497,7 +503,8 @@ class TestSansComptes(CasDansLeProcessus):
         for chemin, corps in demandes:
             with self.subTest(chemin=chemin):
                 reponse = self.client.requete("POST", chemin, corps)
-                self.assertEqual((reponse.statut, reponse.json()), (400, {"erreur": serveur.MESSAGE_SANS_COMPTES}))
+                self.assertEqual((reponse.statut, reponse.json()), (400, {"erreur": serveur.MESSAGE_SANS_COMPTES,
+                                                                          "erreur_code": "sessions.sans_comptes"}))
                 self.assertNotIn("set-cookie", reponse.entetes)
         self.assertFalse((self.donnees / "acces" / "sessions.json").exists())
         self.assertEqual(lignes_du_journal(self.donnees), [])
@@ -570,7 +577,8 @@ class TestServeurReel(CasServeurReel):
                 with self.subTest(route="%s %s" % (methode, motif), cookie=cookie):
                     corps = b"{}" if methode in ("PUT", "POST") else None
                     reponse = self.client.requete(methode, chemin_de(motif), corps, cookie=cookie)
-                    self.assertEqual((reponse.statut, reponse.json()), (401, {"erreur": serveur.MESSAGE_SESSION_ABSENTE}))
+                    self.assertEqual((reponse.statut, reponse.json()), (401, {"erreur": serveur.MESSAGE_SESSION_ABSENTE,
+                                                                         "erreur_code": "sessions.absente"}))
         for chemin in ("/api/inexistant", "/api/acces/comptes", "/api/csv/inconnue"):
             with self.subTest(chemin=chemin):
                 self.assertEqual(self.client.statut(None, chemin), 401)
@@ -583,7 +591,8 @@ class TestServeurReel(CasServeurReel):
                 elif motif == "enroler":    # POST /api/enroler (T153) : ouverte sans session, l'invitation décide
                     reponse = self.client.requete("POST", "/api/enroler", {"invitation": "x" * 43, "nom": "Essai"})
                     self.assertEqual((reponse.statut, reponse.json()),
-                                     (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE}), reponse.octets)
+                                     (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE,
+                                            "erreur_code": "appareils.invitation_refusee"}), reponse.octets)
                     continue
                 else:                       # POST /api/connexion : ouverte sans session préalable
                     reponse = self.client.connecter("nicolas.briand", MOT_DE_PASSE_RESPONSABLE)
@@ -601,6 +610,8 @@ class TestServeurReel(CasServeurReel):
 
     def test_corps_jamais_lu_sans_session(self):
         # 10 Mo annoncés, rien d'envoyé : 401 aussitôt et connexion fermée, le serveur n'attend pas le corps.
+        # Sauvegardes faites au démarrage (T187 : avant-mise-a-jour, quotidienne) : on compare avant / après.
+        sauvegardes_avant = sorted((self.serveur.dossier / "sauvegardes").glob("*"))
         lignes = ["PUT /api/csv/equipements HTTP/1.1", "Host: 127.0.0.1:%d" % self.serveur.port, "X-Prevo: 1",
                   "X-Version-Attendue: aucune", "Content-Length: %d" % (10 * 1024 * 1024)]
         debut = time.monotonic()
@@ -631,7 +642,7 @@ class TestServeurReel(CasServeurReel):
             self.assertIs(connexion.sock, prise)
         finally:
             connexion.close()
-        self.assertEqual(list((self.serveur.dossier / "sauvegardes").glob("*")), [])
+        self.assertEqual(sorted((self.serveur.dossier / "sauvegardes").glob("*")), sauvegardes_avant)
 
     def test_cookie_connexion_session_deconnexion(self):
         entree = self.client.connecter("nicolas.briand", MOT_DE_PASSE_RESPONSABLE)
@@ -640,7 +651,7 @@ class TestServeurReel(CasServeurReel):
         cookie = entree.cookie
         jeton = cookie.split("=", 1)[1]
         attendu = {"identifiant": "nicolas.briand", "role": "responsable", "prenom": "Nicolas", "nom": "Briand",
-                   "technicien_id": "", "a_changer": False, "appareil": False}
+                   "technicien_id": "", "a_changer": False, "appareil": False, "langue": ""}     # langue : T298
         self.assertEqual(entree.json(), {"comptes": True, "session": attendu})
         self.assertNotIn(jeton.encode("ascii"), entree.octets)
         self.assertEqual(self.client.requete("GET", "/api/session", cookie=cookie).json(),
@@ -716,7 +727,8 @@ class TestServeurReel(CasServeurReel):
     def test_meme_reponse_pour_un_identifiant_inconnu_et_un_mot_de_passe_faux(self):
         inconnu = self.client.connecter("personne.inconnue", "un mot de passe quelconque")
         faux = self.client.connecter("nicolas.briand", "un mot de passe quelconque")
-        self.assertEqual((inconnu.statut, inconnu.json()), (401, {"erreur": MESSAGE_REFUS}))
+        self.assertEqual((inconnu.statut, inconnu.json()), (401, {"erreur": MESSAGE_REFUS,
+                                                                  "erreur_code": "sessions.connexion_refusee"}))
         self.assertEqual((inconnu.statut, inconnu.octets), (faux.statut, faux.octets))
         self.assertEqual(sans_date(inconnu.entetes), sans_date(faux.entetes))
         self.assertNotIn("set-cookie", faux.entetes)
@@ -731,7 +743,8 @@ class TestServeurReel(CasServeurReel):
             with self.subTest(route="%s %s" % (methode, motif)):
                 corps = b"{}" if methode in ("PUT", "POST") else None
                 reponse = self.client.requete(methode, chemin_de(motif), corps, cookie=cookie)
-                self.assertEqual((reponse.statut, reponse.json()), (403, {"erreur": MESSAGE_PROVISOIRE}))
+                self.assertEqual((reponse.statut, reponse.json()), (403, {"erreur": MESSAGE_PROVISOIRE,
+                                                                          "erreur_code": "sessions.mot_de_passe_provisoire"}))
         sortie = self.client.requete("POST", "/api/deconnexion", cookie=cookie)              # permis
         self.assertEqual(sortie.statut, 200)
         cookie = self.connecter("lea.martin", MOT_DE_PASSE_PROVISOIRE)

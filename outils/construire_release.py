@@ -1,7 +1,7 @@
 """Construit le zip de la release de Prévo : dist/prevo-<version>.zip (brief de lancement, point 7).
 
 Contenu (liste blanche, rien d'autre) : l'application (index.html, favicon.svg, css/, js/), les
-lanceurs (Lancer_GMAO.bat, lancer.sh, Reinitialiser_mot_de_passe.bat, serveur.py), GUIDE.html, README.md,
+lanceurs (Lancer_GMAO.bat, lancer.sh, Reinitialiser_mot_de_passe.bat, serveur.py), GUIDE.html, GUIDE.en.html, README.md, README.fr.md,
 LICENSE, NOTICE, FICHE_TECHNIQUE_CSV.md et outils/empreintes-tiers.json ; jamais les tests, les autres outils,
 docs/, les captures ni les données (ni fichier caché ni cache Python).
 
@@ -48,7 +48,9 @@ from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
 SORTIE_PAR_DEFAUT = RACINE / "dist"
-FICHIERS = ["index.html", "favicon.svg", "GUIDE.html", "README.md", "LICENSE", "NOTICE", "FICHE_TECHNIQUE_CSV.md",
+# Lot 6 (T338, T330) : guide anglais et README français à côté des versions principales.
+FICHIERS = ["index.html", "favicon.svg", "GUIDE.html", "GUIDE.en.html", "README.md", "README.fr.md", "LICENSE", "NOTICE",
+            "FICHE_TECHNIQUE_CSV.md",
             "Lancer_GMAO.bat", "lancer.sh", "Reinitialiser_mot_de_passe.bat", "serveur.py", "outils/empreintes-tiers.json"]
 CACHE_TIERS_PAR_DEFAUT = SORTIE_PAR_DEFAUT / "tiers"
 DELAI_TELECHARGEMENT_S = 120

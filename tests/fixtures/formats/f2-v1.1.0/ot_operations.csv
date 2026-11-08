@@ -1,0 +1,13 @@
+﻿id;ot_id;ordre;operation;valeur_attendue;fait;valeur_mesuree
+OTO-000001;OT-2025-0001;1;Relever les heures de marche et la pression de service;6 à 7,5 bar;1;6.8 bar
+OTO-000002;OT-2025-0001;2;Contrôler le niveau d'huile;Entre mini et maxi;1;OK
+OTO-000003;OT-2025-0001;3;Purger les condensats du réservoir et du sécheur;Purge fonctionnelle;1;OK
+OTO-000004;OT-2025-0001;4;Nettoyer les ailettes du radiateur d'huile;Propres;1;OK
+OTO-000005;OT-2025-0001;5;Relever la température de refoulement;< 95 °C;1;86 °C
+OTO-000006;OT-2025-0001;6;Vérifier l'absence de fuite d'huile ou d'air;Aucune fuite;1;Conforme
+OTO-000007;OT-2025-0001;7;Contrôler le serrage des raccords et des protecteurs;Serrés;1;OK
+OTO-000008;OT-2025-0003;1;Mesurer la perte de charge des filtres;< 150 Pa;1;116 Pa
+OTO-000009;OT-2025-0003;2;Contrôler la tension de la courroie;Flèche conforme;1;Conforme
+OTO-000010;OT-2025-0003;3;Écouter les paliers (bruit, vibration);Pas de bruit anormal;1;Conforme
+OTO-000011;OT-2025-0003;4;Relever l'intensité du moteur;< 6,5 A;1;5.6 A
+OTO-000012;OT-2025-0005;1;Relever la pression haute (HP);< 18 bar;1;16.3 bar

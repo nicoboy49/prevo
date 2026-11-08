@@ -234,7 +234,7 @@ class CasAvecServeur(unittest.TestCase):
         """GET chemin → 404 « Fichier introuvable. », sans aucun octet du fichier du projet."""
         reponse = self.requete('GET', chemin)
         self.assertEqual(reponse.statut, 404, 'GET %s → %d' % (chemin, reponse.statut))
-        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.'})
+        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.', 'erreur_code': 'statique.introuvable'})
         fichier = os.path.join(DOSSIER_PROJET, *chemin.lstrip('/').split('/'))
         if os.path.isfile(fichier):
             debut = self.lire_fichier(fichier)[:64]
@@ -686,7 +686,7 @@ class TestApiServeur(CasAvecServeur):
         """Lot 2 (§14.7) : serveur.py n'est plus public (il l'était au lot 1)."""
         reponse = self.requete('GET', '/serveur.py')
         self.assertEqual(reponse.statut, 404)
-        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.'})
+        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.', 'erreur_code': 'statique.introuvable'})
         self.assertNotIn(self.lire_fichier(SCRIPT_SERVEUR)[:64], reponse.corps)
         self.assertNotIn(b'VERROU_ECRITURE', reponse.corps)
         self.assertEqual(reponse.entetes['content-type'], 'application/json; charset=utf-8')
@@ -712,7 +712,7 @@ class TestApiServeur(CasAvecServeur):
         # « .gitattributes » commence par « . » : refusé avant même la liste blanche (400, §7).
         reponse = self.requete('GET', '/.gitattributes')
         self.assertTrue(400 <= reponse.statut < 500, reponse.statut)
-        self.assertEqual(set(reponse.json()), {'erreur'})
+        self.assertEqual(set(reponse.json()), {'erreur', 'erreur_code'})          # D157 : le message et son code
         chemin = os.path.join(DOSSIER_PROJET, '.gitattributes')
         if os.path.isfile(chemin):
             self.assertNotIn(self.lire_fichier(chemin)[:64], reponse.corps)
@@ -777,22 +777,28 @@ class TestApiServeur(CasAvecServeur):
 class TestSauvegardeQuotidienne(CasAvecServeur):
 
     ETAT_AVANT = BOM + entete('techniciens') + b'\r\nTEC-0001;Avant\r\n'
+    # T185 : base au format courant (version_schema 3), sinon le serveur la passerait au format courant à son
+    # démarrage (parametres.csv et journal.csv créés, sauvegarde « avant-format-v3 »).
+    PARAMETRES = BOM + entete('parametres') + b"\r\nversion_schema;'3\r\n"
 
     def preparer_donnees(cls, dossier_donnees):
         os.makedirs(dossier_donnees)
         with open(os.path.join(dossier_donnees, 'techniciens.csv'), 'wb') as fichier:
             fichier.write(cls.ETAT_AVANT)
+        with open(os.path.join(dossier_donnees, 'parametres.csv'), 'wb') as fichier:
+            fichier.write(cls.PARAMETRES)
 
     def test_sauvegarde_quotidienne_contient_etat_avant(self):
+        # T187 (D170) : la sauvegarde du jour est faite au démarrage du serveur, donc avant toute écriture, avec son
+        # manifeste ; ni une lecture ni les écritures du même jour ne la refont.
         aujourd_hui = datetime.date.today().strftime('%Y-%m-%d')
         dossier_du_jour = self.chemin_donnee('sauvegardes', aujourd_hui)
-        self.assertFalse(os.path.exists(dossier_du_jour))     # rien avant la 1re écriture
+        self.assertEqual(sorted(os.listdir(dossier_du_jour)), ['manifeste.json', 'parametres.csv', 'techniciens.csv'])
         self.requete('GET', '/api/versions')
-        self.assertFalse(os.path.exists(dossier_du_jour))     # une lecture ne sauvegarde pas
         version = empreinte(self.ETAT_AVANT)
         etat_apres = BOM + entete('techniciens') + b'\r\nTEC-0001;Apres\r\n'
         self.assertEqual(self.mettre_csv('techniciens', etat_apres, version).statut, 200)
-        self.assertEqual(os.listdir(dossier_du_jour), ['techniciens.csv'])
+        self.assertEqual(sorted(os.listdir(dossier_du_jour)), ['manifeste.json', 'parametres.csv', 'techniciens.csv'])
         self.assertEqual(self.lire_fichier(os.path.join(dossier_du_jour, 'techniciens.csv')),
                          self.ETAT_AVANT)
         # Deuxième écriture du jour : la sauvegarde du jour n'est pas refaite.
@@ -800,7 +806,11 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
         self.assertEqual(self.lire_fichier(os.path.join(dossier_du_jour, 'techniciens.csv')),
                          self.ETAT_AVANT)
         liste = self.requete('GET', '/api/sauvegardes').json()['sauvegardes']
-        self.assertEqual(liste, [{'nom': aujourd_hui, 'tables': ['techniciens']}])
+        self.assertEqual([s for s in liste if '_' not in s['nom']],
+                         [{'nom': aujourd_hui, 'tables': ['techniciens', 'parametres']}])
+        # La seule autre : « avant-mise-a-jour », faite au premier démarrage (aucune version de Prévo notée).
+        self.assertEqual([s['nom'][len('AAAA-MM-JJ_HHMMSS_'):] for s in liste if '_' in s['nom']],
+                         ['avant-mise-a-jour'])
         self.assertEqual(self.fichiers_temporaires_restants(), [])
 
     def test_sauvegarde_incomplete_du_mode_dossier_ignoree(self):
@@ -875,7 +885,9 @@ class TestFichierVerrouille(CasAvecServeur):
             reponse = self.mettre_csv('achats', BOM + entete('achats') + b'\r\nACH-0001\r\n', version)
             duree = time.time() - debut
         self.assertEqual(reponse.statut, 423)
-        self.assertIn('Excel', reponse.json()['erreur'])
+        # T232 : le message nomme le fichier et dit quoi faire (texte de Nicolas, le même dans le mode dossier).
+        self.assertEqual(reponse.json()['erreur'], 'Le fichier « achats.csv » est ouvert dans Excel ou un autre '
+                                                   'logiciel : fermez-le, puis réessayez.')
         self.assertGreaterEqual(duree, 0.2)    # 3 essais espacés de 100 ms
         self.assertEqual(self.lire_fichier(chemin), BOM + entete('achats') + b'\r\n')
         self.assertEqual(self.fichiers_temporaires_restants(), [])
@@ -893,6 +905,9 @@ class TestFichierVerrouille(CasAvecServeur):
         corps = reponse.json()
         self.assertTrue(corps['copie_securite'].endswith('_avant-restauration'))
         self.assertIn(corps['copie_securite'], corps['erreur'])
+        self.assertTrue(corps['erreur'].startswith('Le fichier « achats.csv » est ouvert dans Excel ou un autre '
+                                                   'logiciel : fermez-le, puis réessayez. Restauration interrompue'),
+                        corps['erreur'])
         self.assertTrue(os.path.isdir(self.chemin_donnee('sauvegardes', corps['copie_securite'])))
 
 

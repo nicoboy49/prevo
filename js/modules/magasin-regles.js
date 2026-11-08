@@ -86,24 +86,25 @@ const Magasin = (() => {
     return valeurFichier(valeur).replace('.', ',');
   }
 
-  /** Texte comparable : minuscules, sans accents, espaces simplifiés (« Écrou  M8 » → « ecrou m8 »). */
+  /** Texte comparable : le pliage de toute recherche (UI.normaliserRecherche, D154 ; « Écrou  M8 » → « ecrou m8 »). */
   function normaliser(valeur) {
-    return texte(valeur).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ');
+    return UI.normaliserRecherche(valeur);
   }
 
   // Catégorie d'un article = préfixe de sa référence (« ROU-001 » → ROU). Les préfixes connus ont
   // un libellé ; un autre préfixe est affiché tel quel ; sans préfixe : « Sans catégorie ».
+  // Fonctions (et non texte figé) : le libellé est lu au moment de l'affichage.
   const LIBELLES_CATEGORIES = {
-    ROU: 'Roulements', TRA: 'Transmission', ETA: 'Étanchéité', FIL: 'Filtration', LUB: 'Lubrification',
-    ELE: 'Électricité', HYD: 'Hydraulique', PNE: 'Pneumatique', OUT: 'Outillage', DIV: 'Divers',
+    ROU: () => I18n.t('magasin.rou.roulements'), TRA: () => I18n.t('magasin.tra.transmission'), ETA: () => I18n.t('magasin.eta.etancheite'), FIL: () => I18n.t('magasin.fil.filtration'), LUB: () => I18n.t('magasin.lub.lubrification'),
+    ELE: () => I18n.t('magasin.ele.electricite'), HYD: () => I18n.t('magasin.hyd.hydraulique'), PNE: () => I18n.t('magasin.pne.pneumatique'), OUT: () => I18n.t('magasin.out.outillage'), DIV: () => I18n.t('magasin.div.divers'),
   };
 
   /** { code, libelle } de la catégorie d'un article (code '' : sans catégorie). */
   function categorieArticle(article) {
     const morceaux = /^([A-Za-z]{2,6})[-_ .]/.exec(texte(article && article.reference));
-    if (!morceaux) return { code: '', libelle: 'Sans catégorie' };
+    if (!morceaux) return { code: '', libelle: I18n.t('magasin.categorie_article.sans_categorie') };
     const code = morceaux[1].toUpperCase();
-    return { code, libelle: LIBELLES_CATEGORIES[code] || code };
+    return { code, libelle: LIBELLES_CATEGORIES[code] ? LIBELLES_CATEGORIES[code]() : code };
   }
 
   /** Vrai si l'article est actif (champ actif différent de '0'). */

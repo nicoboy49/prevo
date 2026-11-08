@@ -25,8 +25,10 @@ SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/inter
            "js/modules/ia.js", "js/modules/ia-prompts.js"]
 
 # Numéro de téléphone français : 0X XX XX XX XX ou +33 / 0033, groupes collés ou séparés par un même caractère.
-# Pas précédé d'un chiffre, d'une lettre, d'un point ou d'une virgule (décimales « 0.0514459929 »).
-MOTIF_TELEPHONE = re.compile(r"(?<![\w.,])(?:(?:\+|00)33[ .-]?(?:\(0\)[ .-]?)?|0)([1-9])([ .-]?)(\d{2})\2(\d{2})\2(\d{2})\2(\d{2})(?!\w)")
+# Pas précédé d'un chiffre, d'une lettre, d'un point ou d'une virgule (décimales « 0.0514459929 ») ; sauf une
+# séquence d'échappement écrite dans une chaîne (« \t0490… », « \n0490… ») : constat B8 du Lot 0, que ce motif ne
+# voyait pas (le « t » de « \t » est une lettre).
+MOTIF_TELEPHONE = re.compile(r"(?:(?<![\w.,])|(?<=\\[tnr]))(?:(?:\+|00)33[ .-]?(?:\(0\)[ .-]?)?|0)([1-9])([ .-]?)(\d{2})\2(\d{2})\2(\d{2})\2(\d{2})(?!\w)")
 PLAGES_FICTIVES = ("04657100", "06399800")       # ARCEP, œuvres de fiction : 04 65 71 00 xx, 06 39 98 00 xx
 PAS_UN_NUMERO = {"0123456789"}                    # suite des chiffres (alphabet d'un test de tirage)
 EXTENSIONS_TEXTE = {".py", ".js", ".csv", ".tsv", ".md", ".html", ".json", ".txt"}

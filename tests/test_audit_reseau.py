@@ -201,7 +201,11 @@ class TestQuotaDocuments(unittest.TestCase):
         message = second.json()["erreur"]
         self.assertTrue(message.startswith("Dossier des documents plein ("), message)
         self.assertIn("sur 1 Mo", message)
-        self.assertIn("faites de la place ou augmentez quota_documents_mo", message)
+        # T250 : le refus dit où se règle le quota, sans le nom de la clé.
+        self.assertTrue(message.endswith(" avec ce document) : faites de la place, ou agrandissez la place des "
+                                         "documents dans Paramètres › Accès et installation, sur le PC serveur."),
+                        message)
+        self.assertNotIn("quota_documents_mo", message)
         self.assertEqual(fichiers(self.documents), [nom_premier], "rien ne doit être écrit, pas même un temporaire")
         # Un petit document tient encore dans le quota.
         petit = requete(self.serveur.port, "PUT", "/api/documents/petit.pdf", PDF + bytes(100 * 1024))
@@ -341,7 +345,9 @@ class TestDocuments(unittest.TestCase):
             with self.subTest(nom=nom):
                 reponse = self.envoyer(nom, octets)
                 self.assertEqual(reponse.statut, 400, reponse.octets)
-                self.assertEqual(reponse.json(), {"erreur": "Le contenu n'est pas une image %s." % attendu})
+                self.assertEqual(reponse.json(), {"erreur": "Le contenu n'est pas une image %s." % attendu,
+                                                  "erreur_code": "documents.pas_une_image",
+                                                  "erreur_valeurs": {"format": attendu}})
         self.assertEqual(fichiers(self.documents), avant)
         # Les vraies images passent ; un PDF ou un texte n'est pas contrôlé.
         for nom, octets in (("vrai.jpg", JPEG), ("vrai.jpeg", JPEG), ("vrai.png", PNG), ("vrai.gif", b"GIF89a" + bytes(8)),

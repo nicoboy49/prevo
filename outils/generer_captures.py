@@ -30,6 +30,10 @@ Lancer depuis la racine du projet :
     py outils/generer_captures.py --vider             retire les images du guide (src vide), pour
                                                       relire ou modifier son texte ; relancer ensuite
                                                       sans option pour les remettre
+    py outils/generer_captures.py --langue en         les mêmes captures, Prévo en anglais (T338) :
+                                                      docs/captures/en/<nom>.png (README.md) et les
+                                                      images de GUIDE.en.html ; les données de la démo
+                                                      restent en français (elles ne sont pas traduites)
 Code de sortie : 0 si tout est fait, 1 si une capture a échoué (son ancienne image est gardée).
 """
 import argparse
@@ -49,6 +53,23 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_CAPTURES = RACINE / "docs" / "captures"
 FICHIER_GUIDE = RACINE / "GUIDE.html"
+# T338 : langue des captures (« fr » : GUIDE.html et docs/captures/ ; « en » : GUIDE.en.html et docs/captures/en/).
+# Posée par choisir_langue avant toute capture ; le navigateur reçoit la locale et le choix du poste (prevo.langue).
+LANGUES_CAPTURES = {
+    "fr": {"guide": RACINE / "GUIDE.html", "dossier": RACINE / "docs" / "captures", "locale": "fr-FR",
+           "postes": {"telephone": "Téléphone", "bureau": "PC atelier"}},
+    "en": {"guide": RACINE / "GUIDE.en.html", "dossier": RACINE / "docs" / "captures" / "en", "locale": "en-GB",
+           "postes": {"telephone": "Phone", "bureau": "Workshop PC"}},
+}
+LANGUE = "fr"
+
+
+def choisir_langue(code):
+    """Langue des captures : fichiers écrits (guide, dossier des PNG) et réglages du navigateur."""
+    global LANGUE, FICHIER_GUIDE, DOSSIER_CAPTURES
+    LANGUE = code
+    FICHIER_GUIDE = LANGUES_CAPTURES[code]["guide"]
+    DOSSIER_CAPTURES = LANGUES_CAPTURES[code]["dossier"]
 FICHIER_SCENARIOS = RACINE / "tests" / "fixtures" / "demo-scenarios.json"   # écrit par outils/generer_demo.py
 FICHIER_PARC = RACINE / "tests" / "fixtures" / "import" / "equipements.xlsx"   # fichier d'essai du lot 5
 FICHIER_EQUIPEMENTS_DEMO = RACINE / "donnees" / "demo" / "equipements.csv"      # écrit par outils/generer_demo.py
@@ -358,10 +379,13 @@ def options_contexte(playwright, appareil):
 def prendre_capture(playwright, navigateur, serveurs, capture):
     """Ouvre Prévo (démo en file://, ou serveur de test) à l'écran demandé et rend la capture PNG (octets)."""
     appareil = APPAREILS[capture["appareil"]]
-    contexte = navigateur.new_context(locale="fr-FR", **options_contexte(playwright, appareil))
+    reglages = LANGUES_CAPTURES[LANGUE]
+    contexte = navigateur.new_context(locale=reglages["locale"], **options_contexte(playwright, appareil))
     contexte.set_default_timeout(DELAI_MS)
     # Aide à l'écran coupée : les captures du guide montrent l'écran lui-même.
     contexte.add_init_script("try { localStorage.setItem('prevo.aideActive', '0'); } catch (e) {}")
+    if LANGUE != "fr":                      # T338 : la langue choisie sur ce poste (démo, application, porte)
+        contexte.add_init_script("try { localStorage.setItem('prevo.langue', %s); } catch (e) {}" % json.dumps(LANGUE))
     contexte.clock.set_fixed_time(datetime.date.today().isoformat() + "T" + HEURE_CAPTURES)
     try:
         route = capture["route"]() if callable(capture["route"]) else capture["route"]
@@ -380,7 +404,7 @@ def prendre_capture(playwright, navigateur, serveurs, capture):
             page.goto(url + route)
         else:
             profil = PROFILS[capture["profil"]]
-            poste = "Téléphone" if capture["appareil"] == "telephone" else "PC atelier"
+            poste = reglages["postes"]["telephone" if capture["appareil"] == "telephone" else "bureau"]
             contexte.add_init_script(SCRIPT_PROFIL % (json.dumps(json.dumps(profil)), json.dumps(poste)))
             page = contexte.new_page()
             erreurs = []
@@ -518,15 +542,20 @@ def main(arguments=None):
     analyseur.add_argument("noms", nargs="*", help="captures à refaire (défaut : toutes) : "
                            + ", ".join(c["nom"] for c in CAPTURES))
     analyseur.add_argument("--vider", action="store_true", help="retirer les images du guide (src vide)")
+    analyseur.add_argument("--langue", choices=sorted(LANGUES_CAPTURES), default="fr",
+                           help="langue de Prévo sur les captures (défaut fr : GUIDE.html ; en : GUIDE.en.html)")
     options = analyseur.parse_args(arguments)
+    choisir_langue(options.langue)
+    nom_guide = FICHIER_GUIDE.name
+    dossier_affiche = DOSSIER_CAPTURES.relative_to(RACINE).as_posix()
     if hasattr(sys.stdout, "reconfigure"):      # accents lisibles dans toutes les consoles
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     if options.vider:
         if not FICHIER_GUIDE.is_file():
-            print("GUIDE.html introuvable.")
+            print("%s introuvable." % nom_guide)
             return 1
-        print("Images retirées du guide : %s" % ", ".join(mettre_a_jour_guide({}, vider=True)))
+        print("Images retirées de %s : %s" % (nom_guide, ", ".join(mettre_a_jour_guide({}, vider=True))))
         return 0
 
     inconnus = [nom for nom in options.noms if nom not in {c["nom"] for c in CAPTURES}]
@@ -552,16 +581,16 @@ def main(arguments=None):
                     continue
                 (DOSSIER_CAPTURES / (capture["nom"] + ".png")).write_bytes(png)
                 pngs[capture["nom"]] = (png, capture["appareil"])
-                print("Écrit  docs/captures/%s.png (%d octets)" % (capture["nom"], len(png)))
+                print("Écrit  %s/%s.png (%d octets)" % (dossier_affiche, capture["nom"], len(png)))
 
             if not FICHIER_GUIDE.is_file():
-                print("GUIDE.html introuvable : seules les captures PNG ont été écrites.")
+                print("%s introuvable : seules les captures PNG ont été écrites." % nom_guide)
             elif pngs:
                 page_outil = navigateur.new_page()
                 page_outil.set_content("<!doctype html><title>captures</title>")
                 images = images_du_guide(page_outil, pngs)
                 modifies = mettre_a_jour_guide(images)
-                print("GUIDE.html : images mises à jour : %s" % (", ".join(modifies) or "aucune"))
+                print("%s : images mises à jour : %s" % (nom_guide, ", ".join(modifies) or "aucune"))
                 sans_place = sorted(set(images) - set(modifies))
                 if sans_place:
                     print("  (sans <img data-capture> dans le guide : %s)" % ", ".join(sans_place))

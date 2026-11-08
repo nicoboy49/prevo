@@ -91,9 +91,10 @@ def setUpModule():
 # Configurations attendues, écrites en dur d'après l'étude §6.1 (jamais déduites de serveur.py)
 # ---------------------------------------------------------------------------
 
+# T250 : quota_documents_mo passe de 2048 à 4096 (4 Go, comme l'import ZIP), décision de Nicolas du 05/11.
 DEFAUTS_COMMUNS = {
     "port_http": 8080, "port_https": 8443, "certificat": "", "cle": "", "session_heures": 12,
-    "session_longue_jours": 30, "invitation_heures": 24, "quota_documents_mo": 2048, "ia_fournisseur": "ollama",
+    "session_longue_jours": 30, "invitation_heures": 24, "quota_documents_mo": 4096, "ia_fournisseur": "ollama",
     "ia_url": "http://localhost:11434", "ia_cle": "", "ia_en_ligne": False,
 }
 ATTENDU_SOLO_CE_PC = dict(DEFAUTS_COMMUNS, portee="ce-pc", ecoute="127.0.0.1", noms=[], certificat_auto=False,
@@ -744,10 +745,12 @@ class TestVuDuReseau(CasAssistant):
         for methode, etape in ROUTES_DE_L_ASSISTANT:
             with self.subTest(route="%s %s" % (methode, etape)):
                 reponse = reseau.get(etape) if methode == "GET" else reseau.post(etape, {"situation": "seul"})
-                self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE}))
+                self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE,
+                                                                          "erreur_code": "requete.adresse_inconnue"}))
         self.assertEqual(reseau.requete("GET", "/api/installation").statut, 404)
         self.assertEqual(reseau.requete("POST", "/api/installation/situation", b"{}", prevo=False).statut, 404)
-        self.assertEqual(reseau.requete("GET", "/api/inexistante").json(), {"erreur": MESSAGE_INCONNUE})  # identique
+        self.assertEqual(reseau.requete("GET", "/api/inexistante").json(), {"erreur": MESSAGE_INCONNUE,
+                                                                            "erreur_code": "requete.adresse_inconnue"})  # identique
         self.assertFalse(Path(instance.config.dossier_donnees, "installation.json").exists())
         self.assertEqual(client.get("etat").statut, 200)                                   # le PC lui-même, oui
 
@@ -766,7 +769,8 @@ class TestVuDuReseau(CasAssistant):
                 with self.subTest(route="%s %s" % (methode, etape)):
                     reponse = (relais.get(etape, cookie=responsable) if methode == "GET"
                                else relais.post(etape, {"situation": "seul"}, cookie=responsable))
-                    self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE}))
+                    self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE,
+                                                                              "erreur_code": "requete.adresse_inconnue"}))
         self.assertEqual(client.get("etat").statut, 401)                                  # sans session
         self.assertEqual(client.post("situation", {"situation": "seul"}).statut, 401)
         refus = client.get("etat", cookie=technicien)

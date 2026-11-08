@@ -13,7 +13,7 @@
 //     utilisable et le retire sinon, au fil des changements de l'IA (test d'ouverture fini, fournisseur
 //     injoignable, réglages du poste, autorisation du responsable), sans réafficher l'écran ; masqué
 //     (hidden) sans bouton.
-//   Ia.ouvrirEncadre({ apres, fonction, donnees, rendu, utiliser, modifier, boutons }) → Promise de
+//   Ia.ouvrirEncadre({ apres, fonction, donnees, langue, rendu, utiliser, modifier, boutons }) → Promise de
 //     l'issue { choix, resultat, modele, fournisseur, erreur } ; choix : 'utiliser' | 'modifier' |
 //     'ignorer' | 'annuler' | 'erreur' | 'ferme' | la `valeur` d'un bouton propre.
 //       apres     : élément après lequel l'encadré est placé (un seul encadré à la fois par élément) ;
@@ -29,7 +29,6 @@
 
 Object.assign(Ia, (() => {
 
-  const LIBELLE_PROGRESSION = 'L\'IA rédige…';
   const ID_MENTION = 'ia-mention';
   // Étincelle au trait (même style que les icônes de UI.icone).
   const DESSIN_ETINCELLE = '<path d="M12 3.5l1.9 5 5 1.9-5 1.9-1.9 5-1.9-5-5-1.9 5-1.9z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>';
@@ -76,26 +75,26 @@ Object.assign(Ia, (() => {
   function messageErreur(erreur) {
     if (erreur instanceof Ia.ErreurIa) return erreur.message;
     console.warn('Prévo : erreur de l\'encadré IA (' + (erreur && erreur.message) + ').', erreur);
-    return 'L\'assistant IA a rencontré une erreur : aucune proposition.';
+    return I18n.t('ia.message_erreur.assistant_ia_rencontre_erreur');
   }
 
   // Boutons de la proposition : ceux de l'écran (ou Utiliser / Modifier), puis toujours Ignorer.
   function definitionsBoutons(options) {
     const propres = Array.isArray(options.boutons) && options.boutons.length ? options.boutons : [
-      { libelle: 'Utiliser', valeur: 'utiliser', classe: 'btn-primaire', action: options.utiliser },
-      { libelle: 'Modifier', valeur: 'modifier', classe: 'btn-secondaire', action: options.modifier },
+      { libelle: I18n.t('ia.definitions_boutons.utiliser'), valeur: 'utiliser', classe: 'btn-primaire', action: options.utiliser },
+      { libelle: I18n.t('commun.bouton.modifier'), valeur: 'modifier', classe: 'btn-secondaire', action: options.modifier },
     ];
-    return propres.concat([{ libelle: 'Ignorer', valeur: 'ignorer', classe: 'btn-fantome' }]);
+    return propres.concat([{ libelle: I18n.t('ia.definitions_boutons.ignorer'), valeur: 'ignorer', classe: 'btn-fantome' }]);
   }
 
   /** Ouvre l'encadré, demande la proposition et attend le choix (voir l'API en tête de fichier). */
   function ouvrirEncadre(options) {
     const reglages = options || {};
     const apres = reglages.apres;
-    if (!apres || !apres.parentNode) throw new Error('Ia.ouvrirEncadre : « apres » doit être un élément affiché.');
+    if (!apres || !apres.parentNode) throw new Error(I18n.t('ia.ouvrir_encadre.ia_ouvrir_encadre_apres_doit'));
     fermerEncadre(apres);                                   // un seul encadré à la fois par élément
 
-    const encadre = UI.element(UI.html`<section class="encadre ia-encadre" aria-live="polite" aria-label="Proposition de l'IA"></section>`);
+    const encadre = UI.element(UI.html`<section class="encadre ia-encadre" aria-live="polite" aria-label="${I18n.t('ia.ouvrir_encadre.proposition_ia')}"></section>`);
     apres.insertAdjacentElement('afterend', encadre);
     const controleur = new AbortController();
     let resoudre = null;
@@ -134,7 +133,7 @@ Object.assign(Ia, (() => {
       repondre({ choix: 'erreur', erreur });
     }
 
-    Ia.demander(reglages.fonction, reglages.donnees, { signal: controleur.signal }).then((reponse) => {
+    Ia.demander(reglages.fonction, reglages.donnees, { signal: controleur.signal, langue: reglages.langue }).then((reponse) => {
       if (issueDonnee) return;
       clearInterval(minuteur);
       if (!encadre.isConnected) { retirer({ choix: 'ferme' }); return; }
@@ -154,8 +153,8 @@ Object.assign(Ia, (() => {
 
   function afficherProgression(encadre, annuler) {
     UI.remplir(encadre, UI.html`<div class="chargement ia-progression" role="status">
-      <span>${LIBELLE_PROGRESSION} <span class="ia-duree" aria-hidden="true"></span></span>
-      <button type="button" class="btn btn-fantome ia-annuler">Annuler</button>
+      <span>${I18n.t('ia.progression.ia_redige')} <span class="ia-duree" aria-hidden="true"></span></span>
+      <button type="button" class="btn btn-fantome ia-annuler">${I18n.t('commun.bouton.annuler')}</button>
     </div>`);
     UI.$('.ia-annuler', encadre).addEventListener('click', annuler);
   }
@@ -163,14 +162,14 @@ Object.assign(Ia, (() => {
   function afficherErreur(encadre, message, fermer) {
     encadre.classList.add('ia-en-erreur');
     UI.remplir(encadre, UI.html`<p class="ia-erreur" role="alert">${iconeIa()}<span>${message}</span></p>
-      <div class="actions ia-actions"><button type="button" class="btn btn-fantome ia-fermer">Fermer</button></div>`);
+      <div class="actions ia-actions"><button type="button" class="btn btn-fantome ia-fermer">${I18n.t('commun.bouton.fermer')}</button></div>`);
     UI.$('.ia-fermer', encadre).addEventListener('click', fermer);
   }
 
   // La proposition, sa mention et ses boutons (une erreur du rendu de l'écran remonte à l'appelant).
   function afficherProposition(encadre, reponse, reglages, retirer) {
     const contenu = typeof reglages.rendu === 'function' ? reglages.rendu(reponse.resultat, reponse) : renduParDefaut(reponse.resultat);
-    UI.remplir(encadre, UI.html`<p class="ia-mention-proposition">${iconeIa()}<span>Proposition de l'IA — ${reponse.fournisseur}, ${reponse.modele}</span></p>
+    UI.remplir(encadre, UI.html`<p class="ia-mention-proposition">${iconeIa()}<span>${I18n.t('ia.proposition.proposition_ia', { fournisseur: reponse.fournisseur, modele: reponse.modele })}</span></p>
       <div class="ia-proposition"></div>
       <p class="ia-erreur-action" role="alert" hidden></p>
       <div class="actions ia-actions"></div>`);
@@ -195,7 +194,7 @@ Object.assign(Ia, (() => {
           if (retour === false) { boutons.forEach((element) => { element.disabled = false; }); return; }
         }
       } catch (erreur) {
-        zoneErreur.textContent = (erreur && erreur.message) || 'Action impossible.';
+        zoneErreur.textContent = (erreur && erreur.message) || I18n.t('ia.proposition.action_impossible');
         zoneErreur.hidden = false;
         boutons.forEach((element) => { element.disabled = false; });
         console.warn('Prévo : action « ' + definition.libelle + ' » de l\'encadré IA impossible (' + (erreur && erreur.message) + ').', erreur);
@@ -212,7 +211,8 @@ Object.assign(Ia, (() => {
   function texteMention() {
     if (!Ia.active() || Ia.versionWeb()) return '';         // version web : aucun texte ne part
     const reglages = Ia.reglages();
-    return 'IA : ' + Ia.mention(Ia.portee(reglages.url), reglages.url) + (Ia.etat() === 'injoignable' ? ' — ne répond pas' : '');
+    const mention = Ia.mention(Ia.portee(reglages.url), reglages.url);
+    return Ia.etat() === 'injoignable' ? I18n.t('ia.texte_mention.ia_repond_pas', { mention }) : I18n.t('ia.texte_mention.ia', { mention });
   }
 
   /**

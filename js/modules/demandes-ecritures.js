@@ -10,7 +10,7 @@ Object.assign(Demandes, (() => {
 
   // Constantes, outils et règles de demandes-regles.js.
   const { normaliserImpact, typePropose, datePrevue } = Demandes;
-  const { STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, MESSAGE_DEJA_TRAITEE, texte,
+  const { STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, messageDejaTraitee, texte,
     deuxChiffres, prioriteDeLaDemande, estOuvert, nomDuProfil, codesSymptome, estOtPreventif } = Demandes.interne;
 
   // ===========================================================================================
@@ -19,9 +19,9 @@ Object.assign(Demandes, (() => {
 
   // Vérifie qu'une décision est encore possible sur la DI (statut Nouvelle ou Différée).
   function verifierATraiter(demande, diId) {
-    if (!demande) throw new Donnees.ErreurValidation('La demande ' + diId + ' est introuvable.');
+    if (!demande) throw new Donnees.ErreurValidation(I18n.t('demandes.verifier_atraiter.demande_introuvable', { diId }));
     if (!STATUTS_A_TRAITER.includes(demande.statut)) {
-      throw new Donnees.ErreurValidation(MESSAGE_DEJA_TRAITEE + ' (statut actuel : ' + demande.statut + ').');
+      throw new Donnees.ErreurValidation(I18n.t('demandes.verifier_atraiter.statut_actuel', { messageDejaTraitee: messageDejaTraitee(), demandeStatut: Schema.libelleValeur('demandes', 'statut', demande.statut) }));
     }
   }
 
@@ -35,7 +35,7 @@ Object.assign(Demandes, (() => {
   /** Vérifie un code symptôme saisi : vide, ou un code connu de la famille « symptôme ». */
   function verifierCodeSymptome(code) {
     if (code && !codesSymptome().some((entree) => entree.code === code)) {
-      throw new Donnees.ErreurValidation('Le code symptôme ' + code + ' est inconnu.');
+      throw new Donnees.ErreurValidation(I18n.t('demandes.verifier_code_symptome.code_symptome_inconnu', { code }));
     }
   }
 
@@ -46,9 +46,9 @@ Object.assign(Demandes, (() => {
   async function verifierOtOrigine(otId) {
     let ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) ot = (await Donnees.rechargerTable('ordres_travail')).find((ligne) => ligne.id === otId);
-    if (!ot) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!ot) throw new Donnees.ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     if (!estOtPreventif(ot)) {
-      throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' n\'est pas un OT préventif : la demande ne peut pas lui être liée.');
+      throw new Donnees.ErreurValidation(I18n.t('demandes.verifier_ot_origine.ordre_travail_pas_ot', { otId }));
     }
   }
 
@@ -69,15 +69,15 @@ Object.assign(Demandes, (() => {
     const impact = normaliserImpact(v.impact);
     const symptomeCode = texte(v.symptome_code);
     const otOrigineId = texte(v.ot_origine_id);
-    if (!equipementId) throw new Donnees.ErreurValidation('Choisissez l\'équipement concerné.');
+    if (!equipementId) throw new Donnees.ErreurValidation(I18n.t('demandes.creer.choisissez_equipement_concerne'));
     if (!Donnees.trouver('equipements', equipementId)) {
-      throw new Donnees.ErreurValidation('L\'équipement ' + equipementId + ' est inconnu.');
+      throw new Donnees.ErreurValidation(I18n.t('demandes.creer.equipement_inconnu', { equipementId }));
     }
-    if (!symptome) throw new Donnees.ErreurValidation('Décrivez en quelques mots ce que vous constatez.');
-    if (!impact) throw new Donnees.ErreurValidation('Choisissez l\'impact : sécurité, arrêt, dégradé ou gêne.');
+    if (!symptome) throw new Donnees.ErreurValidation(I18n.t('demandes.creer.decrivez_quelques_mots_constatez'));
+    if (!impact) throw new Donnees.ErreurValidation(I18n.t('demandes.creer.choisissez_impact_securite_arret'));
     verifierCodeSymptome(symptomeCode);
     if (otOrigineId) await verifierOtOrigine(otOrigineId);
-    const demandeur = texte(v.demandeur) || nomDuProfil();
+    const demandeur = texte(v.demandeur) || I18n.enLangueDesDonnees(nomDuProfil);    // nom écrit dans la DI (D156)
     const description = texte(v.description);
     const photo = texte(v.photo);
 
@@ -98,8 +98,7 @@ Object.assign(Demandes, (() => {
       try {
         await marquerAnomalie(otOrigineId, id);
       } catch (erreur) {
-        UI.toast('La demande ' + id + ' est bien créée, mais l\'OT ' + otOrigineId
-          + ' n\'a pas pu être marqué « anomalie constatée » : ' + ((erreur && erreur.message) || erreur), 'attention');
+        UI.toast(I18n.t('demandes.creer.demande_bien_creee_mais', { id, otOrigineId, raisonErreur: App.raisonErreur(erreur) }), 'attention');
         console.warn('Prévo (demandes) : anomalie non marquée sur ' + otOrigineId + ' après ' + id + '.', erreur);
       }
     }
@@ -118,7 +117,7 @@ Object.assign(Demandes, (() => {
   async function marquerAnomalie(otId, diId) {
     return Donnees.modifier('ordres_travail', (lignes) => {
       const ot = lignes.find((ligne) => ligne.id === otId);
-      if (!ot) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+      if (!ot) throw new Donnees.ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
       if (Ordres.estVerrouille(ot)) return false;
       ot.anomalie_constatee = '1';
       return true;
@@ -137,17 +136,17 @@ Object.assign(Demandes, (() => {
     const demande = Donnees.trouver('demandes', diId);
     const calculee = prioriteDeLaDemande(demande) || 'P3';
     const priorite = texte(reglages.priorite) || calculee;
-    if (!PRIORITES.includes(priorite)) throw new Donnees.ErreurValidation('Priorité inconnue : ' + priorite + '.');
+    if (!PRIORITES.includes(priorite)) throw new Donnees.ErreurValidation(I18n.t('demandes.accepter.priorite_inconnue', { priorite }));
     const motifPriorite = texte(reglages.motifPriorite);
     if (priorite !== calculee && !motifPriorite) {
-      throw new Donnees.ErreurValidation('Indiquez le motif du changement de priorité (' + calculee + ' → ' + priorite + ').');
+      throw new Donnees.ErreurValidation(I18n.t('demandes.accepter.indiquez_motif_changement_priorite', { calculee, priorite }));
     }
     const type = texte(reglages.type) || typePropose(priorite);
     if (![TYPE_IMMEDIAT, TYPE_DIFFERE].includes(type)) {
-      throw new Donnees.ErreurValidation('Type d\'ordre de travail inconnu : ' + type + '.');
+      throw new Donnees.ErreurValidation(I18n.t('demandes.accepter.type_ordre_travail_inconnu', { type }));
     }
-    const changementPriorite = priorite !== calculee
-      ? 'priorité ' + calculee + ' → ' + priorite + ' : ' + motifPriorite : '';
+    const changementPriorite = priorite !== calculee      // écrit au journal et dans la DI (D156)
+      ? I18n.donnees('demandes.accepter.priorite_calculee_priorite_motif_priorite', { calculee, priorite, motifPriorite }) : '';
 
     // (1) L'OT : réutilisé s'il existe déjà pour cette DI (essai précédent interrompu, autre poste),
     //     sinon créé. Idempotent : rejoué sans risque sur conflit. Le code symptôme de la DI est
@@ -195,7 +194,7 @@ Object.assign(Demandes, (() => {
 
   /** Annule l'OT créé pour une DI finalement traitée sur un autre poste (s'il est encore « Créé »). */
   async function annulerOtOrphelin(diId, otId) {
-    const motif = 'DI traitée sur un autre poste';
+    const motif = I18n.donnees('demandes.annuler_ot_orphelin.di_traitee_autre_poste');      // écrit dans l'OT (D156)
     try {
       await Donnees.modifier('ordres_travail', (lignes) => {
         const ot = lignes.find((l) => l.id === otId);
@@ -214,10 +213,10 @@ Object.assign(Demandes, (() => {
     const demande = Donnees.trouver('demandes', diId);
     const ordres = await Donnees.rechargerTable('ordres_travail');
     const ot = ordres.find((ligne) => ligne.id === otId);
-    if (!ot) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
-    if (!estOuvert(ot)) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' n\'est plus ouvert (' + ot.statut + ').');
+    if (!ot) throw new Donnees.ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
+    if (!estOuvert(ot)) throw new Donnees.ErreurValidation(I18n.t('demandes.regrouper.ordre_travail_plus_ouvert', { otId, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) }));
     if (ot.equipement_id !== demande.equipement_id) {
-      throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' concerne un autre équipement.');
+      throw new Donnees.ErreurValidation(I18n.t('demandes.regrouper.ordre_travail_concerne_autre', { otId }));
     }
     await Donnees.modifier('demandes', (lignes, outils) => {
       const ligne = lignes.find((l) => l.id === diId);
@@ -225,7 +224,7 @@ Object.assign(Demandes, (() => {
       ligne.statut = 'Regroupée';
       ligne.ot_id = otId;
       ligne.date_decision = outils.maintenant();
-      ligne.motif_decision = 'Regroupée avec ' + otId + ', déjà ouvert pour cet équipement.';
+      ligne.motif_decision = I18n.donnees('demandes.regrouper.regroupee_deja_ouvert_equipement', { otId });
     }, { action: 'regroupée avec ' + otId });
     return otId;
   }
@@ -236,7 +235,7 @@ Object.assign(Demandes, (() => {
     await Donnees.modifier('demandes', (lignes, outils) => {
       const ligne = lignes.find((l) => l.id === diId);
       verifierATraiter(ligne, diId);
-      if (ligne.statut === 'Différée') throw new Donnees.ErreurValidation('Cette demande est déjà différée.');
+      if (ligne.statut === 'Différée') throw new Donnees.ErreurValidation(I18n.t('demandes.differer.demande_deja_differee'));
       ligne.statut = 'Différée';
       ligne.date_decision = outils.maintenant();
       ligne.motif_decision = texte(motif);
@@ -246,7 +245,7 @@ Object.assign(Demandes, (() => {
   /** Refuse une DI : motif obligatoire, visible du demandeur. */
   async function refuser(diId, motif) {
     const motifPropre = texte(motif);
-    if (!motifPropre) throw new Donnees.ErreurValidation('Le motif du refus est obligatoire : il sera montré au demandeur.');
+    if (!motifPropre) throw new Donnees.ErreurValidation(I18n.t('demandes.refuser.motif_refus_obligatoire_sera'));
     await verifierEncoreATraiter(diId);
     await Donnees.modifier('demandes', (lignes, outils) => {
       const ligne = lignes.find((l) => l.id === diId);

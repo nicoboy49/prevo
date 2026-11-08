@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "comptes": [
+    {
+      "identifiant": "claire.essai",
+      "prenom": "Claire",
+      "nom": "Essai",
+      "role": "responsable",
+      "technicien_id": "",
+      "actif": true,
+      "algo": "scrypt-n15-r8-p3",
+      "sel": "AAECAwQFBgcICQoLDA0ODw==",
+      "empreinte": "RxVz7nGAWmutM4Z4fG1KI9pl/eUGOLGfuHG8h8s8KZ4=",
+      "a_changer": false,
+      "cree_le": "2026-10-28T09:00:00",
+      "modifie_le": "2026-10-28T09:00:00",
+      "mot_de_passe_le": "2026-10-28T09:00:00"
+    }
+  ]
+}

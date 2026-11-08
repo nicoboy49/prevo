@@ -46,6 +46,20 @@ img { max-width: 100%; height: auto; }
 
 .porte { max-width: 560px; margin: 0 auto; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); }
 
+/* Langue (T297) : en haut à droite, visible sans menu ; un globe et la liste, chaque langue écrite dans sa langue */
+.langue { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
+.globe {
+  width: 22px; height: 22px; flex: none;
+  fill: none; stroke: var(--texte-2); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.langue select {
+  min-height: var(--tactile); max-width: 100%; padding: .4rem .8rem; border-radius: 12px;
+  font: 600 1rem/1.25 Sora, system-ui, sans-serif; color: var(--texte); background: var(--champ);
+  border: 1px solid var(--trait-2); cursor: pointer;
+}
+.langue select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.langue-refus { margin-bottom: 12px; }
+
 /* Marque : logo (le favicon) et titre, comme l'écran de démarrage de l'application */
 .marque { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
 .logo {

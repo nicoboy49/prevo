@@ -1,7 +1,7 @@
 'use strict';
 // UI : helpers d'écran communs à tous les modules de Prévo (ARCHITECTURE.md §9).
 // Échappement HTML, formats français, badges, notifications, fenêtres, tableaux triables,
-// champs de formulaire, sélecteur d'équipement, QR codes, photos, onglets, bandeaux, icônes.
+// champs de formulaire, sélecteur d'équipement, QR codes, photos, onglets, bandeaux, icônes, sélecteur de langue.
 //
 // Règles :
 // - aucune dépendance à Donnees ni aux modules : tout ce qu'il faut est passé en paramètre ;
@@ -82,7 +82,7 @@ const UI = (function () {
   function html(morceaux, ...valeurs) {
     // Appelé comme une fonction ordinaire (UI.html(chaine)), il laisserait passer du HTML non échappé.
     if (!morceaux || !Array.isArray(morceaux.raw)) {
-      throw new Error("UI.html s'utilise comme gabarit : UI.html`…`");
+      throw new Error(I18n.t('socle.html.ui_html_utilise_comme'));
     }
     let resultat = morceaux[0];
     for (let i = 0; i < valeurs.length; i += 1) {
@@ -116,11 +116,47 @@ const UI = (function () {
     return modele.content.firstElementChild;
   }
 
-  /** Texte comparable pour une recherche : minuscules, sans accents, espaces simplifiés. */
+  /**
+   * Texte comparable pour une recherche, un seul pliage quelle que soit la langue (D154) : ı et İ ramenés à i (I l'est
+   * par les minuscules), ß à ss, accents retirés, minuscules, espaces simplifiés (« İSTANBUL » → « istanbul »,
+   * « ırmak » et « IRMAK » → « irmak »). Toute recherche de l'application passe par ici (le wiki aussi).
+   */
   function normaliserRecherche(texte) {
     return String(texte === null || texte === undefined ? '' : texte)
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[ıİ]/g, 'i').replace(/[ßẞ]/g, 'ss')
+      .normalize('NFD').replace(/\p{M}+/gu, '')
       .toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // Tri des listes affichées (D154) : ordre de la langue active, Intl.Collator de I18n.locale (en turc : « Çelik » entre
+  // « Cem » et « Dede », « Işık » avant « İnce »), un par locale et par réglages, gardé. Codes, identifiants, dates ISO,
+  // noms de fichiers et en-têtes CSV n'y passent pas : leur ordre reste le même dans toutes les langues.
+  const collateurs = new Map();
+
+  function collateur(numeric, sensitivity) {
+    const locale = I18n.locale;
+    const cle = locale + ' ' + numeric + ' ' + sensitivity;
+    if (!collateurs.has(cle)) {
+      const reglages = { numeric, sensitivity };
+      let nouveau;
+      try {
+        nouveau = new Intl.Collator(locale, reglages);
+      } catch (erreur) {                         // locale refusée par Intl : ordre du français
+        nouveau = new Intl.Collator('fr-FR', reglages);
+      }
+      collateurs.set(cle, nouveau);
+    }
+    return collateurs.get(cle);
+  }
+
+  function enChaine(valeur) {
+    return String(valeur === null || valeur === undefined ? '' : valeur);
+  }
+
+  /** Compare deux libellés dans l'ordre de la langue active ; options d'Intl.Collator : { numeric, sensitivity }. */
+  function comparerTextes(a, b, options) {
+    const reglages = options || {};
+    return collateur(Boolean(reglages.numeric), reglages.sensitivity || 'variant').compare(enChaine(a), enChaine(b));
   }
 
   // ===========================================================================================
@@ -136,12 +172,66 @@ const UI = (function () {
   const ESPACE_FINE = /\u202F/g;
   const ESPACE_INSECABLE = '\u00A0';
 
+  // Devise de l'installation (T304, D152) : clé `devise` de parametres.csv (code ISO 4217), lue à chaque formatage ;
+  // EUR si elle manque, est illisible ou inconnue d'Intl, ou si la page n'a pas Donnees. Elle ne convertit aucun montant.
+  const DEVISE_PAR_DEFAUT = 'EUR';
+  const devisesConnues = {};
+  const symbolesDevise = {};
+
+  /** Vrai si `code` est un code ISO 4217 (3 lettres majuscules) connu d'Intl. */
+  function deviseConnue(code) {
+    if (typeof code !== 'string' || !/^[A-Z]{3}$/.test(code)) return false;
+    if (!(code in devisesConnues)) {
+      let connue = false;
+      try {
+        if (typeof Intl.supportedValuesOf === 'function') connue = Intl.supportedValuesOf('currency').includes(code);
+        else connue = new Intl.DisplayNames(['en'], { type: 'currency' }).of(code) !== code;
+      } catch (erreur) { connue = false; }
+      devisesConnues[code] = connue;
+    }
+    return devisesConnues[code];
+  }
+
+  /** Code de la devise réglée (« EUR » par défaut). */
+  function devise() {
+    let code = DEVISE_PAR_DEFAUT;
+    try {
+      if (typeof Donnees !== 'undefined' && Donnees && typeof Donnees.parametre === 'function') {
+        code = String(Donnees.parametre('devise', DEVISE_PAR_DEFAUT)).trim().toUpperCase();
+      }
+    } catch (erreur) { code = DEVISE_PAR_DEFAUT; }
+    return deviseConnue(code) ? code : DEVISE_PAR_DEFAUT;
+  }
+
+  /** Nom de la devise dans la langue active (« euro », « Swiss Franc ») ; le code lui-même si Intl l'ignore. */
+  function nomDevise(code) {
+    try { return new Intl.DisplayNames([I18n.locale], { type: 'currency' }).of(code) || code; } catch (erreur) { return code; }
+  }
+
+  /** Symbole court de la devise réglée, pour les libellés (« € », « CHF », « £ »). */
+  function symboleDevise() {
+    const code = devise();
+    const cle = I18n.locale + '/' + code;
+    if (!symbolesDevise[cle]) {
+      let symbole = code;
+      try {
+        const parties = new Intl.NumberFormat(I18n.locale, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' }).formatToParts(0);
+        const partie = parties.find((p) => p.type === 'currency');
+        if (partie) symbole = partie.value;
+      } catch (erreur) { symbole = code; }
+      symbolesDevise[cle] = symbole;
+    }
+    return symbolesDevise[cle];
+  }
+
   function formateurNombre(decimalesMin, decimalesMax, style) {
-    const cle = decimalesMin + '/' + decimalesMax + '/' + (style || '');
+    const locale = I18n.locale;
+    const monnaie = style === 'euro' ? devise() : '';
+    const cle = locale + '/' + decimalesMin + '/' + decimalesMax + '/' + (style || '') + '/' + monnaie;
     if (!formateursNombre[cle]) {
       const options = { minimumFractionDigits: decimalesMin, maximumFractionDigits: decimalesMax };
-      if (style === 'euro') { options.style = 'currency'; options.currency = 'EUR'; }
-      const intl = new Intl.NumberFormat('fr-FR', options);
+      if (style === 'euro') { options.style = 'currency'; options.currency = monnaie; }
+      const intl = new Intl.NumberFormat(locale, options);
       formateursNombre[cle] = { format: (nombre) => intl.format(nombre).replace(ESPACE_FINE, ESPACE_INSECABLE) };
     }
     return formateursNombre[cle];
@@ -154,6 +244,12 @@ const UI = (function () {
     const texte = String(valeur).replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
     if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(texte)) return null;
     return Number(texte);
+  }
+
+  /** Guide d'utilisation de la langue active (T338) : GUIDE.html en français, GUIDE.en.html sinon (la seule autre
+   *  version du guide ; les langues de la 2.1 ouvrent aussi le guide anglais). */
+  function adresseGuide() {
+    return I18n.langue === 'fr' ? 'GUIDE.html' : 'GUIDE.en.html';
   }
 
   /** '2026-03-15' (ou '2026-03-15 08:05') → '15/03/2026'. Valeur vide → ''. Autre format : rendu tel quel. */
@@ -194,7 +290,7 @@ const UI = (function () {
     return formateurNombre(decimales, decimales).format(nombre);
   }
 
-  /** Montant en euros : '1234.5' → '1 234,50 €' (2 décimales par défaut). Absent → '–'. */
+  /** Montant dans la devise réglée (EUR par défaut) : '1234.5' → '1 234,50 €' (2 décimales par défaut). Absent → '–'. */
   function euro(valeur, decimales) {
     const nombre = enNombre(valeur);
     if (nombre === null) return TIRET_VALEUR_ABSENTE;
@@ -218,9 +314,9 @@ const UI = (function () {
     const texte = String(priorite === null || priorite === undefined ? '' : priorite).trim();
     const code = texte.toUpperCase();
     if (/^P[1-4]$/.test(code)) {
-      return html`<span class="badge prio-${code.toLowerCase()}" title="Priorité ${code}">${code}</span>`;
+      return html`<span class="badge prio-${code.toLowerCase()}" title="${I18n.t('socle.badge_priorite.priorite_code', { code })}">${code}</span>`;
     }
-    return html`<span class="badge neutre" title="Priorité inconnue">${texte || '—'}</span>`;
+    return html`<span class="badge neutre" title="${I18n.t('socle.badge_priorite.priorite_inconnue')}">${texte || '—'}</span>`;
   }
 
   // Ton (couleur) de chaque statut connu (DI, OT, équipements, achats, contrôles) ; inconnu → neutre.
@@ -239,11 +335,25 @@ const UI = (function () {
     'valide': 'ok', 'à renouveler': 'attention', 'échue': 'ko',
   };
 
-  /** Badge de statut (texte toujours affiché ; la couleur aide seulement). `ton` force la couleur. */
-  function badgeStatut(statut, ton) {
+  /**
+   * Badge de statut (texte toujours affiché ; la couleur aide seulement). `ton` force la couleur. `libelle` : texte
+   * affiché à la place du statut (état calculé traduit), la couleur restant choisie sur le statut.
+   */
+  function badgeStatut(statut, ton, libelle) {
     const texte = String(statut === null || statut === undefined ? '' : statut).trim();
     const tonChoisi = ton || TONS_STATUT[texte.toLowerCase()] || 'neutre';
-    return html`<span class="badge statut ${tonChoisi}">${texte || '—'}</span>`;
+    return html`<span class="badge statut ${tonChoisi}">${(libelle === undefined ? texte : libelle) || '—'}</span>`;
+  }
+
+  /**
+   * Badge d'une valeur stockée d'une liste du schéma (D155) : la couleur se choisit sur la valeur brute (TONS_STATUT,
+   * comme badgeStatut), le texte est son libellé dans la langue de l'écran (Schema.libelleValeur). `ton` force la
+   * couleur. UI.badgeValeur('ordres_travail', 'statut', ot.statut).
+   */
+  function badgeValeur(nomTable, nomChamp, valeur, ton) {
+    const texte = String(valeur === null || valeur === undefined ? '' : valeur).trim();
+    const tonChoisi = ton || TONS_STATUT[texte.toLowerCase()] || 'neutre';
+    return html`<span class="badge statut ${tonChoisi}">${Schema.libelleValeur(nomTable, nomChamp, texte) || '—'}</span>`;
   }
 
   // ===========================================================================================
@@ -293,14 +403,16 @@ const UI = (function () {
     chevron: '<path d="m9 6 6 6-6 6"/>',
     // Lot 6 (ARCHITECTURE.md §20.1) : wiki de maintenance (livre ouvert)
     wiki: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5z"/><path d="M12 6.5V20"/>',
+    // Lot 4 du chantier multilingue (T297) : langue de l'écran (globe neutre, sans drapeau ni mot), écran de connexion
+    langue: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9s1.2-6.5 3.6-9z"/>',
   };
 
   /** Icône SVG au trait par son nom (voir ICONES) ; `classe` ajoute des classes CSS. Inconnue → ''. */
   function icone(nom, classe) {
     const dessin = ICONES[nom];
     if (!dessin) return brut('');
-    const classes = 'icone' + (classe ? ' ' + echapper(classe) : '');
-    return brut('<svg class="' + classes + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + dessin + '</svg>');
+    const classes = 'icone' + (classe ? ' ' + classe : '');
+    return html`<svg class="${classes}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brut(dessin)}</svg>`;
   }
 
   /** Noms des icônes disponibles (pour le guide de style). */
@@ -317,8 +429,8 @@ const UI = (function () {
 
   /** Logo de l'application : carré dégradé avec l'engrenage. `classe` : 'grand' pour l'écran de démarrage. */
   function logo(classe) {
-    return brut('<span class="logo' + (classe ? ' ' + echapper(classe) : '') + '" aria-hidden="true">'
-      + '<svg viewBox="0 0 32 32" focusable="false"><path fill-rule="evenodd" d="' + CHEMIN_ENGRENAGE_LOGO + '"/></svg></span>');
+    const classes = 'logo' + (classe ? ' ' + classe : '');
+    return html`<span class="${classes}" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path fill-rule="evenodd" d="${CHEMIN_ENGRENAGE_LOGO}"/></svg></span>`;
   }
 
   // ===========================================================================================
@@ -391,7 +503,7 @@ const UI = (function () {
 
   /** Indicateur de chargement (texte toujours présent). */
   function chargement(texte) {
-    return html`<div class="chargement" role="status">${texte || 'Chargement…'}</div>`;
+    return html`<div class="chargement" role="status">${texte || I18n.t('socle.chargement.chargement')}</div>`;
   }
 
   // ===========================================================================================
@@ -426,7 +538,7 @@ const UI = (function () {
       formulaire.innerHTML = String(html`
         <div class="fenetre-tete">
           <h2 id="${idTitre}"></h2>
-          <button type="button" class="btn btn-fantome btn-icone fenetre-fermer" aria-label="Fermer">${icone('fermer')}</button>
+          <button type="button" class="btn btn-fantome btn-icone fenetre-fermer" aria-label="${I18n.t('commun.bouton.fermer')}">${icone('fermer')}</button>
         </div>
         <div class="fenetre-corps"></div>
         <div class="actions fenetre-actions"></div>`);
@@ -435,7 +547,7 @@ const UI = (function () {
 
       const boutons = reglages.boutons && reglages.boutons.length
         ? reglages.boutons
-        : [{ libelle: 'Fermer', valeur: null, classe: 'btn-primaire', defaut: true }];
+        : [{ libelle: I18n.t('commun.bouton.fermer'), valeur: null, classe: 'btn-primaire', defaut: true }];
       const zoneBoutons = formulaire.querySelector('.fenetre-actions');
       let boutonParDefaut = null;
       boutons.forEach((definition) => {
@@ -550,7 +662,7 @@ const UI = (function () {
     const choix = await fenetre({
       titre, contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
         { libelle: libelleValider, valeur: 'ok', classe: 'btn-primaire', defaut: true },
       ],
       surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
@@ -570,11 +682,11 @@ const UI = (function () {
   async function confirmer(message, options) {
     const reglages = options || {};
     const choix = await fenetre({
-      titre: reglages.titre || 'Confirmation',
+      titre: reglages.titre || I18n.t('socle.confirmer.confirmation'),
       contenu: html`<p>${message}</p>`,
       boutons: [
-        { libelle: reglages.non || 'Annuler', valeur: false, classe: 'btn-fantome' },
-        { libelle: reglages.oui || 'Confirmer', valeur: true, classe: reglages.danger ? 'btn-danger' : 'btn-primaire', defaut: true },
+        { libelle: reglages.non || I18n.t('commun.bouton.annuler'), valeur: false, classe: 'btn-fantome' },
+        { libelle: reglages.oui || I18n.t('socle.confirmer.confirmer'), valeur: true, classe: reglages.danger ? 'btn-danger' : 'btn-primaire', defaut: true },
       ],
     });
     return choix === true;
@@ -590,7 +702,7 @@ const UI = (function () {
     const idChamp = identifiantUnique('motif');
     const contenu = element(html`
       <div class="champ">
-        <label class="libelle" for="${idChamp}">${libelle || 'Motif'} <span class="requis" aria-hidden="true">*</span></label>
+        <label class="libelle" for="${idChamp}">${libelle || I18n.t('socle.demander_motif.motif')} <span class="requis" aria-hidden="true">*</span></label>
         <textarea id="${idChamp}" name="motif" rows="4" required aria-required="true" data-dictee
           aria-describedby="${idChamp}-erreur" placeholder="${reglages.exemple || ''}"></textarea>
         <p class="erreur-champ" id="${idChamp}-erreur" role="alert" hidden></p>
@@ -602,15 +714,15 @@ const UI = (function () {
       if (zoneTexte.value.trim()) { zoneErreur.hidden = true; zoneTexte.removeAttribute('aria-invalid'); }
     });
     const choix = await fenetre({
-      titre: titre || 'Motif',
+      titre: titre || I18n.t('socle.demander_motif.motif'),
       contenu: contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: reglages.libelleValider || 'Valider', valeur: 'valider', classe: 'btn-primaire', defaut: true },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: reglages.libelleValider || I18n.t('socle.demander_motif.valider'), valeur: 'valider', classe: 'btn-primaire', defaut: true },
       ],
       avantFermeture() {
         if (zoneTexte.value.trim() !== '') return true;
-        zoneErreur.textContent = 'Le motif est obligatoire.';
+        zoneErreur.textContent = I18n.t('socle.demander_motif.motif_obligatoire');
         zoneErreur.hidden = false;
         zoneTexte.setAttribute('aria-invalid', 'true');
         zoneTexte.focus();
@@ -624,7 +736,8 @@ const UI = (function () {
   // Tableau triable
   // ===========================================================================================
 
-  const comparateurTexte = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
+  // Ordre des codes (repères, identifiants, dates ISO) : fixe, le même dans toutes les langues (D154).
+  const ordreDesCodes = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
   /**
    * Tableau HTML triable par clic sur l'en-tête. Renvoie un élément <div class="table-defile">.
@@ -639,8 +752,11 @@ const UI = (function () {
    *     lignes: [...], surClic: (ligne) => …, triInitial: { cle: 'date_prevue', sens: 'desc' },
    *     vide: 'Aucun ordre de travail.', libelle: 'Ordres de travail' (légende pour les lecteurs d'écran)
    *   });
-   * rendu(ligne) peut rendre un texte (échappé), un fragment UI.html ou un nœud DOM.
-   * type 'nombre' : tri numérique et alignement à droite. Les cellules vides vont toujours à la fin.
+   * rendu(ligne) peut rendre un texte (échappé), un fragment UI.html ou un nœud DOM. Sans rendu, `table` (nom de
+   * table du schéma) affiche une valeur de liste par son libellé (Schema.libelleValeur, D155) : { cle: 'statut',
+   * libelle: 'Statut', table: 'demandes' }.
+   * type 'nombre' : tri numérique et alignement à droite ; type 'date' : ordre des codes ; sinon ordre de la langue
+   * active (UI.comparerTextes). Les cellules vides vont toujours à la fin.
    * element.mettreAJour(nouvellesLignes) réaffiche le tableau en gardant le tri.
    */
   function tableau(options) {
@@ -667,7 +783,8 @@ const UI = (function () {
         const nombreB = enNombre(valeurB);
         ecart = (nombreA === null ? 0 : nombreA) - (nombreB === null ? 0 : nombreB);
       } else {
-        ecart = comparateurTexte.compare(String(valeurA), String(valeurB));
+        ecart = colonne.type === 'date' ? ordreDesCodes.compare(String(valeurA), String(valeurB))
+          : comparerTextes(valeurA, valeurB, { numeric: true, sensitivity: 'base' });
       }
       return sens === 'desc' ? -ecart : ecart;
     }
@@ -728,7 +845,7 @@ const UI = (function () {
         const cellule = corps.insertRow().insertCell();
         cellule.colSpan = Math.max(1, colonnes.length);
         cellule.className = 'vide-table';
-        remplir(cellule, options.vide === undefined ? 'Aucune ligne à afficher.' : options.vide);
+        remplir(cellule, options.vide === undefined ? I18n.t('socle.tableau.aucune_ligne_afficher') : options.vide);
       }
       lignes.forEach((ligne) => {
         const rangee = corps.insertRow();
@@ -736,7 +853,9 @@ const UI = (function () {
           const cellule = rangee.insertCell();
           if (colonne.type === 'nombre') cellule.classList.add('num');
           if (colonne.classe) cellule.className += ' ' + colonne.classe;
-          const contenu = typeof colonne.rendu === 'function' ? colonne.rendu(ligne) : ligne[colonne.cle];
+          // colonne.table : la cellule est une valeur stockée d'une liste du schéma (D155), affichée par son libellé.
+          const contenu = typeof colonne.rendu === 'function' ? colonne.rendu(ligne)
+            : colonne.table ? Schema.libelleValeur(colonne.table, colonne.cle, ligne[colonne.cle]) : ligne[colonne.cle];
           remplir(cellule, contenu);
         });
         if (typeof options.surClic === 'function') {
@@ -889,7 +1008,9 @@ const UI = (function () {
         controle = champSaisie('datetime-local', valeurTexte.replace(' ', 'T').slice(0, 16));
         break;
       case 'choix':
-        controle = listeDeroulante((definition.valeurs || []).map((v) => ({ valeur: v, libelle: v })), valeurTexte, obligatoire);
+        // Valeurs stockées (D155) : libellé affiché par Schema.libelleValeur si le champ vient du schéma (nomTable).
+        controle = listeDeroulante((definition.valeurs || []).map((v) => ({ valeur: v,
+          libelle: definition.nomTable ? Schema.libelleValeur(definition.nomTable, definition.nom, v) : v })), valeurTexte, obligatoire);
         break;
       case 'ref':
         controle = listeDeroulante((reglages.liste || []).map((entree) => (typeof entree === 'object'
@@ -918,11 +1039,11 @@ const UI = (function () {
   function listeDeroulante(entrees, valeurTexte, obligatoire) {
     const liste = document.createElement('select');
     if (!obligatoire || valeurTexte === '') {
-      liste.appendChild(new Option(obligatoire ? '— Choisir —' : '—', ''));
+      liste.appendChild(new Option(obligatoire ? I18n.t('socle.liste_deroulante.choisir') : '—', ''));
     }
     entrees.forEach((entree) => liste.appendChild(new Option(entree.libelle, entree.valeur)));
     if (valeurTexte !== '' && !entrees.some((entree) => entree.valeur === valeurTexte)) {
-      liste.appendChild(new Option(valeurTexte + ' (valeur inconnue)', valeurTexte));
+      liste.appendChild(new Option(I18n.t('socle.liste_deroulante.valeur_inconnue', { valeurTexte }), valeurTexte));
     }
     liste.value = valeurTexte;
     return liste;
@@ -989,11 +1110,11 @@ const UI = (function () {
       const valeur = controle.type === 'checkbox' ? (controle.checked ? '1' : '') : String(controle.value || '').trim();
       let message = '';
       if (controle.required && valeur === '') {
-        message = controle.type === 'checkbox' ? 'Cette case doit être cochée.' : 'Ce champ est obligatoire.';
+        message = controle.type === 'checkbox' ? I18n.t('socle.verifier_formulaire.case_doit_etre_cochee') : I18n.t('socle.verifier_formulaire.champ_obligatoire');
       } else if (valeur !== '' && type === 'entier' && !/^[-+]?\d+$/.test(valeur.replace(/[\s\u00a0\u202f]/g, ''))) {
-        message = 'Saisissez un nombre entier (ex. 12).';
+        message = I18n.t('socle.verifier_formulaire.saisissez_nombre_entier_ex');
       } else if (valeur !== '' && type === 'decimal' && enNombre(valeur) === null) {
-        message = 'Saisissez un nombre (ex. 12,5).';
+        message = I18n.t('socle.verifier_formulaire.saisissez_nombre_ex_12');
       }
       marquerErreur(bloc, message);
       if (message) erreurs.push({ nom: controle.name, message });
@@ -1032,16 +1153,16 @@ const UI = (function () {
         <input type="hidden" name="${reglages.nom || 'equipement_id'}" data-type="ref">
         <div class="selecteur-choisi" hidden>
           <div class="selecteur-resume"></div>
-          <button type="button" class="btn btn-secondaire selecteur-changer">Changer</button>
+          <button type="button" class="btn btn-secondaire selecteur-changer">${I18n.t('socle.selecteur_equipement.changer')}</button>
         </div>
         <div class="selecteur-recherche">
           <div class="selecteur-ligne">
-            <label class="visuellement-cache" for="${idRecherche}">Rechercher un équipement</label>
+            <label class="visuellement-cache" for="${idRecherche}">${I18n.t('socle.selecteur_equipement.rechercher_equipement')}</label>
             <input type="search" id="${idRecherche}" autocomplete="off" enterkeyhint="search"
-              placeholder="Repère ou nom">
-            ${cameraDisponible() ? html`<button type="button" class="btn btn-secondaire selecteur-scanner">${icone('qr')}Scanner</button>` : ''}
+              placeholder="${I18n.t('socle.selecteur_equipement.repere_nom')}">
+            ${cameraDisponible() ? html`<button type="button" class="btn btn-secondaire selecteur-scanner">${icone('qr')}${I18n.t('socle.selecteur_equipement.scanner')}</button>` : ''}
           </div>
-          <ul class="selecteur-resultats" aria-label="Équipements trouvés"></ul>
+          <ul class="selecteur-resultats" aria-label="${I18n.t('socle.selecteur_equipement.equipements_trouves')}"></ul>
           <p class="aide selecteur-aide"></p>
         </div>
       </div>`);
@@ -1068,13 +1189,14 @@ const UI = (function () {
       const trouves = equipements
         .filter((e) => e.actif !== '0')
         .filter((e) => mots.every((mot) => textePourRecherche(e).includes(mot)))
-        .sort((a, b) => comparateurTexte.compare(a.repere || '', b.repere || ''));
+        .sort((a, b) => ordreDesCodes.compare(a.repere || '', b.repere || ''));
       listeResultats.innerHTML = String(html`${trouves.slice(0, maxResultats).map((e) => html`
         <li><button type="button" class="selecteur-option" data-id="${e.id}">
           <b>${e.repere || e.id}</b><span>${e.designation}</span>${libelleLocalisation(e) ? html`<small>${libelleLocalisation(e)}</small>` : ''}
         </button></li>`)}`);
-      if (trouves.length === 0) aide.textContent = 'Aucun équipement ne correspond à « ' + saisie.value.trim() + ' ».';
-      else if (trouves.length > maxResultats) aide.textContent = trouves.length + ' équipements : tapez quelques lettres pour affiner.';
+      const recherche = saisie.value.trim();
+      if (trouves.length === 0) aide.textContent = I18n.t('socle.selecteur_equipement.aucun_equipement_correspond', { recherche });
+      else if (trouves.length > maxResultats) aide.textContent = I18n.t('socle.selecteur_equipement.equipements_trouves_affiner', { n: trouves.length });
       else aide.textContent = '';
     }
 
@@ -1120,7 +1242,7 @@ const UI = (function () {
         const texte = await scannerQR();
         if (texte === null) return;
         const id = identifiantDepuisQR(texte);
-        if (!id || !choisir(id)) toast('Ce QR code ne correspond à aucun équipement connu.', 'attention');
+        if (!id || !choisir(id)) toast(I18n.t('socle.selecteur_equipement.qr_code_correspond_aucun'), 'attention');
       });
     }
 
@@ -1157,7 +1279,7 @@ const UI = (function () {
    */
   async function scannerQR() {
     if (!cameraDisponible()) {
-      toast('Le scan par caméra n\'est pas disponible sur cette page. Utilisez l\'appareil photo du téléphone.', 'attention');
+      toast(I18n.t('socle.scanner_qr.scan_camera_pas_disponible'), 'attention');
       return null;
     }
     let flux = null;
@@ -1165,7 +1287,7 @@ const UI = (function () {
     const contenu = element(html`
       <div>
         <div class="scanner"><video playsinline muted></video><div class="scanner-viseur"></div></div>
-        <p class="note">Placez le QR code de l'équipement dans le cadre.</p>
+        <p class="note">${I18n.t('socle.scanner_qr.placez_qr_code_equipement')}</p>
       </div>`);
     const video = contenu.querySelector('video');
     const toile = document.createElement('canvas');
@@ -1178,16 +1300,16 @@ const UI = (function () {
     }
 
     const resultat = await fenetre({
-      titre: 'Scanner un QR code',
+      titre: I18n.t('socle.scanner_qr.scanner_qr_code'),
       contenu,
       classe: 'large',
-      boutons: [{ libelle: 'Annuler', valeur: null, classe: 'btn-secondaire', defaut: true }],
+      boutons: [{ libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-secondaire', defaut: true }],
       surOuverture: async (dialogue, fermer) => {
         try {
           flux = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
         } catch (erreur) {
           fermer(null);
-          toast('Impossible d\'ouvrir la caméra (autorisation refusée ou caméra occupée).', 'erreur');
+          toast(I18n.t('socle.scanner_qr.impossible_ouvrir_camera_autorisation'), 'erreur');
           return;
         }
         if (!actif) { arreterCamera(); return; }
@@ -1219,7 +1341,7 @@ const UI = (function () {
    * (écran sombre, impression, image exportée).
    */
   function qrSvg(texte, taille) {
-    if (typeof window.qrcode !== 'function') throw new Error('Bibliothèque qrcode absente (js/lib/qrcode.js).');
+    if (typeof window.qrcode !== 'function') throw new Error(I18n.t('socle.qr_svg.bibliotheque_qrcode_absente_js'));
     const generateur = window.qrcode;
     if (generateur.stringToBytesFuncs && generateur.stringToBytesFuncs['UTF-8']) {
       generateur.stringToBytes = generateur.stringToBytesFuncs['UTF-8']; // accents corrects
@@ -1237,14 +1359,12 @@ const UI = (function () {
         if (!code.isDark(ligne, colonne)) { colonne += 1; continue; }
         const debut = colonne;
         while (colonne < modules && code.isDark(ligne, colonne)) colonne += 1;
-        chemin += 'M' + (debut + marge) + ' ' + (ligne + marge) + 'h' + (colonne - debut) + 'v1h-' + (colonne - debut) + 'z';
+        const largeur = colonne - debut;
+        chemin += 'M' + [debut + marge, ligne + marge].join(' ') + 'h' + largeur + 'v1h-' + largeur + 'z';
       }
     }
     const pixels = Math.round(taille || 160);
-    return brut('<svg xmlns="http://www.w3.org/2000/svg" class="qr-svg" viewBox="0 0 ' + cote + ' ' + cote + '" width="'
-      + pixels + '" height="' + pixels + '" shape-rendering="crispEdges" role="img" aria-label="'
-      + echapper('QR code : ' + texte) + '"><rect width="' + cote + '" height="' + cote + '" fill="#fff"/><path fill="#000" d="'
-      + chemin + '"/></svg>');
+    return html`<svg xmlns="http://www.w3.org/2000/svg" class="qr-svg" viewBox="0 0 ${cote} ${cote}" width="${pixels}" height="${pixels}" shape-rendering="crispEdges" role="img" aria-label="${I18n.t('socle.qr_svg.qr_code', { texte })}"><rect width="${cote}" height="${cote}" fill="#fff"/><path fill="#000" d="${chemin}"/></svg>`;
   }
 
   // ===========================================================================================
@@ -1271,7 +1391,7 @@ const UI = (function () {
     contexte.drawImage(image.source, 0, 0, largeur, hauteur);
     image.liberer();
     return new Promise((resoudre, rejeter) => {
-      toile.toBlob((blob) => (blob ? resoudre(blob) : rejeter(new Error('La photo n\'a pas pu être convertie.'))), 'image/jpeg', 0.85);
+      toile.toBlob((blob) => (blob ? resoudre(blob) : rejeter(new Error(I18n.t('socle.redimensionner_photo.photo_pas_pu_etre')))), 'image/jpeg', 0.85);
     });
   }
 
@@ -1290,7 +1410,7 @@ const UI = (function () {
       });
       image.onerror = () => {
         URL.revokeObjectURL(adresse);
-        rejeter(new Error('Cette image ne peut pas être lue (format non pris en charge ?).'));
+        rejeter(new Error(I18n.t('socle.charger_image.image_peut_pas_etre')));
       };
       image.src = adresse;
     });
@@ -1450,13 +1570,92 @@ const UI = (function () {
     return window.matchMedia('(max-width: 640px)').matches;
   }
 
+  const CLE_LANGUE = 'prevo.langue';          // lue par js/i18n-chargeur.js avant js/schema.js
+  const CLE_LANGUE_INSTALLATION = 'prevo.langue.installation';   // écrite par js/app.js (langue_defaut, T295)
+
+  /** Langue de ce navigateur ramenée à une langue déclarée (I18n.langueDuNavigateur, D150 : sinon l'anglais). */
+  function langueDuNavigateur() {
+    let langues = [];
+    try {
+      langues = Array.from(navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
+    } catch (erreur) { /* navigateur sans langue lisible : anglais */ }
+    return I18n.langueDuNavigateur(langues);
+  }
+
+  /**
+   * Options (fragment sûr) des langues déclarées, chacune sous son nom dans sa langue (lang posé, jamais traduit, sans
+   * drapeau), « choisie » sélectionnée : liste « Langue de Prévo » d'une base neuve (T296 ; assistant d'installation,
+   * écran « base vide »), proposée d'après le navigateur (langueDuNavigateur).
+   */
+  function optionsLangues(choisie) {
+    return html`${I18n.langues.map((langue) => html`<option value="${langue.code}" lang="${langue.code}" ${brut(langue.code === choisie ? 'selected' : '')}>${langue.nom}</option>`)}`;
+  }
+
+  /**
+   * Sélecteur de langue (D147, D148) : <select> des langues déclarées (I18n.langues, ordre de js/i18n/langues.js),
+   * chacune sous son nom dans sa langue (jamais traduit, sans drapeau), la langue active choisie. Au changement, le
+   * choix est retenu par ce navigateur (localStorage « prevo.langue »), puis la page est rechargée : js/i18n-chargeur.js
+   * y charge la langue avant js/schema.js. La langue qu'aurait le poste sans choix (celle de l'installation donnée par
+   * la page ou retenue par ce navigateur, sinon, sans réglage, la langue du navigateur : I18n.langueDeLaPage, T295,
+   * T297 et T299) retire la clé : le poste suit alors
+   * l'installation. Stockage refusé : message court, la liste revient à la langue active, la page reste dans sa langue.
+   * Dans la démo (App.mode « demo »), le rechargement efface ce qu'on y a modifié : une confirmation d'abord
+   * (UI.confirmer) ; Annuler remet la liste sur la langue active, rien n'est retenu.
+   * reglages : { id, classe, libelle (aria-label, quand aucun <label> visible ne nomme la liste), retenir (T298 :
+   * async (code) → vrai si le choix est retenu ; à la place de retenirLangueDuPoste, pour la langue du compte) }.
+   */
+  function selecteurLangue(reglages) {
+    const options = reglages || {};
+    const liste = document.createElement('select');
+    if (options.id) liste.id = options.id;
+    if (options.classe) liste.className = options.classe;
+    if (options.libelle) liste.setAttribute('aria-label', options.libelle);
+    I18n.langues.forEach((langue) => {
+      const option = new Option(langue.nom, langue.code);
+      option.lang = langue.code;                // lu dans sa langue par un lecteur d'écran
+      liste.appendChild(option);
+    });
+    liste.value = I18n.langue;
+    liste.addEventListener('change', async () => {
+      const code = liste.value;
+      if (code === I18n.langue) return;
+      if (typeof App !== 'undefined' && App.mode === 'demo') {
+        const accord = await confirmer(I18n.t('socle.selecteur_langue.recharge_demo'), {
+          titre: I18n.t('socle.selecteur_langue.changer_langue'), oui: I18n.t('socle.selecteur_langue.changer'), danger: true });
+        if (!accord) { liste.value = I18n.langue; return; }
+      }
+      const retenu = options.retenir ? await options.retenir(code) : retenirLangueDuPoste(code);
+      if (!retenu) { liste.value = I18n.langue; return; }
+      window.location.reload();
+    });
+    return liste;
+  }
+
+  /**
+   * Retient `code` comme choix de ce poste (localStorage « prevo.langue », lu par js/i18n-chargeur.js), ou retire la
+   * clé quand c'est la langue qu'aurait le poste sans choix (le poste suit alors l'installation) ; vrai si c'est fait.
+   * Stockage refusé : message court, faux. Ne recharge pas la page (UI.selecteurLangue le fait).
+   */
+  function retenirLangueDuPoste(code) {
+    try {
+      const sansChoix = I18n.langueDeLaPage('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION),
+        Array.from(navigator.languages || [navigator.language]));
+      if (code === sansChoix) window.localStorage.removeItem(CLE_LANGUE);
+      else window.localStorage.setItem(CLE_LANGUE, code);
+      return true;
+    } catch (erreur) {                          // navigation privée stricte, réglage du navigateur
+      toast(I18n.t('socle.selecteur_langue.choix_non_retenu'), 'erreur');
+      return false;
+    }
+  }
+
   return Object.freeze({
     // sélecteurs et HTML sûr
-    $, $$, echapper, html, brut, estSur, remplir, element, identifiantUnique, normaliserRecherche,
+    $, $$, echapper, html, brut, estSur, remplir, element, identifiantUnique, normaliserRecherche, comparerTextes,
     // formats français
-    dateFr, dateHeureFr, nombreFr, euro, heures, enNombre,
+    adresseGuide, dateFr, dateHeureFr, nombreFr, euro, montant: euro, devise, deviseConnue, nomDevise, symboleDevise, heures, enNombre,
     // badges, icônes, logo
-    badgePriorite, badgeStatut, icone, nomsIcones, logo,
+    badgePriorite, badgeStatut, badgeValeur, icone, nomsIcones, logo,
     // notifications
     toast, bandeau, vide, chargement,
     // fenêtres
@@ -1467,7 +1666,7 @@ const UI = (function () {
     selecteurEquipement, identifiantDepuisQR, cameraDisponible, scannerQR, qrSvg,
     // fichiers
     redimensionnerPhoto, nomFichierUnique, telecharger,
-    // mise en page
-    onglets, estTelephone,
+    // mise en page, langue de l'écran
+    onglets, estTelephone, selecteurLangue, retenirLangueDuPoste, langueDuNavigateur, optionsLangues,
   });
 })();

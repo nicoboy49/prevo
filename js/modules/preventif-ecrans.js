@@ -23,7 +23,7 @@ Object.assign(Preventif, (() => {
   const ONGLETS = ['gammes', 'calendrier'];
   const TONS_ETAT = { echue: 'ko', ot_ouvert: 'cyan', bientot: 'attention', a_jour: 'ok', incomplete: 'violet', inactive: 'neutre' };
   const RANGS_ETAT = Object.keys(STATUTS_GAMME);            // du plus urgent au moins urgent
-  const LIBELLES_COURTS = { date: 'Date', compteur: 'Compteur', seuil: 'Seuil' };
+  const LIBELLES_COURTS = { get date() { return I18n.t('preventif.libelles_courts.date'); }, get compteur() { return I18n.t('preventif.compteur.compteur'); }, get seuil() { return I18n.t('preventif.seuil.seuil'); } };
   const TABLES_ECRANS = ['gammes', 'gamme_operations', 'ordres_travail', 'releves', 'compteurs', 'equipements'];
   // Onglets « Suggestions » et « Décisions » du responsable : ils dépendent en plus du journal (décisions
   // prises sur un autre poste), des DI et des codes de défaillance (lot 4, §17.9).
@@ -36,8 +36,14 @@ Object.assign(Preventif, (() => {
   // 9. Petits outils d'affichage
   // ===========================================================================================
 
-  function comparerTextes(a, b) {
+  /** Identifiants et dates ISO : ordre fixe, le même dans toutes les langues (D154). */
+  function comparerCodes(a, b) {
     return String(a).localeCompare(String(b), 'fr', { numeric: true, sensitivity: 'base' });
+  }
+
+  /** Libellés affichés : ordre de la langue active (UI.comparerTextes, D154). */
+  function comparerLibelles(a, b) {
+    return UI.comparerTextes(a, b, { numeric: true, sensitivity: 'base' });
   }
 
   function repere(equipementId) {
@@ -63,9 +69,9 @@ Object.assign(Preventif, (() => {
   /** « tous les 30 j », « toutes les 2 000 h », « seuil 0,8 bar » (vide si non renseignée). */
   function periodicite(gamme) {
     const declencheur = texte(gamme.declencheur) || 'date';
-    if (declencheur === 'date') return gamme.periodicite_jours ? 'tous les ' + UI.nombreFr(gamme.periodicite_jours) + ' j' : '';
-    if (declencheur === 'compteur') return gamme.periodicite_unites ? 'toutes les ' + avecUnite(gamme.periodicite_unites, uniteCompteur(gamme)) : '';
-    return texte(gamme.seuil) ? 'seuil ' + avecUnite(gamme.seuil, uniteCompteur(gamme)) : '';
+    if (declencheur === 'date') return gamme.periodicite_jours ? I18n.t('preventif.periodicite.tous_periodicite_jours', { n: UI.nombreFr(gamme.periodicite_jours) }) : '';
+    if (declencheur === 'compteur') return gamme.periodicite_unites ? I18n.t('preventif.periodicite.toutes_avec_unite', { avecUnite: avecUnite(gamme.periodicite_unites, uniteCompteur(gamme)) }) : '';
+    return texte(gamme.seuil) ? I18n.t('preventif.periodicite.seuil_avec_unite', { avecUnite: avecUnite(gamme.seuil, uniteCompteur(gamme)) }) : '';
   }
 
   /** Badge du statut calculé (texte toujours affiché ; la couleur aide seulement). */
@@ -92,7 +98,7 @@ Object.assign(Preventif, (() => {
   function echeanceHtml(gamme, etat) {
     if (!etat.echeance) return '';
     const estimee = texte(gamme.declencheur) === 'compteur';
-    return UI.html`<span class="sans-coupure">${UI.dateFr(etat.echeance)}</span>${estimee ? UI.html` <span class="pv-estimee">(estimée)</span>` : ''}`;
+    return UI.html`<span class="sans-coupure">${UI.dateFr(etat.echeance)}</span>${estimee ? UI.html` <span class="pv-estimee">${I18n.t('preventif.echeance.estimee')}</span>` : ''}`;
   }
 
   /** Gammes et leur état (RG5), de la plus urgente à la moins urgente : [{ gamme, etat }]. */
@@ -101,8 +107,8 @@ Object.assign(Preventif, (() => {
     const contexte = contexteCalcul();
     const rang = (entree) => RANGS_ETAT.indexOf(entree.etat.statut);
     return Donnees.lignes('gammes').map((gamme) => ({ gamme, etat: evaluerGamme(gamme, jour, contexte) }))
-      .sort((a, b) => rang(a) - rang(b) || comparerTextes(a.etat.echeance || '9999', b.etat.echeance || '9999')
-        || comparerTextes(a.gamme.id, b.gamme.id));
+      .sort((a, b) => rang(a) - rang(b) || comparerCodes(a.etat.echeance || '9999', b.etat.echeance || '9999')
+        || comparerCodes(a.gamme.id, b.gamme.id));
   }
 
   function optionsHtml(liste, valeurChoisie) {
@@ -155,10 +161,10 @@ Object.assign(Preventif, (() => {
     UI.remplir(conteneur, UI.html`
       <div class="preventif">
         <div class="entete-page">
-          <div><h1>Préventif</h1><p>Gammes de maintenance préventive, échéances et calendrier des ${semaines} prochaines semaines.</p></div>
+          <div><h1>${I18n.t('preventif.liste.preventif')}</h1><p>${I18n.t('preventif.liste.gammes_maintenance_preventive_echeances', { n: semaines })}</p></div>
           ${App.estResponsable() ? UI.html`<div class="actions">
-            <button type="button" class="btn btn-secondaire" id="pv-generer">${UI.icone('actualiser')}Générer les OT échus</button>
-            <a class="btn btn-primaire" id="pv-nouvelle" href="#/preventif/gamme/nouvelle">${UI.icone('ajouter')}Nouvelle gamme</a>
+            <button type="button" class="btn btn-secondaire" id="pv-generer">${UI.icone('actualiser')}${I18n.t('preventif.liste.generer_ot_echus')}</button>
+            <a class="btn btn-primaire" id="pv-nouvelle" href="#/preventif/gamme/nouvelle">${UI.icone('ajouter')}${I18n.t('preventif.liste.nouvelle_gamme')}</a>
           </div>` : ''}
         </div>
         <div class="pv-onglets"></div>
@@ -166,9 +172,9 @@ Object.assign(Preventif, (() => {
     const bouton = UI.$('#pv-generer', conteneur);
     if (bouton) bouton.addEventListener('click', () => genererDepuisBouton(bouton));
     UI.onglets(UI.$('.pv-onglets', conteneur), [
-      { id: 'gammes', libelle: 'Gammes', compteur: toutes.length, afficher: (panneau) => afficherGammes(panneau, toutes) },
-      { id: 'calendrier', libelle: 'Calendrier ' + semaines + ' semaines', afficher: (panneau) => afficherCalendrier(panneau) },
-    ].concat(ongletsSuggestions), { actif: onglet, libelle: 'Vues du préventif', surChangement: memoriserOnglet });
+      { id: 'gammes', libelle: I18n.t('preventif.liste.gammes'), compteur: toutes.length, afficher: (panneau) => afficherGammes(panneau, toutes) },
+      { id: 'calendrier', libelle: I18n.t('preventif.liste.calendrier_semaines', { n: semaines }), afficher: (panneau) => afficherCalendrier(panneau) },
+    ].concat(ongletsSuggestions), { actif: onglet, libelle: I18n.t('preventif.liste.vues_preventif'), surChangement: memoriserOnglet });
   }
 
   // Relais vers preventif-calendrier.js (chargé après ce fichier).
@@ -199,41 +205,41 @@ Object.assign(Preventif, (() => {
     const identifiants = new Set(toutes.map((e) => e.gamme.equipement_id));
     if (memoire.equipement) identifiants.add(memoire.equipement);
     const equipements = Array.from(identifiants).map((id) => ({ valeur: id, libelle: libelleEquipement(id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
     return UI.html`
-      <form class="filtres pv-filtres" id="pv-filtres" data-hors-saisie role="search" aria-label="Filtrer les gammes">
-        <label class="visuellement-cache" for="pv-filtre-statut">Statut</label>
-        <select id="pv-filtre-statut" name="statut">${optionsHtml([{ valeur: '', libelle: 'Tous les statuts' }].concat(statuts), memoire.statut)}</select>
-        <label class="visuellement-cache" for="pv-filtre-equipement">Équipement</label>
-        <select id="pv-filtre-equipement" name="equipement">${optionsHtml([{ valeur: '', libelle: 'Tous les équipements' }].concat(equipements), memoire.equipement)}</select>
+      <form class="filtres pv-filtres" id="pv-filtres" data-hors-saisie role="search" aria-label="${I18n.t('preventif.barre_filtres.filtrer_gammes')}">
+        <label class="visuellement-cache" for="pv-filtre-statut">${I18n.t('commun.champ.statut')}</label>
+        <select id="pv-filtre-statut" name="statut">${optionsHtml([{ valeur: '', libelle: I18n.t('preventif.barre_filtres.tous_statuts') }].concat(statuts), memoire.statut)}</select>
+        <label class="visuellement-cache" for="pv-filtre-equipement">${I18n.t('commun.champ.equipement')}</label>
+        <select id="pv-filtre-equipement" name="equipement">${optionsHtml([{ valeur: '', libelle: I18n.t('preventif.barre_filtres.tous_equipements') }].concat(equipements), memoire.equipement)}</select>
       </form>`;
   }
 
   function colonnesListe() {
     return [
-      { cle: 'equipement', libelle: 'Équipement', valeurTri: (l) => repere(l.gamme.equipement_id),
+      { cle: 'equipement', libelle: I18n.t('commun.champ.equipement'), valeurTri: (l) => repere(l.gamme.equipement_id),
         rendu: (l) => UI.html`<b class="sans-coupure">${repere(l.gamme.equipement_id)}</b>` },
-      { cle: 'libelle', libelle: 'Gamme', classe: 'pv-col-gamme', valeurTri: (l) => l.gamme.libelle,
+      { cle: 'libelle', libelle: I18n.t('preventif.colonnes_liste.gamme'), classe: 'pv-col-gamme', valeurTri: (l) => l.gamme.libelle,
         rendu: (l) => UI.html`${lienGamme(l.gamme)} <span class="pv-id">${l.gamme.id}</span>` },
-      { cle: 'declencheur', libelle: 'Déclencheur · périodicité', valeurTri: (l) => l.gamme.declencheur,
+      { cle: 'declencheur', libelle: I18n.t('preventif.colonnes_liste.declencheur_periodicite'), valeurTri: (l) => l.gamme.declencheur,
         rendu: (l) => UI.html`${LIBELLES_COURTS[l.gamme.declencheur] || l.gamme.declencheur}<span class="pv-sous">${periodicite(l.gamme)}</span>` },
-      { cle: 'derniere', libelle: 'Dernière réalisation', valeurTri: (l) => l.gamme.derniere_realisation,
+      { cle: 'derniere', libelle: I18n.t('preventif.colonnes_liste.derniere_realisation'), valeurTri: (l) => l.gamme.derniere_realisation,
         rendu: (l) => UI.dateFr(l.gamme.derniere_realisation) },
-      { cle: 'echeance', libelle: 'Échéance', valeurTri: (l) => l.etat.echeance, rendu: (l) => echeanceHtml(l.gamme, l.etat) },
+      { cle: 'echeance', libelle: I18n.t('preventif.colonnes_liste.echeance'), valeurTri: (l) => l.etat.echeance, rendu: (l) => echeanceHtml(l.gamme, l.etat) },
       // Statut : badge, raison et, pour une gamme qui a un OT ouvert, le lien vers cet OT.
-      { cle: 'statut', libelle: 'Statut', classe: 'pv-col-statut',
+      { cle: 'statut', libelle: I18n.t('commun.champ.statut'), classe: 'pv-col-statut',
         valeurTri: (l) => String(RANGS_ETAT.indexOf(l.etat.statut)) + (l.etat.echeance || '9999'),
         rendu: (l) => UI.html`${badgeEtat(l.etat)}${raisonHtml(l.etat)}` },
     ];
   }
 
   function cartesHtml(liste) {
-    if (!liste.length) return UI.html`<li>${UI.vide('Aucune gamme', 'Aucune gamme ne correspond à ces filtres.', 'preventif')}</li>`;
+    if (!liste.length) return UI.html`<li>${UI.vide(I18n.t('preventif.cartes.aucune_gamme'), I18n.t('preventif.cartes.aucune_gamme_correspond_filtres'), 'preventif')}</li>`;
     return UI.html`${liste.map(({ gamme, etat }) => UI.html`<li><div class="carte-ligne">
       <div class="carte-tete"><b>${repere(gamme.equipement_id)}</b>${badgeEtat(etat)}</div>
       <div class="carte-titre">${lienGamme(gamme)}</div>
       <div class="carte-meta"><span>${periodicite(gamme)}</span>
-        ${etat.echeance ? UI.html`<span>Échéance ${echeanceHtml(gamme, etat)}</span>` : ''}
+        ${etat.echeance ? UI.html`<span>${I18n.t('preventif.colonnes_liste.echeance')} ${echeanceHtml(gamme, etat)}</span>` : ''}
         ${raisonHtml(etat)}</div>
     </div></li>`)}`;
   }
@@ -244,8 +250,8 @@ Object.assign(Preventif, (() => {
       <p class="note pv-compteur" id="pv-compteur" role="status"></p>
       <div class="carte pv-liste-tableau"></div>
       <ul class="liste-cartes pv-liste-cartes"></ul>`);
-    const tableau = UI.tableau({ colonnes: colonnesListe(), lignes: [], libelle: 'Gammes de préventif',
-      vide: 'Aucune gamme ne correspond à ces filtres.' });
+    const tableau = UI.tableau({ colonnes: colonnesListe(), lignes: [], libelle: I18n.t('preventif.gammes.gammes_preventif'),
+      vide: I18n.t('preventif.cartes.aucune_gamme_correspond_filtres') });
     UI.$('.pv-liste-tableau', panneau).appendChild(tableau);
 
     function rafraichir() {
@@ -253,7 +259,7 @@ Object.assign(Preventif, (() => {
         && (!memoire.equipement || gamme.equipement_id === memoire.equipement));
       tableau.mettreAJour(affichees);
       UI.remplir(UI.$('.pv-liste-cartes', panneau), cartesHtml(affichees));
-      UI.$('#pv-compteur', panneau).textContent = affichees.length + ' gamme(s) sur ' + toutes.length;
+      UI.$('#pv-compteur', panneau).textContent = I18n.t('preventif.gammes.n_gamme_nb_toutes', { n: affichees.length, nbToutes: toutes.length });
     }
 
     const formulaire = UI.$('#pv-filtres', panneau);
@@ -275,15 +281,15 @@ Object.assign(Preventif, (() => {
   };
 
   const AIDES = {
-    periodicite_jours: 'Obligatoire pour une gamme par date (ex. 30 pour une gamme mensuelle).',
-    avance_jours: 'L\'OT est généré ce nombre de jours avant l\'échéance.',
-    compteur_id: 'Compteur (heures, cycles) ou point de mesure (pression, température…).',
-    periodicite_unites: 'Obligatoire pour une gamme au compteur (ex. 2000 pour 2 000 heures).',
-    seuil: 'La gamme est échue quand un relevé atteint ce seuil.',
-    derniere_realisation: 'Mise à jour automatiquement à la clôture technique d\'un OT de la gamme.',
-    releve_derniere_realisation: 'Valeur du compteur à la dernière réalisation : base du prochain déclenchement.',
-    prochaine_echeance: 'Laissez vide pour la calculer : dernière réalisation + périodicité.',
-    temps_prevu_h: 'Recopié dans chaque OT généré.',
+    get periodicite_jours() { return I18n.t('preventif.periodicite_jours.obligatoire_gamme_date_ex'); },
+    get avance_jours() { return I18n.t('preventif.avance_jours.ot_genere_nombre_jours'); },
+    get compteur_id() { return I18n.t('preventif.compteur_id.compteur_heures_cycles_point'); },
+    get periodicite_unites() { return I18n.t('preventif.periodicite_unites.obligatoire_gamme_compteur_ex'); },
+    get seuil() { return I18n.t('preventif.seuil.gamme_echue_quand_releve'); },
+    get derniere_realisation() { return I18n.t('preventif.derniere_realisation.mise_jour_automatiquement_cloture'); },
+    get releve_derniere_realisation() { return I18n.t('preventif.releve_derniere_realisation.valeur_compteur_derniere_realisation'); },
+    get prochaine_echeance() { return I18n.t('preventif.prochaine_echeance.laissez_vide_calculer_derniere'); },
+    get temps_prevu_h() { return I18n.t('preventif.temps_prevu_h.recopie_chaque_ot_genere'); },
   };
 
   const CHAMPS_DU_FORMULAIRE = ['periodicite_jours', 'compteur_id', 'periodicite_unites', 'seuil', 'avance_jours',
@@ -296,13 +302,13 @@ Object.assign(Preventif, (() => {
   function listeEquipements(valeur) {
     return Donnees.lignes('equipements').filter((e) => e.actif !== '0' || e.id === valeur)
       .map((e) => ({ valeur: e.id, libelle: libelleEquipement(e.id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
   }
 
   function listeCompteurs() {
     return Donnees.lignes('compteurs')
       .map((c) => ({ valeur: c.id, libelle: repere(c.equipement_id) + ' — ' + texte(c.libelle) + (c.unite ? ' (' + c.unite + ')' : '') + ' · ' + c.id }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
   }
 
   function formulaireGamme(gamme, valeursInitiales) {
@@ -323,12 +329,12 @@ Object.assign(Preventif, (() => {
       aide: AIDES[nom], liste: nom === 'compteur_id' ? listeCompteurs() : undefined,
     })));
     ajouter('consignes', UI.champ(definitionChamp('consignes'), valeur('consignes'),
-      { aide: 'Recopiées dans chaque OT généré (sécurité, consignation…).' }), true);
-    ajouter('actif', UI.champ(definitionChamp('actif'), gamme ? gamme.actif : '1', { libelle: 'Gamme active (elle génère des OT)' }), true);
-    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>champ obligatoire</p>`));
+      { aide: I18n.t('preventif.formulaire_gamme.recopiees_chaque_ot_genere') }), true);
+    ajouter('actif', UI.champ(definitionChamp('actif'), gamme ? gamme.actif : '1', { libelle: I18n.t('preventif.formulaire_gamme.gamme_active_genere_ot') }), true);
+    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>${I18n.t('commun.message.champ_obligatoire')}</p>`));
     formulaire.appendChild(UI.element(UI.html`<div class="actions">
-      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}${gamme ? 'Enregistrer la gamme' : 'Créer la gamme'}</button>
-      <a class="btn btn-fantome" href="${gamme ? '#/preventif/gamme/' + encodeURIComponent(gamme.id) : '#/preventif'}">Annuler</a>
+      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}${gamme ? I18n.t('preventif.formulaire_gamme.enregistrer_gamme') : I18n.t('preventif.formulaire_gamme.creer_gamme')}</button>
+      <a class="btn btn-fantome" href="${gamme ? '#/preventif/gamme/' + encodeURIComponent(gamme.id) : '#/preventif'}">${I18n.t('commun.bouton.annuler')}</a>
     </div>`));
 
     const choixDeclencheur = formulaire.querySelector('[name="declencheur"]');
@@ -366,13 +372,13 @@ Object.assign(Preventif, (() => {
         if (gamme) {
           const changes = await Preventif.modifierGamme(gamme.id, valeurs);
           App.marquerSaisie(false);
-          UI.toast(changes.length ? 'Gamme enregistrée.' : 'Aucune modification à enregistrer.', changes.length ? 'succes' : 'info');
+          UI.toast(changes.length ? I18n.t('preventif.brancher_enregistrement.gamme_enregistree') : I18n.t('commun.message.aucune_modification'), changes.length ? 'succes' : 'info');
           await Suggestions.apresModificationGamme(gamme.id, changes);     // suggestion suivie : traitée (§16.6)
           await App.reafficher();
         } else {
           const id = await Preventif.creerGamme(valeurs);
           App.marquerSaisie(false);
-          UI.toast('Gamme ' + id + ' créée : ajoutez maintenant sa check-list.', 'succes');
+          UI.toast(I18n.t('preventif.brancher_enregistrement.gamme_creee_ajoutez_maintenant', { id }), 'succes');
           await Suggestions.apresCreationGamme(id);                         // S1 suivie : traitée (§16.6)
           App.naviguer('#/preventif/gamme/' + encodeURIComponent(id));
         }
@@ -390,9 +396,9 @@ Object.assign(Preventif, (() => {
     UI.remplir(conteneur, UI.html`
       <div class="preventif">
         <div class="entete-page"><div>
-          <div class="fil"><a href="#/preventif">Préventif</a> <span aria-hidden="true">›</span> <span>Nouvelle gamme</span></div>
-          <h1>Nouvelle gamme</h1>
-          <p>La check-list (les opérations à réaliser) se remplit ensuite, sur la fiche de la gamme.</p>
+          <div class="fil">${I18n.html('preventif.nouvelle.preventif_nouvelle_gamme')}</div>
+          <h1>${I18n.t('preventif.liste.nouvelle_gamme')}</h1>
+          <p>${I18n.t('preventif.nouvelle.check_list_operations_realiser')}</p>
         </div></div>
         <article class="carte pv-carte-formulaire"></article>
       </div>`);
@@ -412,33 +418,33 @@ Object.assign(Preventif, (() => {
     const compteur = Donnees.trouver('compteurs', gamme.compteur_id);
     const releve = compteur ? Preventif.dernierReleve(compteur.id) : null;
     return UI.html`<dl class="valeurs">
-      <dt>Équipement</dt><dd><a href="#/equipement/${encodeURIComponent(gamme.equipement_id)}">${libelleEquipement(gamme.equipement_id)}</a></dd>
-      <dt>Déclencheur</dt><dd>${DECLENCHEURS[declencheur] || declencheur}</dd>
-      <dt>Périodicité</dt><dd>${periodicite(gamme)}</dd>
-      ${compteur ? UI.html`<dt>Compteur</dt><dd>${texte(compteur.libelle)} (${compteur.id})${releve
-        ? UI.html` — dernier relevé ${avecUnite(releve.valeur, compteur.unite)} le ${UI.dateFr(releve.date)}` : ''}</dd>` : ''}
-      ${declencheur === 'date' ? UI.html`<dt>Avance</dt><dd>${gamme.avance_jours ? gamme.avance_jours + ' j' : ''}</dd>` : ''}
-      <dt>Dernière réalisation</dt><dd>${UI.dateFr(gamme.derniere_realisation)}${compteur && texte(gamme.releve_derniere_realisation)
+      <dt>${I18n.t('commun.champ.equipement')}</dt><dd><a href="#/equipement/${encodeURIComponent(gamme.equipement_id)}">${libelleEquipement(gamme.equipement_id)}</a></dd>
+      <dt>${I18n.t('preventif.description.declencheur')}</dt><dd>${DECLENCHEURS[declencheur] || declencheur}</dd>
+      <dt>${I18n.t('preventif.description.periodicite')}</dt><dd>${periodicite(gamme)}</dd>
+      ${compteur ? UI.html`<dt>${I18n.t('preventif.compteur.compteur')}</dt><dd>${texte(compteur.libelle)} (${compteur.id})${releve
+        ? UI.html` ${I18n.t('preventif.description.dernier_releve', { avecUnite: avecUnite(releve.valeur, compteur.unite), date: UI.dateFr(releve.date) })}` : ''}</dd>` : ''}
+      ${declencheur === 'date' ? UI.html`<dt>${I18n.t('preventif.description.avance')}</dt><dd>${gamme.avance_jours ? I18n.t('preventif.description.avance_jours', { n: gamme.avance_jours }) : ''}</dd>` : ''}
+      <dt>${I18n.t('preventif.colonnes_liste.derniere_realisation')}</dt><dd>${UI.dateFr(gamme.derniere_realisation)}${compteur && texte(gamme.releve_derniere_realisation)
         ? ' (' + avecUnite(gamme.releve_derniere_realisation, compteur.unite) + ')' : ''}</dd>
-      <dt>Échéance</dt><dd>${echeanceHtml(gamme, etat)}</dd>
-      <dt>Temps prévu</dt><dd>${gamme.temps_prevu_h ? UI.heures(gamme.temps_prevu_h) : ''}</dd>
-      <dt>Consignes</dt><dd class="pv-texte">${gamme.consignes}</dd>
-      <dt>Active</dt><dd>${gamme.actif === '0' ? 'non' : 'oui'}</dd>
+      <dt>${I18n.t('preventif.colonnes_liste.echeance')}</dt><dd>${echeanceHtml(gamme, etat)}</dd>
+      <dt>${I18n.t('preventif.description.temps_prevu')}</dt><dd>${gamme.temps_prevu_h ? UI.heures(gamme.temps_prevu_h) : ''}</dd>
+      <dt>${I18n.t('preventif.description.consignes')}</dt><dd class="pv-texte">${gamme.consignes}</dd>
+      <dt>${I18n.t('preventif.description.active')}</dt><dd>${gamme.actif === '0' ? I18n.t('preventif.description.non') : I18n.t('preventif.description.oui')}</dd>
     </dl>`;
   }
 
   function afficherOtsDeLaGamme(section, gammeId) {
     const ots = Donnees.lignes('ordres_travail').filter((ot) => ot.gamme_id === gammeId)
-      .sort((a, b) => comparerTextes(b.date_creation, a.date_creation) || comparerTextes(b.id, a.id));
-    UI.remplir(section, UI.html`<div class="entete-carte"><h2 id="pv-titre-ots">OT de la gamme</h2><span class="badge neutre">${ots.length}</span></div>`);
+      .sort((a, b) => comparerCodes(b.date_creation, a.date_creation) || comparerCodes(b.id, a.id));
+    UI.remplir(section, UI.html`<div class="entete-carte"><h2 id="pv-titre-ots">${I18n.t('preventif.ots_de_la_gamme.ot_gamme')}</h2><span class="badge neutre">${ots.length}</span></div>`);
     section.appendChild(UI.tableau({
       colonnes: [
-        { cle: 'id', libelle: 'N°', rendu: (ot) => lienOt(ot.id) },
-        { cle: 'statut', libelle: 'Statut', rendu: (ot) => UI.badgeStatut(ot.statut) },
-        { cle: 'date_prevue', libelle: 'Prévu le', rendu: (ot) => UI.dateFr(ot.date_prevue) },
-        { cle: 'date_fin', libelle: 'Réalisé le', rendu: (ot) => UI.dateFr(ot.date_fin) },
+        { cle: 'id', libelle: I18n.t('commun.champ.numero'), rendu: (ot) => lienOt(ot.id) },
+        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (ot) => UI.badgeValeur('ordres_travail', 'statut', ot.statut) },
+        { cle: 'date_prevue', libelle: I18n.t('preventif.ots_de_la_gamme.prevu'), rendu: (ot) => UI.dateFr(ot.date_prevue) },
+        { cle: 'date_fin', libelle: I18n.t('preventif.ots_de_la_gamme.realise'), rendu: (ot) => UI.dateFr(ot.date_fin) },
       ],
-      lignes: ots, libelle: 'OT de la gamme', classe: 'pv-table-ots', vide: 'Aucun OT pour cette gamme pour le moment.',
+      lignes: ots, libelle: I18n.t('preventif.ots_de_la_gamme.ot_gamme'), classe: 'pv-table-ots', vide: I18n.t('preventif.ots_de_la_gamme.aucun_ot_gamme_moment'),
     }));
   }
 
@@ -446,8 +452,8 @@ Object.assign(Preventif, (() => {
     const gamme = Donnees.trouver('gammes', parametres.id);
     if (!gamme) {
       UI.remplir(conteneur, UI.html`<div class="preventif"><div class="entete-page"><div>
-        <div class="fil"><a href="#/preventif">Préventif</a></div><h1>Gamme introuvable</h1></div></div>
-        ${UI.vide('Gamme introuvable', 'Aucune gamme ne porte l\'identifiant « ' + parametres.id + ' ».', 'recherche')}</div>`);
+        <div class="fil"><a href="#/preventif">${I18n.t('preventif.liste.preventif')}</a></div><h1>${I18n.t('preventif.fiche.gamme_introuvable')}</h1></div></div>
+        ${UI.vide(I18n.t('preventif.fiche.gamme_introuvable'), I18n.t('preventif.fiche.aucune_gamme_porte_identifiant', { parametresId: parametres.id }), 'recherche')}</div>`);
       return;
     }
     App.definirTitre(gamme.id);
@@ -456,13 +462,13 @@ Object.assign(Preventif, (() => {
     UI.remplir(conteneur, UI.html`
       <div class="preventif pv-fiche" data-gamme="${gamme.id}">
         <div class="entete-page"><div>
-          <div class="fil"><a href="#/preventif">Préventif</a> <span aria-hidden="true">›</span> <span>${gamme.id}</span></div>
+          <div class="fil">${I18n.html('preventif.fiche.preventif_gamme_id', { gammeId: gamme.id })}</div>
           <h1><span class="pv-numero">${gamme.id}</span> ${texte(gamme.libelle)}</h1>
           <div class="pv-badges">${badgeEtat(etat)}${raisonHtml(etat)}</div>
         </div></div>
         <div class="pv-fiche-grille">
           <section class="carte pv-parametres" aria-labelledby="pv-titre-parametres">
-            <div class="entete-carte"><h2 id="pv-titre-parametres">${responsable ? 'Paramètres de la gamme' : 'Gamme'}</h2></div>
+            <div class="entete-carte"><h2 id="pv-titre-parametres">${responsable ? I18n.t('preventif.fiche.parametres_gamme') : I18n.t('preventif.colonnes_liste.gamme')}</h2></div>
             ${responsable ? '' : descriptionHtml(gamme, etat)}
           </section>
           <section class="carte pv-check-liste" aria-labelledby="pv-titre-check-liste"></section>
@@ -488,26 +494,26 @@ Object.assign(Preventif, (() => {
     return UI.html`<li class="pv-operation" data-operation="${operation.id}">
       <span class="pv-rang" aria-hidden="true">${rang + 1}</span>
       <div class="pv-operation-texte"><span class="operation">${operation.operation}</span>
-        ${operation.valeur_attendue ? UI.html`<span class="attendu">Attendu : ${operation.valeur_attendue}</span>` : ''}</div>
+        ${operation.valeur_attendue ? UI.html`<span class="attendu">${I18n.t('preventif.operation.attendu_valeur_attendue', { valeur_attendue: operation.valeur_attendue })}</span>` : ''}</div>
       ${responsable ? UI.html`<div class="pv-operation-actions">
-        <button type="button" class="btn btn-fantome btn-icone" data-action="monter" title="Monter"
-          aria-label="Monter l'opération ${rang + 1}"${rang === 0 ? UI.brut(' disabled') : ''}>↑</button>
-        <button type="button" class="btn btn-fantome btn-icone" data-action="descendre" title="Descendre"
-          aria-label="Descendre l'opération ${rang + 1}"${rang === total - 1 ? UI.brut(' disabled') : ''}>↓</button>
-        <button type="button" class="btn btn-fantome" data-action="modifier">Modifier</button>
-        <button type="button" class="btn btn-danger" data-action="supprimer">Supprimer</button>
+        <button type="button" class="btn btn-fantome btn-icone" data-action="monter" title="${I18n.t('preventif.operation.monter')}"
+          aria-label="${I18n.t('preventif.operation.monter_operation', { numero: rang + 1 })}"${rang === 0 ? UI.brut(' disabled') : ''}>↑</button>
+        <button type="button" class="btn btn-fantome btn-icone" data-action="descendre" title="${I18n.t('preventif.operation.descendre')}"
+          aria-label="${I18n.t('preventif.operation.descendre_operation', { numero: rang + 1 })}"${rang === total - 1 ? UI.brut(' disabled') : ''}>↓</button>
+        <button type="button" class="btn btn-fantome" data-action="modifier">${I18n.t('commun.bouton.modifier')}</button>
+        <button type="button" class="btn btn-danger" data-action="supprimer">${I18n.t('preventif.operation.supprimer')}</button>
       </div>` : ''}
     </li>`;
   }
 
   function formulaireAjoutHtml() {
     return UI.html`<form class="form-ligne pv-ajout-operation" id="pv-ajout-operation" novalidate>
-      <div class="champ"><label class="libelle" for="pv-nouvelle-operation">Nouvelle opération <span class="requis" aria-hidden="true">*</span></label>
+      <div class="champ"><label class="libelle" for="pv-nouvelle-operation">${I18n.t('preventif.formulaire_ajout.nouvelle_operation')} <span class="requis" aria-hidden="true">*</span></label>
         <input type="text" id="pv-nouvelle-operation" name="operation" maxlength="200" autocomplete="off"
-          placeholder="Ex. Contrôler la tension de la courroie" aria-describedby="pv-erreur-operation"></div>
-      <div class="champ"><label class="libelle" for="pv-nouvelle-attendue">Valeur attendue</label>
-        <input type="text" id="pv-nouvelle-attendue" name="valeur_attendue" maxlength="120" autocomplete="off" placeholder="Ex. Flèche de 10 à 15 mm"></div>
-      <button type="submit" class="btn btn-secondaire">${UI.icone('ajouter')}Ajouter</button>
+          placeholder="${I18n.t('preventif.formulaire_ajout.ex_controler_tension_courroie')}" aria-describedby="pv-erreur-operation"></div>
+      <div class="champ"><label class="libelle" for="pv-nouvelle-attendue">${I18n.t('preventif.formulaire_ajout.valeur_attendue')}</label>
+        <input type="text" id="pv-nouvelle-attendue" name="valeur_attendue" maxlength="120" autocomplete="off" placeholder="${I18n.t('preventif.formulaire_ajout.ex_fleche_10_15')}"></div>
+      <button type="submit" class="btn btn-secondaire">${UI.icone('ajouter')}${I18n.t('commun.bouton.ajouter')}</button>
       <p class="erreur-champ" id="pv-erreur-operation" role="alert" hidden></p>
     </form>`;
   }
@@ -516,17 +522,17 @@ Object.assign(Preventif, (() => {
     const operations = operationsDeGamme(gammeId);
     const responsable = App.estResponsable();
     UI.remplir(section, UI.html`
-      <div class="entete-carte"><h2 id="pv-titre-check-liste">Check-list</h2><span class="badge neutre">${operations.length}</span></div>
+      <div class="entete-carte"><h2 id="pv-titre-check-liste">${I18n.t('preventif.check_liste.check_list')}</h2><span class="badge neutre">${operations.length}</span></div>
       ${operations.length
         ? UI.html`<ol class="pv-operations">${operations.map((op, rang) => operationHtml(op, rang, operations.length, responsable))}</ol>`
-        : UI.html`<p class="muted">Aucune opération${responsable ? ' : ajoutez ci-dessous les opérations à réaliser, dans l\'ordre.' : '.'}</p>`}
+        : UI.html`<p class="muted">${I18n.t('preventif.check_liste.aucune_operation')}${responsable ? ' ' + I18n.t('preventif.check_liste.ajoutez_ci_dessous_operations') : '.'}</p>`}
       ${responsable ? formulaireAjoutHtml() : ''}
-      <p class="note">Chaque OT généré reçoit une copie de cette check-list : la modifier ne change pas les OT déjà créés.</p>`);
+      <p class="note">${I18n.t('preventif.check_liste.chaque_ot_genere_recoit')}</p>`);
     // Lot 4 (§17.5) : check-list de départ proposée par l'IA (responsable ; bouton absent sans IA, posé
     // ou retiré au fil de l'état de l'IA).
     if (responsable) {
       // Encadré placé après l'emplacement (pas dedans) : un message d'erreur reste visible quand le bouton s'en va.
-      const zoneIa = Ia.emplacement('Proposer une check-list', () => proposerCheckListe(section, gammeId, zoneIa));
+      const zoneIa = Ia.emplacement(I18n.t('preventif.check_liste.proposer_check_list'), () => proposerCheckListe(section, gammeId, zoneIa));
       UI.$('.pv-ajout-operation', section).insertAdjacentElement('afterend', zoneIa);
     }
   }
@@ -547,9 +553,9 @@ Object.assign(Preventif, (() => {
         declencheur: DECLENCHEURS[gamme.declencheur] || gamme.declencheur, periodicite: periodicite(gamme), causeVisee: causeVisee(gamme) },
       rendu: (resultat) => UI.html`<ul class="pv-ia-operations">${resultat.operations.map((op, rang) => UI.html`<li><label class="case">
         <input type="checkbox" checked data-rang="${rang}"><span>${op.operation}${op.valeur_attendue ? UI.html` — <i>${op.valeur_attendue}</i>` : ''}</span></label></li>`)}</ul>`,
-      boutons: [{ libelle: 'Ajouter les opérations cochées', valeur: 'ajouter', classe: 'btn-primaire', action: async (resultat, reponse) => {
+      boutons: [{ libelle: I18n.t('preventif.proposer_check_liste.ajouter_operations_cochees'), valeur: 'ajouter', classe: 'btn-primaire', action: async (resultat, reponse) => {
         const cochees = UI.$$('.pv-ia-operations input:checked', section);
-        if (!cochees.length) { UI.toast('Cochez au moins une opération.', 'attention'); return false; }
+        if (!cochees.length) { UI.toast(I18n.t('preventif.proposer_check_liste.cochez_moins_operation'), 'attention'); return false; }
         for (const caseACocher of cochees) {
           await Preventif.ajouterOperation(gammeId, resultat.operations[Number(caseACocher.dataset.rang)]);
           caseACocher.checked = false;                     // ajoutée : après un échec, un nouvel essai ne la rajoute pas
@@ -560,7 +566,7 @@ Object.assign(Preventif, (() => {
         } catch (erreur) {
           console.warn('Prévo (préventif) : trace de la proposition IA non écrite (' + (erreur && erreur.message) + ').', erreur);
         }
-        UI.toast(cochees.length + ' opération(s) ajoutée(s) à la check-list.', 'succes');
+        UI.toast(I18n.t('preventif.proposer_check_liste.operation_ajoutee_check_list', { n: cochees.length }), 'succes');
         return true;
       } }],
     });
@@ -574,9 +580,9 @@ Object.assign(Preventif, (() => {
     const operation = Donnees.trouver('gamme_operations', operationId);
     if (!operation) return true;                                   // déjà supprimée : on réaffiche
     const contenu = UI.element(UI.html`<div class="form-colonne">
-      <div class="champ"><label class="libelle" for="pv-modif-operation">Opération <span class="requis" aria-hidden="true">*</span></label>
+      <div class="champ"><label class="libelle" for="pv-modif-operation">${I18n.t('preventif.modifier_dans_fenetre.operation')} <span class="requis" aria-hidden="true">*</span></label>
         <input type="text" id="pv-modif-operation" maxlength="200" aria-describedby="pv-modif-erreur"></div>
-      <div class="champ"><label class="libelle" for="pv-modif-attendue">Valeur attendue</label>
+      <div class="champ"><label class="libelle" for="pv-modif-attendue">${I18n.t('preventif.formulaire_ajout.valeur_attendue')}</label>
         <input type="text" id="pv-modif-attendue" maxlength="120"></div>
       <p class="erreur-champ" id="pv-modif-erreur" role="alert" hidden></p>
     </div>`);
@@ -585,13 +591,13 @@ Object.assign(Preventif, (() => {
     champOperation.value = operation.operation;
     champAttendue.value = operation.valeur_attendue;
     const choix = await UI.fenetre({
-      titre: 'Modifier l\'opération', contenu,
-      boutons: [{ libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: 'Enregistrer', valeur: 'ok', classe: 'btn-primaire', defaut: true }],
+      titre: I18n.t('preventif.modifier_dans_fenetre.modifier_operation'), contenu,
+      boutons: [{ libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: I18n.t('commun.bouton.enregistrer'), valeur: 'ok', classe: 'btn-primaire', defaut: true }],
       avantFermeture(valeur) {
         if (valeur !== 'ok' || champOperation.value.trim()) return true;
         const erreur = UI.$('#pv-modif-erreur', contenu);
-        erreur.textContent = 'Décrivez l\'opération à réaliser.';
+        erreur.textContent = I18n.t('preventif.modifier_dans_fenetre.decrivez_operation_realiser');
         erreur.hidden = false;
         champOperation.focus();
         return false;
@@ -599,19 +605,18 @@ Object.assign(Preventif, (() => {
     });
     if (choix !== 'ok') return false;
     return agir(section, () => Preventif.modifierOperation(operationId,
-      { operation: champOperation.value, valeur_attendue: champAttendue.value }), 'modification de l\'opération');
+      { operation: champOperation.value, valeur_attendue: champAttendue.value }), I18n.t('preventif.modifier_dans_fenetre.modification_operation'));
   }
 
   /** Suppression après confirmation (D26 : seule suppression permise, inscrite au journal). */
   async function supprimerAvecConfirmation(section, operationId) {
     const operation = Donnees.trouver('gamme_operations', operationId);
     if (!operation) return true;
-    const confirme = await UI.confirmer('Supprimer l\'opération « ' + operation.operation + ' » de la check-list ? '
-      + 'La suppression est inscrite au journal ; les OT déjà créés gardent leur copie.',
-    { titre: 'Supprimer une opération', oui: 'Supprimer', danger: true });
+    const confirme = await UI.confirmer(I18n.t('preventif.supprimer_avec_confirmation.supprimer_operation_check_list', { operation: operation.operation }),
+    { titre: I18n.t('preventif.supprimer_avec_confirmation.supprimer_operation'), oui: I18n.t('preventif.operation.supprimer'), danger: true });
     if (!confirme) return false;
-    const fait = await agir(section, () => Preventif.supprimerOperation(operationId), 'suppression de l\'opération');
-    if (fait) UI.toast('Opération supprimée (inscrite au journal).', 'succes');
+    const fait = await agir(section, () => Preventif.supprimerOperation(operationId), I18n.t('preventif.supprimer_avec_confirmation.suppression_operation'));
+    if (fait) UI.toast(I18n.t('preventif.supprimer_avec_confirmation.operation_supprimee_inscrite_journal'), 'succes');
     return true;
   }
 
@@ -629,12 +634,12 @@ Object.assign(Preventif, (() => {
       const valeurs = UI.lireFormulaire(formulaire);
       const erreur = UI.$('#pv-erreur-operation', formulaire);
       if (!valeurs.operation) {
-        erreur.textContent = 'Décrivez l\'opération à réaliser.';
+        erreur.textContent = I18n.t('preventif.modifier_dans_fenetre.decrivez_operation_realiser');
         erreur.hidden = false;
         UI.$('#pv-nouvelle-operation', formulaire).focus();
         return;
       }
-      if (!await agir(section, () => Preventif.ajouterOperation(gammeId, valeurs), 'ajout d\'une opération')) return;
+      if (!await agir(section, () => Preventif.ajouterOperation(gammeId, valeurs), I18n.t('preventif.brancher_check_liste.ajout_operation'))) return;
       redessiner();
       UI.$('#pv-nouvelle-operation', section).focus();
     });
@@ -661,19 +666,19 @@ Object.assign(Preventif, (() => {
 
   document.addEventListener('DOMContentLoaded', () => {
     App.ecran({
-      id: 'preventif', route: /^#\/preventif$/, titre: 'Préventif',
-      menu: { libelle: 'Préventif', icone: 'preventif', ordre: 35 },
+      id: 'preventif', route: /^#\/preventif$/, get titre() { return I18n.t('preventif.liste.preventif'); },
+      menu: { get libelle() { return I18n.t('preventif.liste.preventif'); }, icone: 'preventif', ordre: 35 },
       profils: ['technicien', 'responsable'],
       get tables() { return App.estResponsable() ? TABLES_ECRANS.concat(TABLES_SUGGESTIONS) : TABLES_ECRANS; },
       afficher: afficherListe,
     });
     App.ecran({
-      id: 'preventif-gamme-nouvelle', route: /^#\/preventif\/gamme\/nouvelle$/, titre: 'Nouvelle gamme',
+      id: 'preventif-gamme-nouvelle', route: /^#\/preventif\/gamme\/nouvelle$/, get titre() { return I18n.t('preventif.liste.nouvelle_gamme'); },
       parent: 'preventif', profils: ['responsable'], tables: ['equipements', 'compteurs'],
       afficher: afficherNouvelle,
     });
     App.ecran({
-      id: 'preventif-gamme', route: /^#\/preventif\/gamme\/(?<id>(?!nouvelle$)[^/?]+)$/, titre: 'Gamme de préventif',
+      id: 'preventif-gamme', route: /^#\/preventif\/gamme\/(?<id>(?!nouvelle$)[^/?]+)$/, get titre() { return I18n.t('preventif.titre.gamme_preventif'); },
       parent: 'preventif', profils: ['technicien', 'responsable'], tables: TABLES_ECRANS,
       afficher: afficherFiche,
     });

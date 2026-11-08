@@ -17,6 +17,10 @@ from commun import CasNavigateur, RACINE, ServeurStatique, installer_dossier_sim
 PAGE = "/tests/fixtures/page-stockage-dossier.html"
 NOM_DOSSIER_SIMULE = "donnees-test"
 BOM = b"\xef\xbb\xbf"
+# T232 (texte de Nicolas, le même que serveur.py) : fichier ouvert dans Excel, nommé ; repli si le nom n'est pas connu.
+MESSAGE_FICHIER_OUVERT = "Le fichier « %s » est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez."
+MESSAGE_FICHIER_OUVERT_SANS_NOM = ("Un fichier du dossier de données est ouvert dans Excel ou un autre logiciel : "
+                                   "fermez-le, puis réessayez.")
 
 # Petits outils JavaScript ajoutés à la page de test (rien de tout cela n'est dans le code testé).
 AIDE_JS = """
@@ -450,7 +454,7 @@ class TestStockageDossier(CasNavigateur):
         self.enregistrer("equipements", etat, None)
         self.reussir("ajouter", "journal", octets_js(b"id;texte\r\n1;x\r\n"))
         self.assertEqual(self.lire_opfs("sauvegardes/%s/equipements.csv" % jour), etat)
-        self.assertEqual(self.lister_opfs("sauvegardes/%s" % jour), ["equipements.csv"])
+        self.assertEqual(self.lister_opfs("sauvegardes/%s" % jour), ["equipements.csv", "manifeste.json"])   # T188
 
     def test_ecritures_simultanees_une_seule_sauvegarde_du_jour_complete(self):
         self.choisir_dossier()
@@ -764,7 +768,39 @@ class TestStockageDossier(CasNavigateur):
         resultat = self.appeler("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;moi\n")), None)
         self.assertFalse(resultat["ok"], resultat)
         self.assertEqual(resultat["nom"], "ErreurStockage")
+        self.assertEqual(resultat["message"], MESSAGE_FICHIER_OUVERT % "equipements.csv")      # T232
         self.assertIsNone(self.lire_opfs("equipements.csv"))
+
+    def test_fichier_ouvert_dans_excel_le_message_nomme_le_fichier(self):
+        """T232 : refus « fichier ouvert » (NoModificationAllowedError) à l'écriture d'une table, puis du journal : le
+        message nomme le fichier refusé (texte de Nicolas, le même que serveur.py) ; repli quand le nom n'est pas
+        connu (ici, un refus hors des écritures, à la lecture)."""
+        self.choisir_dossier_enveloppe()
+        avant = csv("id;nom\nEQ-0001;a\n")
+        self.enregistrer("equipements", avant, None)
+        self.page.evaluate("() => { crochets.ecritureEnEchec = (nom) => nom === 'equipements.csv' "
+                           "|| nom === 'journal.csv'; }")
+        for methode, arguments, fichier in [
+                ("enregistrer", ("equipements", octets_js(csv("id;nom\nEQ-0001;b\n")), empreinte(avant)),
+                 "equipements.csv"),
+                ("ajouter", ("journal", self.corps_journal("J-1")), "journal.csv")]:
+            with self.subTest(methode=methode):
+                erreur = self.echouer(methode, *arguments)
+                self.assertEqual((erreur["nom"], erreur["message"]),
+                                 ("ErreurStockage", MESSAGE_FICHIER_OUVERT % fichier))
+        self.assertEqual(self.lire_opfs("equipements.csv"), avant)
+        self.assertIsNone(self.lire_opfs("journal.csv"))
+        self.page.evaluate("""() => {
+            crochets.ecritureEnEchec = null;
+            crochets.avantGetFileHandle = (nom) => {
+                if (nom !== 'equipements.csv') { return; }
+                const erreur = new Error('refus simulé');
+                erreur.name = 'NoModificationAllowedError';
+                throw erreur;
+            };
+        }""")
+        erreur = self.echouer("charger", "equipements")
+        self.assertEqual((erreur["nom"], erreur["message"]), ("ErreurStockage", MESSAGE_FICHIER_OUVERT_SANS_NOM))
 
     def test_dossier_de_donnees_disparu_donne_une_erreur(self):
         """Dossier supprimé ou clé USB débranchée : erreur, et non « fichier absent » (base vide)."""
@@ -825,7 +861,7 @@ class TestStockageDossier(CasNavigateur):
         self.assertEqual(len(du_jour), 1, liste)
         self.assertEqual(du_jour[0]["tables"], ["equipements", "journal"])
         self.assertEqual([n for n in self.lister_opfs("sauvegardes/%s" % jour, page=seconde)
-                          if not n.startswith(".")], ["equipements.csv", "journal.csv"])
+                          if not n.startswith(".")], ["equipements.csv", "journal.csv", "manifeste.json"])
         seconde.close()
 
     def test_sauvegarde_en_cours_sur_un_autre_poste_n_est_pas_effacee(self):

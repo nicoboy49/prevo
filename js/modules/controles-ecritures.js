@@ -44,7 +44,7 @@ Object.assign(Controles, (() => {
 
   function ligneDuControle(lignes, controleId) {
     const ligne = lignes.find((l) => l.id === controleId);
-    if (!ligne) throw ErreurValidation('Le contrôle ' + (controleId || '(non choisi)') + ' est introuvable.');
+    if (!ligne) throw ErreurValidation(I18n.t('controles.ligne_du_controle.controle_introuvable', { controleId: (controleId || I18n.t('controles.ligne_du_controle.non_choisi')) }));
     return ligne;
   }
 
@@ -64,8 +64,8 @@ Object.assign(Controles, (() => {
   /** Erreur [{ nom, message }] d'un champ date : illisible, ou (si `pasFuture`) après aujourd'hui. */
   function erreursDate(nom, valeur, jour, pasFuture, libelle) {
     if (!texte(valeur)) return [];
-    if (!dateIso(valeur) || texte(valeur).length !== 10) return [{ nom, message: libelle + ' : date illisible (format AAAA-MM-JJ).' }];
-    if (pasFuture && texte(valeur) > jour) return [{ nom, message: libelle + ' ne peut pas être dans le futur.' }];
+    if (!dateIso(valeur) || texte(valeur).length !== 10) return [{ nom, message: I18n.t('controles.erreurs_date.date_illisible_format_aaaa', { libelle }) }];
+    if (pasFuture && texte(valeur) > jour) return [{ nom, message: I18n.t('controles.erreurs_date.peut_pas_etre_futur', { libelle }) }];
     return [];
   }
 
@@ -83,26 +83,25 @@ Object.assign(Controles, (() => {
     const erreurs = [];
     const jour = dateDuJour(aujourdhui);
     const equipementId = texte(valeurs.equipement_id);
-    if (!equipementId) erreurs.push({ nom: 'equipement_id', message: 'Choisissez l\'équipement contrôlé.' });
+    if (!equipementId) erreurs.push({ nom: 'equipement_id', message: I18n.t('controles.verifier_controle.choisissez_equipement_controle') });
     else if (!Donnees.trouver('equipements', equipementId)) {
-      erreurs.push({ nom: 'equipement_id', message: 'L\'équipement ' + equipementId + ' est introuvable.' });
+      erreurs.push({ nom: 'equipement_id', message: I18n.t('controles.verifier_controle.equipement_introuvable', { equipementId }) });
     }
     if (!texte(valeurs.nature)) {
-      erreurs.push({ nom: 'nature', message: 'La nature du contrôle est obligatoire (ex. VGP du pont roulant).' });
+      erreurs.push({ nom: 'nature', message: I18n.t('controles.verifier_controle.nature_controle_obligatoire_ex') });
     }
     const brute = texte(valeurs.periodicite_mois);
     const mois = Donnees.nombre(brute);
-    if (!brute) erreurs.push({ nom: 'periodicite_mois', message: 'La périodicité est obligatoire (en mois, ex. 12).' });
+    if (!brute) erreurs.push({ nom: 'periodicite_mois', message: I18n.t('controles.verifier_controle.periodicite_obligatoire_mois_ex') });
     else if (mois === null || !Number.isInteger(mois) || mois <= 0 || mois > PERIODICITE_MAX_MOIS) {
-      erreurs.push({ nom: 'periodicite_mois', message: 'La périodicité doit être un nombre entier de mois supérieur à 0 (ex. 6 ou 12), '
-        + PERIODICITE_MAX_MOIS + ' au plus.' });
+      erreurs.push({ nom: 'periodicite_mois', message: I18n.t('controles.verifier_controle.periodicite_doit_etre_nombre', { maximum: PERIODICITE_MAX_MOIS }) });
     }
-    erreurs.push(...erreursDate('derniere_date', valeurs.derniere_date, jour, true, 'La date du dernier contrôle'));
-    erreurs.push(...erreursDate('prochaine_date', valeurs.prochaine_date, jour, false, 'La date du prochain contrôle'));
+    erreurs.push(...erreursDate('derniere_date', valeurs.derniere_date, jour, true, I18n.t('controles.verifier_controle.date_dernier_controle')));
+    erreurs.push(...erreursDate('prochaine_date', valeurs.prochaine_date, jour, false, I18n.t('controles.verifier_controle.date_prochain_controle')));
     const derniere = dateIso(valeurs.derniere_date);
     const prochaine = dateIso(valeurs.prochaine_date);
     if (derniere && prochaine && prochaine <= derniere && !erreurs.some((e) => e.nom === 'prochaine_date')) {
-      erreurs.push({ nom: 'prochaine_date', message: 'La date du prochain contrôle doit suivre celle du dernier (' + UI.dateFr(derniere) + ').' });
+      erreurs.push({ nom: 'prochaine_date', message: I18n.t('controles.verifier_controle.date_prochain_controle_doit', { derniere: UI.dateFr(derniere) }) });
     }
     return erreurs;
   }
@@ -141,14 +140,14 @@ Object.assign(Controles, (() => {
   function verifierRealisation(controle, valeurs, aujourdhui) {
     const jour = dateDuJour(aujourdhui);
     const date = texte(valeurs.date);
-    if (!date) return [{ nom: 'date', message: 'Indiquez la date du contrôle.' }];
-    const erreurs = erreursDate('date', date, jour, true, 'La date du contrôle');
+    if (!date) return [{ nom: 'date', message: I18n.t('controles.verifier_realisation.indiquez_date_controle') }];
+    const erreurs = erreursDate('date', date, jour, true, I18n.t('controles.verifier_realisation.date_controle'));
     const derniere = dateIso(controle.derniere_date);
     if (!erreurs.length && derniere && date < derniere) {
-      erreurs.push({ nom: 'date', message: 'Le dernier contrôle enregistré date du ' + UI.dateFr(derniere) + ' : une date antérieure est refusée.' });
+      erreurs.push({ nom: 'date', message: I18n.t('controles.verifier_realisation.dernier_controle_enregistre_date', { derniere: UI.dateFr(derniere) }) });
     }
     if (periodicite(controle) === null) {
-      erreurs.push({ nom: 'date', message: 'La périodicité du contrôle n\'est pas renseignée : modifiez d\'abord le contrôle.' });
+      erreurs.push({ nom: 'date', message: I18n.t('controles.verifier_realisation.periodicite_controle_pas_renseignee') });
     }
     return erreurs;
   }
@@ -183,17 +182,17 @@ Object.assign(Controles, (() => {
 
   /** Contrôle d'une levée d'observations : [{ nom, message }]. */
   function verifierLevee(controle, valeurs, aujourdhui) {
-    if (!observationsALever(controle)) return [{ nom: 'commentaire', message: 'Ce contrôle n\'a pas d\'observation à lever.' }];
+    if (!observationsALever(controle)) return [{ nom: 'commentaire', message: I18n.t('controles.verifier_levee.controle_pas_observation_lever') }];
     const jour = dateDuJour(aujourdhui);
     const date = texte(valeurs.date);
-    const erreurs = date ? erreursDate('date', date, jour, true, 'La date de levée')
-      : [{ nom: 'date', message: 'Indiquez la date à laquelle les observations ont été levées.' }];
+    const erreurs = date ? erreursDate('date', date, jour, true, I18n.t('controles.verifier_levee.date_levee'))
+      : [{ nom: 'date', message: I18n.t('controles.verifier_levee.indiquez_date_laquelle_observations') }];
     const derniere = dateIso(controle.derniere_date);
     if (!erreurs.length && derniere && date < derniere) {
-      erreurs.push({ nom: 'date', message: 'Les observations datent du contrôle du ' + UI.dateFr(derniere) + ' : une levée antérieure est refusée.' });
+      erreurs.push({ nom: 'date', message: I18n.t('controles.verifier_levee.observations_datent_controle_levee', { derniere: UI.dateFr(derniere) }) });
     }
     if (!texte(valeurs.commentaire)) {
-      erreurs.push({ nom: 'commentaire', message: 'Décrivez ce qui a été fait (ex. purgeur remplacé, attestation reçue).' });
+      erreurs.push({ nom: 'commentaire', message: I18n.t('controles.verifier_levee.decrivez_ete_fait_ex') });
     }
     return erreurs;
   }
@@ -224,9 +223,9 @@ Object.assign(Controles, (() => {
   /** Message d'erreur si le fichier ne peut pas servir de rapport, sinon ''. */
   function verifierFichierRapport(fichier) {
     if (!fichier) return '';
-    if (!EXTENSIONS_RAPPORT.includes(extensionDe(fichier.name))) return 'Le rapport doit être un PDF ou une photo (JPG, PNG, WebP).';
+    if (!EXTENSIONS_RAPPORT.includes(extensionDe(fichier.name))) return I18n.t('controles.verifier_fichier_rapport.rapport_doit_etre_pdf');
     if (fichier.size > TAILLE_MAX_RAPPORT && !EXTENSIONS_PHOTO.includes(extensionDe(fichier.name))) {
-      return 'Ce fichier est trop volumineux (9 Mo au maximum).';
+      return I18n.t('commun.message.fichier_trop_volumineux');
     }
     return '';
   }
@@ -247,7 +246,7 @@ Object.assign(Controles, (() => {
     const photo = EXTENSIONS_PHOTO.includes(extensionDe(fichier.name));
     const contenu = photo ? await UI.redimensionnerPhoto(fichier, COTE_MAX_PHOTO) : fichier;
     const extension = photo ? 'jpg' : extensionDe(fichier.name);
-    if (contenu.size > TAILLE_MAX_RAPPORT) throw ErreurValidation('Ce fichier est trop volumineux (9 Mo au maximum).');
+    if (contenu.size > TAILLE_MAX_RAPPORT) throw ErreurValidation(I18n.t('commun.message.fichier_trop_volumineux'));
     const base = ('controle-' + texte(controleId) + '-' + texte(date)).replace(/[^A-Za-z0-9._-]+/g, '-');
     for (let rang = 1; rang <= ESSAIS_NOM_RAPPORT; rang += 1) {
       const nom = base + (rang === 1 ? '' : '-' + rang) + '.' + extension;

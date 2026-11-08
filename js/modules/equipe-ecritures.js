@@ -40,10 +40,6 @@ Object.assign(Equipe, (() => {
     return lu === null ? texte(valeur) : String(Math.round(lu * 1e6) / 1e6);
   }
 
-  function libelleDate(valeur) {
-    return dateIso(valeur) ? UI.dateFr(valeur) : 'sans échéance';
-  }
-
   // ===========================================================================================
   // 4. Techniciens : création, modification, désactivation
   // ===========================================================================================
@@ -55,21 +51,21 @@ Object.assign(Equipe, (() => {
    */
   function verifierTechnicien(valeurs, lignesTechniciens, idCourant) {
     const erreurs = [];
-    if (!texte(valeurs.nom)) erreurs.push({ nom: 'nom', message: 'Le nom du technicien est obligatoire.' });
+    if (!texte(valeurs.nom)) erreurs.push({ nom: 'nom', message: I18n.t('equipe.verifier_technicien.nom_technicien_obligatoire') });
     const taux = texte(valeurs.taux_horaire);
     if (taux !== '' && (Donnees.nombre(taux) === null || Donnees.nombre(taux) < 0)) {
-      erreurs.push({ nom: 'taux_horaire', message: 'Le taux horaire est un nombre d\'euros par heure, jamais négatif (ex. 42).' });
+      erreurs.push({ nom: 'taux_horaire', message: I18n.t('equipe.verifier_technicien.taux_horaire_nombre_euros') });
     }
     const capacite = texte(valeurs.capacite_h_semaine);
     const heures = Donnees.nombre(capacite);
     if (capacite !== '' && (heures === null || heures < 0 || heures > CAPACITE_MAX_H)) {
-      erreurs.push({ nom: 'capacite_h_semaine', message: 'La capacité est comprise entre 0 et ' + CAPACITE_MAX_H + ' heures par semaine (ex. 35).' });
+      erreurs.push({ nom: 'capacite_h_semaine', message: I18n.t('equipe.verifier_technicien.capacite_entre', { n: CAPACITE_MAX_H }) });
     }
     if (texte(valeurs.nom) && texte(valeurs.actif) !== '0') {
       const cle = UI.normaliserRecherche(texte(valeurs.nom) + ' ' + texte(valeurs.prenom));
       const double = (lignesTechniciens || []).find((ligne) => ligne.id !== idCourant && estActif(ligne)
         && UI.normaliserRecherche(texte(ligne.nom) + ' ' + texte(ligne.prenom)) === cle);
-      if (double) erreurs.push({ nom: 'nom', message: 'Un technicien actif porte déjà ce nom (' + double.id + ').' });
+      if (double) erreurs.push({ nom: 'nom', message: I18n.t('equipe.verifier_technicien.technicien_actif_porte_deja', { doubleId: double.id }) });
     }
     return erreurs;
   }
@@ -105,7 +101,7 @@ Object.assign(Equipe, (() => {
     let action = 'modification du technicien';
     return Donnees.modifier('techniciens', (lignes) => {
       const ligne = lignes.find((l) => l.id === technicienId);
-      if (!ligne) throw ErreurValidation('Le technicien ' + technicienId + ' est introuvable.');
+      if (!ligne) throw ErreurValidation(I18n.t('equipe.modifier_technicien.technicien_introuvable', { technicienId }));
       refuserSiErreurs(verifierTechnicien(Object.assign({}, ligne, propres), lignes, technicienId));
       const changes = Object.keys(propres).filter((nom) => texte(ligne[nom]) !== propres[nom]);
       changes.forEach((nom) => { ligne[nom] = propres[nom]; });
@@ -122,14 +118,14 @@ Object.assign(Equipe, (() => {
   /** Contrôle les valeurs d'une habilitation : intitulé, obtention obligatoires ; échéance ≥ obtention. */
   function verifierHabilitation(valeurs) {
     const erreurs = [];
-    if (!texte(valeurs.intitule)) erreurs.push({ nom: 'intitule', message: 'L\'intitulé est obligatoire (ex. BR, H0V, CACES R489).' });
+    if (!texte(valeurs.intitule)) erreurs.push({ nom: 'intitule', message: I18n.t('equipe.verifier_habilitation.intitule_obligatoire_ex_br') });
     const obtention = texte(valeurs.date_obtention);
     const echeance = texte(valeurs.date_echeance);
-    if (!obtention) erreurs.push({ nom: 'date_obtention', message: 'La date d\'obtention est obligatoire.' });
-    else if (!dateIso(obtention)) erreurs.push({ nom: 'date_obtention', message: 'Date d\'obtention illisible (format AAAA-MM-JJ).' });
-    if (echeance && !dateIso(echeance)) erreurs.push({ nom: 'date_echeance', message: 'Date d\'échéance illisible (format AAAA-MM-JJ).' });
+    if (!obtention) erreurs.push({ nom: 'date_obtention', message: I18n.t('equipe.verifier_habilitation.date_obtention_obligatoire') });
+    else if (!dateIso(obtention)) erreurs.push({ nom: 'date_obtention', message: I18n.t('equipe.verifier_habilitation.date_obtention_illisible_format') });
+    if (echeance && !dateIso(echeance)) erreurs.push({ nom: 'date_echeance', message: I18n.t('equipe.verifier_habilitation.date_echeance_illisible_format') });
     else if (echeance && dateIso(obtention) && echeance < obtention) {
-      erreurs.push({ nom: 'date_echeance', message: 'L\'échéance ne peut pas précéder la date d\'obtention (' + UI.dateFr(obtention) + ').' });
+      erreurs.push({ nom: 'date_echeance', message: I18n.t('equipe.verifier_habilitation.echeance_peut_pas_preceder', { obtention: UI.dateFr(obtention) }) });
     }
     return erreurs;
   }
@@ -144,7 +140,8 @@ Object.assign(Equipe, (() => {
 
   function technicienExistant(technicienId) {
     const technicien = Donnees.trouver('techniciens', texte(technicienId));
-    if (!technicien) throw ErreurValidation('Le technicien ' + (texte(technicienId) || '(non choisi)') + ' est introuvable.');
+    const nom = texte(technicienId) || I18n.t('equipe.technicien_existant.non_choisi');
+    if (!technicien) throw ErreurValidation(I18n.t('equipe.technicien_existant.technicien_introuvable', { nom }));
     return technicien;
   }
 
@@ -163,8 +160,7 @@ Object.assign(Equipe, (() => {
     return Donnees.modifier('habilitations', (lignes, outils) => {
       refuserSiErreurs(verifierHabilitation(propres));
       if (memeHabilitation(lignes, technicien.id, propres.intitule).length) {
-        throw ErreurValidation(nomComplet(technicien) + ' a déjà l\'habilitation « ' + propres.intitule
-          + ' » : utilisez « Renouveler » (nouvelle échéance) ou « Corriger » (erreur de saisie).');
+        throw ErreurValidation(I18n.t('equipe.ajouter_habilitation.deja_habilitation_utilisez_renouveler', { nomComplet: nomComplet(technicien), intitule: propres.intitule }));
       }
       const id = outils.nouvelId(lignes);
       lignes.push({ id, technicien_id: technicien.id, intitule: propres.intitule,
@@ -178,12 +174,12 @@ Object.assign(Equipe, (() => {
     const propres = valeursHabilitation(valeurs || {});
     return Donnees.modifier('habilitations', (lignes) => {
       const ligne = lignes.find((l) => l.id === habilitationId);
-      if (!ligne) throw ErreurValidation('L\'habilitation ' + habilitationId + ' est introuvable.');
+      if (!ligne) throw ErreurValidation(I18n.t('equipe.modifier_habilitation.habilitation_introuvable', { habilitationId }));
       const corrigee = Object.assign({}, ligne, propres);
       refuserSiErreurs(verifierHabilitation(corrigee));
       if (cleIntitule(corrigee.intitule) !== cleIntitule(ligne.intitule)
           && memeHabilitation(lignes, ligne.technicien_id, corrigee.intitule).length) {
-        throw ErreurValidation('Ce technicien a déjà l\'habilitation « ' + corrigee.intitule + ' ».');
+        throw ErreurValidation(I18n.t('equipe.modifier_habilitation.technicien_deja_habilitation', { intitule: corrigee.intitule }));
       }
       const changes = Object.keys(propres).filter((nom) => texte(ligne[nom]) !== propres[nom]);
       changes.forEach((nom) => { ligne[nom] = propres[nom]; });
@@ -202,22 +198,23 @@ Object.assign(Equipe, (() => {
     let action = 'renouvellement de ' + habilitationId;
     return Donnees.modifier('habilitations', (lignes, outils) => {
       const ancienne = lignes.find((l) => l.id === habilitationId);
-      if (!ancienne) throw ErreurValidation('L\'habilitation ' + habilitationId + ' est introuvable.');
+      if (!ancienne) throw ErreurValidation(I18n.t('equipe.modifier_habilitation.habilitation_introuvable', { habilitationId }));
       refuserSiErreurs(verifierHabilitation(Object.assign({ intitule: ancienne.intitule }, dates)));
       const lignesMeme = memeHabilitation(lignes, ancienne.technicien_id, ancienne.intitule);
       if (lignesMeme.some((l) => !texte(l.date_echeance))) {
-        throw ErreurValidation('L\'habilitation « ' + ancienne.intitule + ' » n\'a pas d\'échéance : rien à renouveler (corrigez-la si besoin).');
+        throw ErreurValidation(I18n.t('equipe.renouveler_habilitation.habilitation_pas_echeance_rien', { intitule: ancienne.intitule }));
       }
       // Une échéance illisible ne compte pas : le renouvellement la remplace.
       const actuelle = lignesMeme.map((l) => dateIso(l.date_echeance)).filter(Boolean).sort().pop() || '';
       if (dates.date_echeance && actuelle && dates.date_echeance <= actuelle) {
-        throw ErreurValidation('La nouvelle échéance doit dépasser l\'échéance actuelle (' + UI.dateFr(actuelle) + ').');
+        throw ErreurValidation(I18n.t('equipe.renouveler_habilitation.nouvelle_echeance_doit_depasser', { actuelle: UI.dateFr(actuelle) }));
       }
       const id = outils.nouvelId(lignes);
       lignes.push({ id, technicien_id: ancienne.technicien_id, intitule: ancienne.intitule,
         date_obtention: dates.date_obtention, date_echeance: dates.date_echeance });
+      // Action du journal (D156 : écrite dans les données, jamais traduite).
       action = 'renouvellement de ' + ancienne.id + ' (' + ancienne.intitule + ') : échéance '
-        + (actuelle ? UI.dateFr(actuelle) : 'illisible') + ' → ' + libelleDate(dates.date_echeance);
+        + (actuelle ? UI.dateFr(actuelle) : 'illisible') + ' → ' + (dateIso(dates.date_echeance) ? UI.dateFr(dates.date_echeance) : 'sans échéance');
       return id;
     }, { get action() { return action; } });          // texte lu après la mutation (voir modifierTechnicien)
   }

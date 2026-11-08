@@ -225,6 +225,38 @@ class TestIdentifiants(CasDonnees):
         self.assertRegex(resultat["journal"], r"^J-\d{14}-[A-Z0-9]{4}$")
         self.assertIn("parametres", resultat["tableSansIdentifiant"])
 
+    def test_journal_deux_lots_meme_seconde_memes_caracteres_sans_doublon(self):
+        """T261 : deux écritures du journal dans la même seconde (lots séparés), le hasard tirant deux fois les mêmes
+        caractères : le second identifiant est retiré, jamais un doublon (avant : seul le lot en cours comptait)."""
+        resultat = self.js("""async () => {
+          const adaptateur = StockageDemo.creer(DEMO_DONNEES.tables);
+          await demarrer(adaptateur);
+          const fige = Date.now();
+          const vraiNow = Date.now;
+          const vraiHasard = Math.random;
+          Date.now = () => fige;
+          const vraieDate = Date;
+          window.Date = class extends vraieDate { constructor(...a) { super(...(a.length ? a : [fige])); } static now() { return fige; } };
+          // Les 4 premiers tirages valent 0 (« AAAA ») pour chaque entrée, puis le hasard reprend.
+          let tirages = 0;
+          Math.random = () => { tirages += 1; return (tirages % 8) <= 4 && (tirages % 8) !== 0 ? 0 : vraiHasard(); };
+          try {
+            const premier = await Donnees.journaliser('equipements', 'EQ-0001', 'essai T261, premier lot');
+            tirages = 0;
+            const second = await Donnees.journaliser('equipements', 'EQ-0001', 'essai T261, second lot');
+            const ids = Donnees.lignes('journal').map((l) => l.id);
+            return { premier, second, doublons: ids.length - new Set(ids).size,
+                     erreurs: Donnees.problemes().filter((p) => p.table === 'journal' && p.type === 'doublon').length };
+          } finally {
+            Math.random = vraiHasard; window.Date = vraieDate; Date.now = vraiNow;
+          }
+        }""")
+        self.assertRegex(resultat["premier"], r"^J-\d{14}-AAAA$")
+        self.assertNotEqual(resultat["premier"], resultat["second"])
+        self.assertEqual(resultat["premier"][:17], resultat["second"][:17])     # même seconde
+        self.assertEqual(resultat["doublons"], 0)
+        self.assertEqual(resultat["erreurs"], 0)
+
 
 # ---------------------------------------------------------------------------
 # modifier : conflits, validation, journal

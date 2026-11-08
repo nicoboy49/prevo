@@ -1,18 +1,21 @@
 """Lot 7 — textes d'aide de l'accès et de l'installation, une seule source (D131 ; CS124, CS130 ; tâche T169).
 
 Ce qui est vérifié :
-    à jour       js/modules/acces-textes.js est exactement ce que produit outils/generer_acces_textes.py ;
+    à jour       js/modules/acces-textes.js et le bloc « acces » de js/i18n/aide/fr.js (textes français, clés
+                 aide.acces.*, T247) sont exactement ce que produit outils/generer_acces_textes.py ; un second passage
+                 ne change aucun octet ;
     options      chaque clé de CLES_CONFIGURATION (serveur.py) a son texte d'aide, identique à celui de
                  « serveur.py --aide » ;
     choix        chaque choix de l'assistant a son titre, qui est concerné, ce que ça change, pourquoi, et un conseil
                  pour chacune des trois situations (seul, équipe, informaticien) ;
-    chargement   le module est chargé par index.html et AccesTextes est lisible dans la page (mode démo).
+    chargement   le module est chargé par index.html et AccesTextes est lisible dans la page (mode démo), ses textes
+                 lus dans js/i18n/aide/fr.js.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_acces_textes.py" -v
 """
 import importlib.util
-import json
+import re
 import subprocess
 import sys
 import unittest
@@ -21,6 +24,8 @@ from commun import RACINE, CasNavigateur, attendre_pret, preregler_profil, url_f
 
 OUTIL = RACINE / "outils" / "generer_acces_textes.py"
 CIBLE = RACINE / "js" / "modules" / "acces-textes.js"
+AIDE = RACINE / "js" / "i18n" / "aide" / "fr.js"
+AIDE_EN = RACINE / "js" / "i18n" / "aide" / "en.js"
 
 
 def charger(chemin, nom):
@@ -31,9 +36,10 @@ def charger(chemin, nom):
 
 
 def lire_textes():
-    texte = CIBLE.read_text(encoding="utf-8")
-    debut = texte.index("const AccesTextes = ") + len("const AccesTextes = ")
-    return json.loads(texte[debut:texte.rindex(";")])
+    """Textes français d'AccesTextes ({ situations, choix, options }) : depuis T247, le module ne garde que des clés et
+    les textes sont dans js/i18n/aide/fr.js ; ce sont ceux de l'outil (test_fichier_a_jour : les deux fichiers en
+    sortent tels quels)."""
+    return charger(OUTIL, "generer_acces_textes_lecture").donnees()
 
 
 class TestSource(unittest.TestCase):
@@ -42,6 +48,18 @@ class TestSource(unittest.TestCase):
         outil = charger(OUTIL, "generer_acces_textes_test")
         self.assertEqual(CIBLE.read_bytes().decode("utf-8"), outil.contenu(),
                          "js/modules/acces-textes.js n'est pas à jour : py outils/generer_acces_textes.py")
+        aide = AIDE.read_bytes().decode("utf-8")
+        self.assertIn(outil.bloc(), aide, "js/i18n/aide/fr.js n'est pas à jour : py outils/generer_acces_textes.py")
+        # second passage : aucun octet ne change ; le module ne contient plus aucun texte, seulement des clés
+        self.assertEqual(outil.texte_aide(aide, "acces", outil.entrees()), aide)
+        self.assertEqual(set(re.findall(r"I18n\.t\('([^']+)'\)", outil.contenu())), set(outil.entrees()))
+        self.assertTrue(all(cle.startswith("aide.acces.") for cle in outil.entrees()))
+        # l'anglais (T277) : même mécanisme, mêmes clés que le français
+        aide_en = AIDE_EN.read_bytes().decode("utf-8")
+        self.assertIn(outil.bloc("en"), aide_en, "js/i18n/aide/en.js n'est pas à jour : py outils/generer_acces_textes.py")
+        self.assertEqual(outil.texte_aide(aide_en, "acces", outil.entrees(langue="en"), "en"), aide_en)
+        self.assertEqual(set(outil.entrees(langue="en")), set(outil.entrees()))
+        self.assertEqual(set(outil.OPTIONS_EN), set(outil.donnees()["options"]))
 
     def test_options_identiques_a_serveur_aide(self):
         serveur = charger(RACINE / "serveur.py", "serveur_prevo_textes_test")

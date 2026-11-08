@@ -234,6 +234,10 @@ class TestSansResume(CasFonctions):
 class TestCommentaireRapport(CasFonctions):
 
     def ouvrir_rapports(self, modele="faux"):
+        # Horloge du navigateur fixée à la date de référence de la démo (T194) : le serveur sert donnees/demo telle
+        # quelle (dates du 2026-10-19 au plus tard) ; un autre jour, le mois proposé pourrait n'avoir aucune
+        # disponibilité calculable, et le faux modèle, qui écrit toujours {disponibilite}, serait refusé (jeton inconnu).
+        self.contexte.clock.set_fixed_time("2026-10-19T09:00:00")
         page = self.ouvrir("#/indicateurs?onglet=rapports", modele=modele)
         page.wait_for_selector("#rapports-commentaire")
         return page
@@ -278,6 +282,16 @@ class TestCommentaireRapport(CasFonctions):
         self.assertIn("coût du mois est de %s." % tuiles["cout"], commentaire)
         self.assertTrue(attendre(lambda: any(l["action"].startswith("proposition IA utilisée (faux) : commentaire du rapport")
                                              for l in lire_csv(self.serveur.dossier, "journal.csv"))))
+
+    def test_commentaire_fige_en_anglais_demande_en_anglais_ecran_francais(self):
+        """T303 (D159, CS156) : la langue du rapport (liste « Langue du rapport ») est celle de la consigne, pas celle de l'écran."""
+        page = self.ouvrir_rapports()
+        page.select_option("#rapports-langue", "en")
+        page.click(".rapports-figer .ia-bouton")
+        page.wait_for_selector(".rapports-figer .ia-encadre .ia-texte")
+        systeme = self.faux.requetes_vers("/api/chat")[-1]["corps"]["messages"][0]["content"]
+        self.assertTrue(systeme.startswith("Fonction : commentaireRapport"))
+        self.assertTrue(systeme.endswith("Réponds en anglais (en)."), systeme[-80:])
 
     def test_commentaire_ecrit_a_la_main_sans_mention(self):
         page = self.ouvrir("#/indicateurs?onglet=rapports", ia=False)

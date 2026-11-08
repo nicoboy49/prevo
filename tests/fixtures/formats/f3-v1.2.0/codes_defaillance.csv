@@ -1,0 +1,13 @@
+﻿id;famille;code;libelle
+CD-0001;symptôme;S01;Fuite
+CD-0002;symptôme;S02;Bruit anormal
+CD-0003;symptôme;S03;Vibration
+CD-0004;symptôme;S04;Échauffement
+CD-0005;symptôme;S05;Arrêt intempestif
+CD-0006;symptôme;S06;Ne démarre pas
+CD-0007;symptôme;S07;Défaut qualité
+CD-0008;symptôme;S08;Pression ou débit bas
+CD-0009;symptôme;S09;Déclenchement disjoncteur
+CD-0010;symptôme;S10;Odeur de brûlé
+CD-0011;symptôme;S99;Autre symptôme
+CD-0012;cause;C01;Garniture usée

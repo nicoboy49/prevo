@@ -1,0 +1,13 @@
+﻿id;equipement_id;libelle;declencheur;periodicite_jours;compteur_id;periodicite_unites;seuil;avance_jours;derniere_realisation;releve_derniere_realisation;prochaine_echeance;temps_prevu_h;consignes;actif
+GAM-0001;EQ-0001;Entretien mensuel du compresseur CP-01;date;30;;;;3;2026-09-29;;2026-10-29;1.5;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0002;EQ-0001;Entretien des 2000 heures du compresseur CP-01;compteur;;CPT-0001;2000;;5;2026-07-10;14838;2027-01-06;4;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0003;EQ-0005;Contrôle trimestriel de la pompe PO-02;date;90;;;;7;2026-08-04;;2026-11-02;2;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0004;EQ-0022;Contrôle mensuel du convoyeur CV-01;date;30;;;;3;2026-09-14;;2026-10-14;1;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0005;EQ-0008;Contrôle mensuel de la ventilation VE-01;date;30;;;;3;2026-10-06;;2026-11-05;1;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0006;EQ-0020;Contrôle hydraulique et graissage de la presse PR-01;date;60;;;;5;2026-09-02;;2026-11-01;2.5;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0007;EQ-0001;Remplacement du séparateur air/huile de CP-01 (perte de charge);seuil;;CPT-0004;;0.8;0;2026-04-14;0.84;;2;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0008;EQ-0007;Entretien trimestriel du groupe froid GF-01;date;90;;;;7;2026-10-13;;2027-01-11;3;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0009;EQ-0030;Vérification du chariot CH-01 toutes les 200 heures;compteur;;CPT-0003;200;;5;2026-08-12;4659;2026-09-24;1.5;Débrancher la batterie avant toute intervention.;1
+GAM-0010;EQ-0014;Graissage et contrôle mensuel du tour CN-01;date;30;;;;3;2026-09-17;;2026-10-17;1.5;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0011;EQ-0003;Purge et contrôle du réservoir d'air RA-01;date;14;;;;1;2026-10-14;;2026-10-28;0.5;Le réservoir reste sous pression : ne jamais démonter le purgeur sans avoir isolé et purgé le réservoir.;1
+GAM-0012;EQ-0007;Contrôle de fonctionnement du groupe froid GF-01;date;14;;;;0;2026-10-12;;2026-10-26;0.5;Contrôle en marche, capots fermés : toute intervention sur le groupe exige l'habilitation BR.;1

@@ -55,7 +55,7 @@ Object.assign(Import, (() => {
     if (parCode) return { code: o.texte(parCode.code) };
     const parLibelle = codes.filter((c) => o.comparable(c.libelle) === cherche);
     if (parLibelle.length === 1) return { code: o.texte(parLibelle[0].code) };
-    return { erreur: parLibelle.length ? 'désigne plusieurs codes « ' + famille + ' »' : 'introuvable parmi les codes « ' + famille + ' »' };
+    return { erreur: parLibelle.length ? I18n.t('import.trouver_code.designe_plusieurs_codes', { famille }) : I18n.t('import.trouver_code.introuvable_parmi_codes', { famille }) };
   }
 
   // OT de la base : anciens numéros cités et clés de doublon supposé (le premier OT l'emporte).
@@ -69,19 +69,16 @@ Object.assign(Import, (() => {
     return { numeros, cles };
   }
 
-  // Ce qu'une ligne double : un OT de la base, ou une ligne plus haut dans le fichier.
-  const decrireDoublon = (deja) => (deja.ot ? deja.ot : 'la ligne ' + deja.ligne.numero);
-
   // Refus d'une ligne qu'on garde (contrôles du §18.6) : équipement, dates, nombres, titre → [raison].
   function controler(contexte, o, v) {
     const erreurs = [];
     const equipement = o.trouverEquipement(v.equipement, contexte);
-    if (!equipement) erreurs.push('équipement « ' + v.equipement + ' » introuvable dans Prévo');
-    if (!v.date_creation && !v.date_debut) erreurs.push('ni date de création ni date de début : ligne refusée (la date de fin seule ne suffit pas)');
+    if (!equipement) erreurs.push(I18n.t('import.controler.equipement_introuvable_prevo', { equipement: v.equipement }));
+    if (!v.date_creation && !v.date_debut) erreurs.push(I18n.t('import.controler.ni_date_creation_ni'));
     for (const cle of NOMBRES) {
-      if (v[cle] !== undefined && Number(v[cle]) < 0) erreurs.push(o.champDe(contexte.description, cle).libelle + ' : « ' + v[cle] + ' » ne peut pas être négatif');
+      if (v[cle] !== undefined && Number(v[cle]) < 0) erreurs.push(I18n.t('import.controler.negatif', { champ: o.champDe(contexte.description, cle).libelle, valeur: v[cle] }));
     }
-    if (!v.titre && !v.compte_rendu) erreurs.push('Titre obligatoire : ni titre ni compte rendu dans la ligne');
+    if (!v.titre && !v.compte_rendu) erreurs.push(I18n.t('import.controler.titre_obligatoire_ni_titre'));
     return { equipement, erreurs };
   }
 
@@ -89,25 +86,25 @@ Object.assign(Import, (() => {
   function construireOt(contexte, o, ligne, equipement) {
     const [v, raisons] = [ligne.valeurs, ligne.raisons];
     const type = v.type || TYPE_DEFAUT;
-    if (!v.type) raisons.push('Type absent : « ' + TYPE_DEFAUT + ' » par défaut');
+    if (!v.type) raisons.push(I18n.t('import.construire_ot.type_absent', { type: Schema.libelleValeur('ordres_travail', 'type', TYPE_DEFAUT) }));
     const priorite = v.priorite || PRIORITE_DEFAUT;
-    if (!v.priorite) raisons.push('Priorité absente : « ' + PRIORITE_DEFAUT + ' » par défaut');
+    if (!v.priorite) raisons.push(I18n.t('import.construire_ot.priorite_absente', { priorite: Schema.libelleValeur('ordres_travail', 'priorite', PRIORITE_DEFAUT) }));
     const titre = v.titre || titreDe(v.compte_rendu, o);
-    if (!v.titre) raisons.push('Titre absent : début du compte rendu repris');
+    if (!v.titre) raisons.push(I18n.t('import.construire_ot.titre_absent_debut_compte'));
     const dateCreation = v.date_creation || v.date_debut;
-    if (!v.date_creation) raisons.push('Date de création absente : date de début reprise');
+    if (!v.date_creation) raisons.push(I18n.t('import.construire_ot.date_creation_absente_date'));
     const dateDebut = v.date_debut || '';
     const dateFin = v.date_fin || dateDebut || dateCreation;
-    if (!v.date_fin) raisons.push('Date de fin absente : ' + (dateDebut ? 'date de début' : 'date de création') + ' reprise');
+    if (!v.date_fin) raisons.push(dateDebut ? I18n.t('import.construire_ot.date_fin_absente_debut') : I18n.t('import.construire_ot.date_fin_absente_creation'));
     // Durée d'arrêt : vide si absente, jamais 0 inventé (ajustement 3) ; arrêt : la colonne, sinon une durée > 0.
     const duree = v.duree_arret_h || '';
     const avecDuree = duree !== '' && Number(duree) > 0;
     let arret = v.arret_production;
     if (arret === undefined) {
       arret = avecDuree ? '1' : '0';
-      if (avecDuree) raisons.push("Arrêt de production absent : « oui », car une durée d'arrêt est donnée");
-    } else if (arret === '0' && avecDuree) raisons.push("Arrêt de production « non » malgré une durée d'arrêt : laissé à « non »");
-    if (arret === '1' && duree === '') raisons.push("Arrêt de production sans durée d'arrêt : durée laissée vide (panne hors MTTR et disponibilité)");
+      if (avecDuree) raisons.push(I18n.t('import.construire_ot.arret_production_absent_oui'));
+    } else if (arret === '0' && avecDuree) raisons.push(I18n.t('import.construire_ot.arret_production_non_malgre'));
+    if (arret === '1' && duree === '') raisons.push(I18n.t('import.construire_ot.arret_production_sans_duree'));
     // Codes par code ou libellé, dans la famille de la colonne seulement ; jamais créés.
     const codes = {};
     for (const [cle, famille] of FAMILLES) {
@@ -115,16 +112,16 @@ Object.assign(Import, (() => {
       if (v[cle] === undefined) continue;
       const trouve = trouverCode(famille, v[cle], o);
       if (trouve.code) codes[cle] = trouve.code;
-      else raisons.push(o.champDe(contexte.description, cle).libelle + ' « ' + v[cle] + ' » ' + trouve.erreur + ' : laissé vide (aucun code créé)');
+      else raisons.push(I18n.t('import.construire_ot.code_laisse_vide', { champ: o.champDe(contexte.description, cle).libelle, valeur: v[cle], erreur: trouve.erreur }));
     }
     let technicienId = '';
     if (v.technicien !== undefined) {
       const technicien = o.trouverTechnicien(v.technicien);
       if (technicien.id) technicienId = technicien.id;
-      else raisons.push(technicien.erreur + ' : laissé vide');
+      else raisons.push(I18n.t('import.construire_ot.laisse_vide', { erreur: technicien.erreur }));
     }
     const avecTemps = v.temps_passe_h !== undefined && Number(v.temps_passe_h) > 0;
-    if (avecTemps && !technicienId) raisons.push('Temps passé sans technicien : ligne de temps sans technicien');
+    if (avecTemps && !technicienId) raisons.push(I18n.t('import.construire_ot.temps_passe_sans_technicien'));
     const numero = v.ancien_numero || '';
     const compteRendu = numero ? ligneAncienNumero(numero) + (v.compte_rendu ? '\n' + v.compte_rendu : '') : (v.compte_rendu || '');
     const ot = o.nouvelleLigne('ordres_travail', Object.assign({
@@ -142,7 +139,7 @@ Object.assign(Import, (() => {
     if (!(cellules || []).some((cellule) => o.texte(cellule) !== '')) return;            // ligne vide : ignorée
     const ligne = { numero: contexte.premierNumero + rang, rang, action: 'creer', raisons: [], valeurs: {}, changements: [], cible: '' };
     contexte.lignes.push(ligne);
-    if (rang >= o.PLAFOND_LIGNES) return o.refuser(ligne, 'au-delà de ' + o.PLAFOND_LIGNES + ' lignes (plafond) : ligne non lue');
+    if (rang >= o.PLAFOND_LIGNES) return o.refuser(ligne, I18n.t('import.lire_ligne.plafond', { n: o.PLAFOND_LIGNES }));
     const lu = o.lireCellules(contexte.description, contexte.colonnes, cellules);
     const v = ligne.valeurs = lu.valeurs;
     ligne.raisons.push(...lu.notes);
@@ -152,7 +149,8 @@ Object.assign(Import, (() => {
     const deja = cleNumero ? index.base.numeros.get(cleNumero) || index.fichier.numeros.get(cleNumero) : null;
     if (deja) {
       Object.assign(ligne, { action: 'doublon_sur', _doublon: deja });
-      ligne.raisons.unshift('Doublon sûr : ancien n° « ' + numero + ' » déjà ' + (deja.ot ? 'dans Prévo (' + deja.ot + ')' : 'à la ligne ' + deja.ligne.numero + ' du fichier') + ' : ligne ignorée');
+      ligne.raisons.unshift(deja.ot ? I18n.t('import.lire_ligne.doublon_sur_ot', { numero, ot: deja.ot })
+        : I18n.t('import.lire_ligne.doublon_sur_ligne', { numero, ligne: deja.ligne.numero }));
       return;
     }
     // 2. Refus
@@ -168,11 +166,12 @@ Object.assign(Import, (() => {
       ligne._doublon = suppose;
       if (!index.forcees.has(ligne.numero)) {
         ligne.action = 'doublon_suppose';
-        ligne.raisons.unshift('Doublon supposé : même équipement, même date de création et même titre que ' + decrireDoublon(suppose)
-          + ' ; cochez « Importer quand même » pour l\'importer');
+        ligne.raisons.unshift(suppose.ot ? I18n.t('import.lire_ligne.doublon_suppose_ot', { ot: suppose.ot })
+          : I18n.t('import.lire_ligne.doublon_suppose_ligne', { ligne: suppose.ligne.numero }));
         return;
       }
-      ligne.raisons.unshift('Doublon supposé de ' + decrireDoublon(suppose) + ' : importée quand même (case « Importer quand même » cochée)');
+      ligne.raisons.unshift(suppose.ot ? I18n.t('import.lire_ligne.importee_quand_meme_ot', { ot: suppose.ot })
+        : I18n.t('import.lire_ligne.importee_quand_meme_ligne', { ligne: suppose.ligne.numero }));
     } else index.fichier.cles.set(cle, { ligne });
     ligne._objet = o.prevoir(contexte, 'ordres_travail', ot, ligne);
     if (temps) o.prevoir(contexte, 'ot_temps', o.nouvelleLigne('ot_temps', Object.assign({ ot_id: ot }, temps)), ligne);

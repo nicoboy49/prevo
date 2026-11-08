@@ -390,7 +390,8 @@ class TestEnrolement(CasAppareils):
         for invitation in ("x" * 43, "pas un jeton", "", jeton[:-1] + ("A" if jeton[-1] != "A" else "B")):
             with self.subTest(invitation=invitation[:12]):
                 reponse = self.enroler(invitation)
-                self.assertEqual((reponse.statut, reponse.json()), (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE}))
+                self.assertEqual((reponse.statut, reponse.json()), (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE,
+                                                                          "erreur_code": "appareils.invitation_refusee"}))
                 self.assertNotIn("set-cookie", reponse.entetes)
         for corps in ({"invitation": jeton}, {"invitation": jeton, "nom": "   "}, {"invitation": jeton, "nom": "x" * 61},
                       {"invitation": jeton, "nom": 12}, {"invitation": 12, "nom": "Léa"}):
@@ -405,7 +406,8 @@ class TestEnrolement(CasAppareils):
         self.assertEqual(self.enroler(jeton).statut, 200)
         self.serveur.avancer(1)
         expiree = self.enroler(jeton)
-        self.assertEqual((expiree.statut, expiree.json()), (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE}))
+        self.assertEqual((expiree.statut, expiree.json()), (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE,
+                                                                  "erreur_code": "appareils.invitation_refusee"}))
         liste = self.client.requete("GET", "/api/acces/invitations", cookie=self.responsable_frais()).json()["invitations"]
         self.assertEqual([(i["revoquee"], i["valide"]) for i in liste], [(False, False)])
         # Révoquée : plus personne ne s'enrôle ; 404 pour un id inconnu ; le journal le dit.
@@ -415,7 +417,8 @@ class TestEnrolement(CasAppareils):
         self.assertEqual((revocation.statut, revocation.json()), (200, {"invitation": neuve["invitation"]["id"],
                                                                         "revoquee": True}))
         revoquee = self.enroler(neuve["jeton"])
-        self.assertEqual((revoquee.statut, revoquee.json()), (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE}))
+        self.assertEqual((revoquee.statut, revoquee.json()), (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE,
+                                                                    "erreur_code": "appareils.invitation_refusee"}))
         self.assertEqual(self.client.requete("POST", "/api/acces/invitations/INV-ZZZZ/revoquer",
                                              cookie=self.responsable).statut, 404)
         self.assertEqual([(l["qui"], l["resultat"]) for l in lignes_du_journal(self.donnees)][-1],
@@ -448,7 +451,8 @@ class TestDurees(CasAppareils):
         self.serveur.avancer(UN_AN + JOUR)
         refuse = self.client.requete("GET", "/api/csv/equipements", cookie=cookie)
         self.assertEqual(refuse.statut, 401)
-        self.assertEqual(refuse.json(), {"erreur": serveur.MESSAGE_APPAREIL_REFUSE, "appareil_refuse": True})
+        self.assertEqual(refuse.json(), {"erreur": serveur.MESSAGE_APPAREIL_REFUSE, "erreur_code": "appareils.refuse",
+                                         "appareil_refuse": True})
         self.assertEqual(refuse.set_cookie, COOKIE_APPAREIL_EFFACE)
         self.assertEqual(self.client.session(cookie), None)
         # Expiré depuis plus de 30 jours : oublié à l'écriture suivante (une invitation neuve).
@@ -496,7 +500,8 @@ class TestRevocation(CasAppareils):
         self.assertEqual((revocation.statut, revocation.json()), (200, {"appareil": identifiant, "revoque": True}))
         refuse = self.client.requete("GET", "/api/csv/equipements", cookie=cookie)
         self.assertEqual(refuse.statut, 401)
-        self.assertEqual(refuse.json(), {"erreur": serveur.MESSAGE_APPAREIL_REFUSE, "appareil_refuse": True})
+        self.assertEqual(refuse.json(), {"erreur": serveur.MESSAGE_APPAREIL_REFUSE, "erreur_code": "appareils.refuse",
+                                         "appareil_refuse": True})
         self.assertEqual(refuse.set_cookie, COOKIE_APPAREIL_EFFACE)
         self.assertEqual(self.client.session(cookie), None)
         self.assertEqual(self.client.session(autre)["appareil"], True)          # l'autre appareil continue
@@ -539,7 +544,8 @@ class TestDesactive(CasAppareils):
         jeton = self.inviter()["jeton"]
         self.serveur.config.reglages["demandeurs_avec_compte"] = True           # Intranet (D124)
         refuse = self.enroler(jeton)
-        self.assertEqual((refuse.statut, refuse.json()), (403, {"erreur": serveur.MESSAGE_ENROLEMENT_DESACTIVE}))
+        self.assertEqual((refuse.statut, refuse.json()), (403, {"erreur": serveur.MESSAGE_ENROLEMENT_DESACTIVE,
+                                                            "erreur_code": "appareils.enrolement_desactive"}))
         self.assertNotIn("set-cookie", refuse.entetes)
         ignore = self.client.requete("GET", "/api/csv/equipements", cookie=cookie)
         self.assertEqual((ignore.statut, ignore.set_cookie), (401, COOKIE_APPAREIL_EFFACE))
@@ -560,7 +566,8 @@ class TestSansComptes(CasAppareils):
             with self.subTest(chemin=chemin):
                 reponse = self.client.requete(methode, chemin, {"invitation": "x" * 43, "nom": "Léa"}
                                               if methode == "POST" else None)
-                self.assertEqual((reponse.statut, reponse.json()), (400, {"erreur": serveur.MESSAGE_SANS_COMPTES}))
+                self.assertEqual((reponse.statut, reponse.json()), (400, {"erreur": serveur.MESSAGE_SANS_COMPTES,
+                                                                          "erreur_code": "sessions.sans_comptes"}))
         self.assertFalse((self.donnees / "acces" / "appareils.json").exists())
 
 

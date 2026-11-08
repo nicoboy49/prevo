@@ -1,0 +1,13 @@
+id;reference;designation;fabricant;ref_fabricant;emplacement;unite;stock;stock_securite;point_commande;qte_commande;delai_jours;prix_unitaire;fournisseur_id;critique;actif
+ART-0001;'ROU-001;Roulement à billes 6204-2RS;Rouloran;'6204-2RS;A1-01;u;9;4;8;20;3;4.8;FOU-0001;0;1
+ART-0002;'ROU-002;Roulement à billes 6205-2RS;Rouloran;'6205-2RS;A1-02;u;9;4;8;20;3;5.6;FOU-0001;0;1
+ART-0003;'ROU-003;Roulement à billes 6206-2RS;Rouloran;'6206-2RS;A1-03;u;23;4;8;16;3;6.9;FOU-0001;0;1
+ART-0004;'ROU-004;Roulement à billes 6305-2RS;Rouloran;'6305-2RS;A1-04;u;22;4;8;16;3;8.5;FOU-0001;0;1
+ART-0005;'ROU-005;Roulement à billes 6308-2Z;Rouloran;'6308-2Z;A1-05;u;5;2;4;8;4;12.4;FOU-0001;0;1
+ART-0006;'ROU-006;Roulement à rotule sur rouleaux 22210;Rouloran;'22210-E;A1-06;u;3;1;2;4;6;38;FOU-0001;0;1
+ART-0007;'ROU-007;Palier à semelle UCP205;Rouloran;'UCP-205;A1-07;u;5;2;4;6;5;24;FOU-0001;0;1
+ART-0008;'TRA-001;Courroie trapézoïdale SPZ 1000;Cordalpe;'SPZ-1000;A1-08;u;5;2;4;8;3;9.9;FOU-0001;0;1
+ART-0009;'TRA-002;Courroie trapézoïdale SPA 1250;Cordalpe;'SPA-1250;A2-01;u;4;2;3;6;3;14.5;FOU-0001;0;1
+ART-0010;'TRA-003;Courroie crantée HTD 8M-1200;Cordalpe;'8M-1200;A2-02;u;6;1;2;4;5;26;FOU-0001;0;1
+ART-0011;'TRA-004;Galet de convoyeur Ø50;Convexa;'GC-50;A2-03;u;11;6;10;20;5;11;FOU-0001;0;1
+ART-0012;'TRA-005;Chaîne à rouleaux 08B-1 (au mètre);Cordalpe;'08B-1;A2-04;m;6;3;5;10;5;18;FOU-0001;0;1

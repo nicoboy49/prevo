@@ -8,7 +8,7 @@ Object.assign(Parc, (() => {
 
   // Règles et outils de parc-regles.js.
   const { cheminLocalisation, libelleEquipement, verifierEquipement, verifierLocalisation } = Parc;
-  const { comparerTextes, parRepere, identifiantsDescendants, dernierReleveDe, verifierReleve,
+  const { comparerLibelles, parRepere, identifiantsDescendants, dernierReleveDe, verifierReleve,
     estEnBaisse } = Parc.interne;
 
   const TAILLE_MAX_DOCUMENT = 9 * 1024 * 1024;        // le serveur refuse plus de 10 Mo
@@ -36,24 +36,24 @@ Object.assign(Parc, (() => {
 
   async function ouvrirFenetreLocalisation(idExistant) {
     const existante = idExistant ? Donnees.trouver('localisations', idExistant) : null;
-    if (idExistant && !existante) { UI.toast('Cette localisation n\'existe plus.', 'attention'); return; }
+    if (idExistant && !existante) { UI.toast(I18n.t('parc.ouvrir_fenetre_localisation.localisation_existe_plus'), 'attention'); return; }
     const champsSchema = Schema.table('localisations').champs;
     const definition = (nom) => champsSchema.find((c) => c.nom === nom);
     const exclus = existante ? identifiantsDescendants('localisations', existante.id) : new Set();
     if (existante) exclus.add(existante.id);
     const parents = Donnees.lignes('localisations').filter((l) => !exclus.has(l.id))
       .map((l) => ({ valeur: l.id, libelle: cheminLocalisation(l.id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
 
     const contenu = UI.element(UI.html`<div class="form-colonne parc-formulaire-localisation"></div>`);
     contenu.appendChild(UI.champ(definition('libelle'), existante ? existante.libelle : '', { attributs: { maxlength: '80' } }));
     const blocParent = UI.champ(definition('parent_id'), existante ? existante.parent_id : '', {
-      liste: parents, aide: 'Laissez vide pour un site. Un atelier se range dans un site, une ligne dans un atelier.',
+      liste: parents, aide: I18n.t('parc.ouvrir_fenetre_localisation.laissez_vide_site_atelier'),
     });
     contenu.appendChild(blocParent);
     const blocType = UI.champ(definition('type'), existante ? existante.type : 'atelier');
     contenu.appendChild(blocType);
-    contenu.appendChild(UI.element(UI.html`<p class="mention-requis"><span class="requis" aria-hidden="true">*</span>champ obligatoire</p>`));
+    contenu.appendChild(UI.element(UI.html`<p class="mention-requis"><span class="requis" aria-hidden="true">*</span>${I18n.t('commun.message.champ_obligatoire')}</p>`));
 
     // Le type suit le parent tant que l'utilisateur ne l'a pas choisi lui-même.
     let typeChoisi = Boolean(existante);
@@ -83,7 +83,7 @@ Object.assign(Parc, (() => {
           if (problemes.length) throw new Donnees.ErreurValidation(problemes.map((p) => p.message).join(' '));
           if (existante) {
             const ligne = lignes.find((l) => l.id === idExistant);
-            if (!ligne) throw new Donnees.ErreurValidation('Cette localisation n\'existe plus.');
+            if (!ligne) throw new Donnees.ErreurValidation(I18n.t('parc.ouvrir_fenetre_localisation.localisation_existe_plus'));
             Object.assign(ligne, { libelle: valeurs.libelle, parent_id: valeurs.parent_id, type: valeurs.type });
             return ligne.id;
           }
@@ -104,11 +104,11 @@ Object.assign(Parc, (() => {
     }
 
     const choix = await UI.fenetre({
-      titre: existante ? 'Modifier la localisation' : 'Nouvelle localisation',
+      titre: existante ? I18n.t('parc.ouvrir_fenetre_localisation.modifier_localisation') : I18n.t('parc.ouvrir_fenetre_localisation.nouvelle_localisation'),
       contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: 'Enregistrer', valeur: 'ok', classe: 'btn-primaire', defaut: true },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: I18n.t('commun.bouton.enregistrer'), valeur: 'ok', classe: 'btn-primaire', defaut: true },
       ],
       surOuverture(dialogue, fermer) { fermerFenetre = fermer; },
       avantFermeture(valeur) {
@@ -118,7 +118,7 @@ Object.assign(Parc, (() => {
       },
     });
     if (choix === 'ok') {
-      UI.toast(existante ? 'Localisation modifiée.' : 'Localisation créée.', 'succes');
+      UI.toast(existante ? I18n.t('parc.ouvrir_fenetre_localisation.localisation_modifiee') : I18n.t('parc.ouvrir_fenetre_localisation.localisation_creee'), 'succes');
       await App.reafficher();
     }
   }
@@ -136,11 +136,11 @@ Object.assign(Parc, (() => {
     const idCourant = parametres.id || '';
     const existant = idCourant ? Donnees.trouver('equipements', idCourant) : null;
     if (idCourant && !existant) {
-      UI.remplir(conteneur, UI.html`<div class="parc"><div class="entete-page"><div><div class="fil"><a href="#/parc">Parc</a></div><h1>Équipement introuvable</h1></div></div>
-        ${UI.vide('Équipement introuvable', 'Aucun équipement ne porte l\'identifiant « ' + idCourant + ' ».', 'recherche')}</div>`);
+      UI.remplir(conteneur, UI.html`<div class="parc"><div class="entete-page"><div><div class="fil"><a href="#/parc">${I18n.t('parc.formulaire.parc')}</a></div><h1>${I18n.t('parc.formulaire.equipement_introuvable')}</h1></div></div>
+        ${UI.vide(I18n.t('parc.formulaire.equipement_introuvable'), I18n.t('parc.formulaire.aucun_equipement_porte_identifiant', { idCourant }), 'recherche')}</div>`);
       return;
     }
-    App.definirTitre(existant ? 'Modifier ' + (existant.repere || existant.id) : 'Nouvel équipement');
+    App.definirTitre(existant ? I18n.t('parc.formulaire.modifier_v1', { repere: (existant.repere || existant.id) }) : I18n.t('parc.formulaire.nouvel_equipement'));
     const champsSchema = Schema.table('equipements').champs;
     const definition = (nom) => champsSchema.find((c) => c.nom === nom);
     const valeur = (nom) => (existant ? existant[nom] : undefined);
@@ -148,7 +148,7 @@ Object.assign(Parc, (() => {
     // Listes déroulantes : localisations (avec leur chemin) et équipements parents possibles.
     const listeLocalisations = Donnees.lignes('localisations')
       .map((l) => ({ valeur: l.id, libelle: cheminLocalisation(l.id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
     const interdits = existant ? identifiantsDescendants('equipements', existant.id) : new Set();
     if (existant) interdits.add(existant.id);
     const listeParents = Donnees.lignes('equipements').filter((e) => !interdits.has(e.id))
@@ -158,9 +158,9 @@ Object.assign(Parc, (() => {
     UI.remplir(conteneur, UI.html`
       <div class="parc">
         <div class="entete-page"><div>
-          <div class="fil"><a href="#/parc">Parc</a> <span aria-hidden="true">›</span>
-            ${existant ? UI.html`<a href="${retour}">${existant.repere || existant.id}</a>` : UI.html`<span>Nouvel équipement</span>`}</div>
-          <h1>${existant ? 'Modifier ' + libelleEquipement(existant.id) : 'Nouvel équipement'}</h1>
+          <div class="fil"><a href="#/parc">${I18n.t('parc.formulaire.parc')}</a> <span aria-hidden="true">›</span>
+            ${existant ? UI.html`<a href="${retour}">${existant.repere || existant.id}</a>` : UI.html`<span>${I18n.t('parc.formulaire.nouvel_equipement')}</span>`}</div>
+          <h1>${existant ? I18n.t('parc.formulaire.modifier_libelle_equipement', { libelleEquipement: libelleEquipement(existant.id) }) : I18n.t('parc.formulaire.nouvel_equipement')}</h1>
         </div></div>
         <article class="carte"><form class="form-grille" id="parc-formulaire" novalidate></form></article>
       </div>`);
@@ -168,44 +168,44 @@ Object.assign(Parc, (() => {
     const ajouter = (bloc, large) => { if (large) bloc.classList.add('large'); formulaire.appendChild(bloc); return bloc; };
 
     ajouter(UI.champ(definition('repere'), valeur('repere'), {
-      aide: 'Code court, unique parmi les équipements actifs (ex. PO-02).', attributs: { maxlength: '40' },
+      aide: I18n.t('parc.formulaire.code_court_unique_parmi'), attributs: { maxlength: '40' },
     }));
     ajouter(UI.champ(definition('designation'), valeur('designation'), { attributs: { maxlength: '120' } }));
     ajouter(UI.champ(definition('localisation_id'), valeur('localisation_id'), { liste: listeLocalisations }));
     ajouter(UI.champ(definition('parent_id'), valeur('parent_id'), {
-      liste: listeParents, aide: 'À remplir pour un sous-ensemble (ex. le motoréducteur d\'un convoyeur).',
+      liste: listeParents, aide: I18n.t('parc.formulaire.remplir_sous_ensemble_ex'),
     }));
     ajouter(UI.champ(definition('marque'), valeur('marque')));
     ajouter(UI.champ(definition('modele'), valeur('modele')));
     ajouter(UI.champ(definition('num_serie'), valeur('num_serie')));
     ajouter(UI.champ(definition('date_mes'), valeur('date_mes')));
     ajouter(UI.champ(definition('criticite'), valeur('criticite'), {
-      aide: 'A : l\'arrêt bloque la production ou la sécurité. B : gênant. C : sans conséquence immédiate.',
+      aide: I18n.t('parc.formulaire.arret_bloque_production_securite'),
     }));
     ajouter(UI.champ(definition('statut'), valeur('statut')));
-    ajouter(UI.champ(definition('heures_fonct_jour'), valeur('heures_fonct_jour'), { aide: 'Utilisé pour estimer l\'usage entre deux relevés (0 à 24).' }));
+    ajouter(UI.champ(definition('heures_fonct_jour'), valeur('heures_fonct_jour'), { aide: I18n.t('parc.formulaire.utilise_estimer_usage_entre') }));
     ajouter(UI.champ(definition('valeur_remplacement'), valeur('valeur_remplacement'), {
-      aide: 'Prix d\'un équipement neuf équivalent, en euros hors taxes (ex. 12 500).',
+      aide: I18n.t('parc.formulaire.prix_equipement_neuf_equivalent'),
     }));
     ajouter(UI.champ(definition('habilitation_requise'), valeur('habilitation_requise'), {
-      aide: 'Ex. BR. Plusieurs habilitations : séparées par une virgule.',
+      aide: I18n.t('parc.formulaire.ex_br_plusieurs_habilitations'),
     }));
     ajouter(UI.champ(definition('consignation'), valeur('consignation'), {
-      aide: 'Une étape par ligne. Ce texte s\'affiche sur la fiche et sur les ordres de travail.',
+      aide: I18n.t('parc.formulaire.etape_ligne_texte_affiche'),
     }), true);
 
     const idFichier = UI.identifiantUnique('parc-document');
     const blocDocument = ajouter(UI.element(UI.html`<div class="champ" data-champ="document_fichier">
-      <label class="libelle" for="${idFichier}">Document (fiche technique, notice…)</label>
+      <label class="libelle" for="${idFichier}">${I18n.t('parc.formulaire.document_fiche_technique_notice')}</label>
       <input type="file" id="${idFichier}" accept=".${EXTENSIONS_DOCUMENT.join(',.')}" aria-describedby="${idFichier}-aide ${idFichier}-erreur">
       <p class="aide" id="${idFichier}-aide">${existant && existant.document
-        ? 'Document actuel : ' + existant.document + '. Choisir un fichier le remplace.' : 'PDF, image ou tableur, 9 Mo au maximum.'}</p>
+        ? I18n.t('parc.formulaire.document_actuel_choisir_fichier', { document: existant.document }) : I18n.t('parc.formulaire.pdf_image_tableur_9')}</p>
       <p class="erreur-champ" id="${idFichier}-erreur" role="alert" hidden></p>
     </div>`), true);
-    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>champ obligatoire</p>`)).classList.add('large');
+    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>${I18n.t('commun.message.champ_obligatoire')}</p>`)).classList.add('large');
     formulaire.appendChild(UI.element(UI.html`<div class="actions">
-      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}Enregistrer</button>
-      <a class="btn btn-fantome" href="${retour}">Annuler</a>
+      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}${I18n.t('commun.bouton.enregistrer')}</button>
+      <a class="btn btn-fantome" href="${retour}">${I18n.t('commun.bouton.annuler')}</a>
     </div>`));
 
     let enCours = false;
@@ -220,8 +220,8 @@ Object.assign(Parc, (() => {
       const fichier = UI.$('input[type=file]', blocDocument).files[0];
       let messageFichier = '';
       if (fichier) {
-        if (!EXTENSIONS_DOCUMENT.includes(extensionDe(fichier.name))) messageFichier = 'Ce type de fichier n\'est pas accepté (PDF, images, documents Office ou texte).';
-        else if (fichier.size > TAILLE_MAX_DOCUMENT) messageFichier = 'Ce fichier est trop volumineux (9 Mo au maximum).';
+        if (!EXTENSIONS_DOCUMENT.includes(extensionDe(fichier.name))) messageFichier = I18n.t('parc.formulaire.type_fichier_pas_accepte');
+        else if (fichier.size > TAILLE_MAX_DOCUMENT) messageFichier = I18n.t('commun.message.fichier_trop_volumineux');
       }
       if (messageFichier) erreurs.push({ nom: 'document_fichier', message: messageFichier });
       afficherErreurs(formulaire, erreurs);
@@ -241,7 +241,7 @@ Object.assign(Parc, (() => {
           if (problemes.length) throw new Donnees.ErreurValidation(problemes.map((p) => p.message).join(' '));
           if (existant) {
             const ligne = lignes.find((l) => l.id === idCourant);
-            if (!ligne) throw new Donnees.ErreurValidation('Cet équipement n\'existe plus.');
+            if (!ligne) throw new Donnees.ErreurValidation(I18n.t('parc.formulaire.equipement_existe_plus'));
             Object.assign(ligne, valeurs);
             return ligne.id;
           }
@@ -250,7 +250,7 @@ Object.assign(Parc, (() => {
           return nouvelId;
         }, { action: existant ? 'modification de l\'équipement' : 'création de l\'équipement' });
         App.marquerSaisie(false);
-        UI.toast(existant ? 'Équipement enregistré.' : 'Équipement créé.', 'succes');
+        UI.toast(existant ? I18n.t('parc.formulaire.equipement_enregistre') : I18n.t('parc.formulaire.equipement_cree'), 'succes');
         App.naviguer('#/equipement/' + encodeURIComponent(id));
       } catch (erreur) {
         if (erreur instanceof Donnees.ErreurValidation) {
@@ -274,11 +274,11 @@ Object.assign(Parc, (() => {
     return UI.nombreFr(valeur) + (unite ? ' ' + unite : '');
   }
 
-  /** Nom inscrit dans le relevé : celui du technicien (ou du demandeur), sinon « Responsable ». */
+  /** Nom inscrit dans le relevé : celui du technicien (ou du demandeur), sinon « Responsable » (langue de l'installation, D156). */
   function utilisateurCourant() {
     const profil = App.profil;
     if (!profil) return '';
-    if (profil.type === 'responsable') return 'Responsable';
+    if (profil.type === 'responsable') return I18n.donnees('parc.utilisateur_courant.responsable');
     return String(profil.nom || profil.technicienId || '').trim();
   }
 
@@ -302,15 +302,13 @@ Object.assign(Parc, (() => {
   async function enregistrerReleve(compteurId, valeurs, baisseConfirmee) {
     return Donnees.modifier('releves', (lignes, outils) => {
       const compteur = Donnees.trouver('compteurs', compteurId);
-      if (!compteur) throw new Donnees.ErreurValidation('Ce compteur n\'existe plus.');
+      if (!compteur) throw new Donnees.ErreurValidation(I18n.t('parc.enregistrer_releve.compteur_existe_plus'));
       const problemes = verifierReleve(valeurs, outils.aujourdhui());
       if (problemes.length) throw new Donnees.ErreurValidation(problemes.map((p) => p.message).join(' '));
       const dernier = dernierReleveDe(lignes, compteurId);
       const baisse = estEnBaisse(valeurs.valeur, dernier);
       if (!baisseConfirmee && baisse) {
-        throw new Donnees.ErreurValidation('La valeur saisie est plus basse que le dernier relevé ('
-          + valeurAvecUnite(dernier.valeur, compteur.unite) + ' le ' + UI.dateFr(dernier.date)
-          + '). Confirmez que le compteur a été remplacé ou remis à zéro, ou corrigez la valeur.');
+        throw new Donnees.ErreurValidation(I18n.t('parc.enregistrer_releve.valeur_saisie_plus_basse', { valeurAvecUnite: valeurAvecUnite(dernier.valeur, compteur.unite), date: UI.dateFr(dernier.date) }));
       }
       const id = outils.nouvelId(lignes);
       const valeur = Donnees.nombre(valeurs.valeur);
@@ -363,9 +361,7 @@ Object.assign(Parc, (() => {
       await ajusterGammesApresRemiseAZero(compteurId, remiseAZero);
       return '';
     } catch (erreur) {
-      const message = 'Relevé enregistré, mais la base des gammes au compteur ' + compteurId
-        + ' n\'a pas pu être ajustée après la remise à zéro (' + ((erreur && erreur.message) || String(erreur))
-        + ') : vérifiez le relevé de dernière réalisation de chacune de ces gammes.';
+      const message = I18n.t('parc.apres_remise_azero.releve_enregistre_mais_base', { compteurId, raisonErreur: App.raisonErreur(erreur) });
       console.warn('Prévo (parc) : ' + message, erreur);
       return message;
     }
@@ -379,22 +375,21 @@ Object.assign(Parc, (() => {
     try {
       crees = await Preventif.genererOTEchus();
     } catch (erreur) {
-      App.signalerErreur({ message: (avertissement ? avertissement + ' De plus, les' : 'Relevé enregistré, mais les')
-        + ' OT préventifs n\'ont pas pu être générés : ' + ((erreur && erreur.message) || String(erreur)) },
+      App.signalerErreur({ message: (avertissement ? I18n.t('parc.generer_apres_releve.avertissement_plus', { avertissement }) : I18n.t('parc.generer_apres_releve.releve_enregistre_mais')) + ' ' + I18n.t('parc.generer_apres_releve.ot_preventifs_ont_pas', { raisonErreur: App.raisonErreur(erreur) }) },
       'génération du préventif après un relevé');
       return;
     }
     const generation = crees.length ? ' ' + Preventif.texteGeneration(crees.length) + '.' : '';
     if (avertissement) UI.toast(avertissement + generation, 'attention');
-    else UI.toast('Relevé enregistré.' + generation, 'succes');
+    else UI.toast(I18n.t('parc.generer_apres_releve.releve_enregistre', { generation }), 'succes');
   }
 
   // Rappel du dernier relevé (ligne de releves, ou null) : en tête de la fenêtre et dans
   // l'avertissement de baisse.
   function afficherDernierReleve(contenu, dernier, unite) {
     UI.remplir(UI.$('.parc-releve-precedent', contenu), dernier
-      ? UI.html`Dernier relevé : <b class="fort">${valeurAvecUnite(dernier.valeur, unite)}</b> le ${UI.dateFr(dernier.date)}.`
-      : UI.html`Aucun relevé pour ce compteur.`);
+      ? UI.html`${I18n.html('parc.dernier_releve.dernier_releve', { valeurAvecUnite: valeurAvecUnite(dernier.valeur, unite), date: UI.dateFr(dernier.date) })}`
+      : UI.html`${I18n.t('parc.dernier_releve.aucun_releve_compteur')}`);
     UI.remplir(UI.$('.parc-releve-baisse-valeur', contenu),
       dernier ? UI.html` (${valeurAvecUnite(dernier.valeur, unite)})` : '');
   }
@@ -407,17 +402,16 @@ Object.assign(Parc, (() => {
     const contenu = UI.element(UI.html`<div class="form-colonne parc-formulaire-releve">
       <p class="parc-releve-precedent"></p>
     </div>`);
-    contenu.appendChild(UI.champ(definition('date'), jour, { libelle: 'Date du relevé', obligatoire: true, attributs: { max: jour } }));
+    contenu.appendChild(UI.champ(definition('date'), jour, { libelle: I18n.t('parc.contenu_fenetre_releve.date_releve'), obligatoire: true, attributs: { max: jour } }));
     contenu.appendChild(UI.champ(definition('valeur'), '', {
-      libelle: 'Valeur lue' + (unite ? ' (' + unite + ')' : ''), obligatoire: true,
-      aide: 'Le nombre affiché par le compteur, sans calcul (ex. 1 250 ou 0,85).',
+      libelle: unite ? I18n.t('parc.formulaire.valeur_lue_unite', { unite }) : I18n.t('parc.formulaire.valeur_lue'), obligatoire: true,
+      aide: I18n.t('parc.contenu_fenetre_releve.nombre_affiche_compteur_sans'),
     }));
     contenu.appendChild(UI.element(UI.html`<div class="alerte attention parc-releve-baisse" role="alert" hidden>
       ${UI.icone('alerte')}<div class="alerte-texte">
-        <p><b>Valeur plus basse que le dernier relevé<span class="parc-releve-baisse-valeur"></span>.</b>
-          Compteur remplacé ou remis à zéro ? Sinon, corrigez la valeur.</p>
+        <p>${I18n.html('parc.contenu_fenetre_releve.valeur_plus_basse_dernier')}</p>
         <label class="case"><input type="checkbox" name="baisse_confirmee" value="1">
-          <span>Oui, le compteur a été remplacé ou remis à zéro</span></label>
+          <span>${I18n.t('parc.contenu_fenetre_releve.oui_compteur_ete_remplace')}</span></label>
         <p class="erreur-champ parc-releve-erreur-baisse" hidden></p>
       </div></div>`));
     afficherDernierReleve(contenu, dernier, unite);
@@ -435,7 +429,7 @@ Object.assign(Parc, (() => {
    */
   async function ouvrirFenetreReleve(compteurId) {
     const compteur = Donnees.trouver('compteurs', compteurId);
-    if (!compteur) { UI.toast('Ce compteur n\'existe plus.', 'attention'); return false; }
+    if (!compteur) { UI.toast(I18n.t('parc.enregistrer_releve.compteur_existe_plus'), 'attention'); return false; }
     const jour = Donnees.aujourdhui();
     const unite = String(compteur.unite || '').trim();
     let dernier = dernierReleveDe(Donnees.lignes('releves'), compteurId);
@@ -457,7 +451,7 @@ Object.assign(Parc, (() => {
     };
     const demanderConfirmation = () => {
       montrerBaisse(true);
-      erreurBaisse.textContent = 'Cochez la case pour confirmer cette valeur, ou corrigez-la.';
+      erreurBaisse.textContent = I18n.t('parc.ouvrir_fenetre_releve.cochez_case_confirmer_valeur');
       erreurBaisse.hidden = false;
       caseBaisse.focus();
     };
@@ -510,11 +504,11 @@ Object.assign(Parc, (() => {
     }
 
     const choix = await UI.fenetre({
-      titre: 'Saisir un relevé — ' + (compteur.libelle || compteur.id),
+      titre: I18n.t('parc.ouvrir_fenetre_releve.saisir_releve', { compteur: (compteur.libelle || compteur.id) }),
       contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: 'Enregistrer le relevé', valeur: 'ok', classe: 'btn-primaire', defaut: true },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: I18n.t('parc.ouvrir_fenetre_releve.enregistrer_releve'), valeur: 'ok', classe: 'btn-primaire', defaut: true },
       ],
       surOuverture(dialogue, fermer) { fermerFenetre = fermer; },
       avantFermeture(valeur) {

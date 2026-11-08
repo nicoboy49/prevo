@@ -1,0 +1,13 @@
+id;date_heure;poste;profil;table;id_ligne;action
+J-20260323105045-SB54;2026-03-23 10:50;Poste démo;Responsable;equipements;EQ-0001;suggestion S2-EQ-0001-C05 ignorée : Cartouches de filtre à huile d'un lot défectueux, échangées par le fournisseur sous garantie. On surveille avant de modifier les gammes.
+J-20260724123542-ECV5;2026-07-24 12:35;Poste démo;Demandeur Sarah Colin;demandes;DI-2026-0074;création — demande signalée
+J-20260724131506-SLSJ;2026-07-24 13:15;Poste démo;Responsable;ordres_travail;OT-2026-0125;création — acceptation de DI-2026-0074
+J-20260724131507-39CD;2026-07-24 13:15;Poste démo;Responsable;demandes;DI-2026-0074;modification : statut, date_decision, ot_id — acceptée → OT-2026-0125
+J-20260724133419-YJS8;2026-07-24 13:34;Poste démo;Responsable;ordres_travail;OT-2026-0125;modification : statut — statut Créé → Préparé
+J-20260724134119-4SU4;2026-07-24 13:41;Poste démo;Responsable;ordres_travail;OT-2026-0125;modification : statut — statut Préparé → Planifié
+J-20260727082540-GAKJ;2026-07-27 08:25;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0125;modification : statut, date_debut — statut Planifié → En cours
+J-20260727102154-2501;2026-07-27 10:21;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0125;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260728132002-057D;2026-07-28 13:20;Poste démo;Demandeur Mathieu Roux;demandes;DI-2026-0075;création — demande signalée
+J-20260728145825-TGMW;2026-07-28 14:58;Poste démo;Responsable;ordres_travail;OT-2026-0128;création — acceptation de DI-2026-0075
+J-20260728145852-E3IM;2026-07-28 14:58;Poste démo;Responsable;demandes;DI-2026-0075;modification : statut, date_decision, ot_id — acceptée → OT-2026-0128
+J-20260728154359-MO0G;2026-07-28 15:43;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0128;modification : statut, date_debut — statut Créé → En cours

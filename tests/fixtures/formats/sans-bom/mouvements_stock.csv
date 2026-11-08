@@ -1,0 +1,13 @@
+id;date;article_id;type;quantite;ot_id;utilisateur;commentaire
+MVT-000001;2025-09-19 06:30;ART-0001;inventaire;9;;Magasin;Inventaire de départ
+MVT-000002;2025-09-19 06:30;ART-0002;inventaire;9;;Magasin;Inventaire de départ
+MVT-000003;2025-09-19 06:30;ART-0003;inventaire;9;;Magasin;Inventaire de départ
+MVT-000004;2025-09-19 06:30;ART-0004;inventaire;9;;Magasin;Inventaire de départ
+MVT-000005;2025-09-19 06:30;ART-0005;inventaire;5;;Magasin;Inventaire de départ
+MVT-000006;2025-09-19 06:30;ART-0006;inventaire;3;;Magasin;Inventaire de départ
+MVT-000007;2025-09-19 06:30;ART-0007;inventaire;5;;Magasin;Inventaire de départ
+MVT-000008;2025-09-19 06:30;ART-0008;inventaire;5;;Magasin;Inventaire de départ
+MVT-000009;2025-09-19 06:30;ART-0009;inventaire;4;;Magasin;Inventaire de départ
+MVT-000010;2025-09-19 06:30;ART-0010;inventaire;3;;Magasin;Inventaire de départ
+MVT-000011;2025-09-19 06:30;ART-0011;inventaire;11;;Magasin;Inventaire de départ
+MVT-000012;2025-09-19 06:30;ART-0012;inventaire;6;;Magasin;Inventaire de départ

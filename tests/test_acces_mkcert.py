@@ -8,7 +8,6 @@ Ce qui est vérifié, avec un faux mkcert (tests/faux_mkcert.py, certificats fab
                   change ;
     autorité      seul rootCA.pem (public) est rendu pour les téléphones ; rootCA-key.pem n'est jamais copié hors du
                   dossier de l'autorité ;
-    secours       téléchargement : fichier gardé si l'empreinte est juste, jamais sinon ;
     fichier       outils/empreintes-tiers.json donne mkcert 1.4.4 pour Windows, Linux (dont Raspberry Pi) et macOS ;
                   nom_binaire_mkcert choisit le bon fichier.
 Le vrai mkcert (autorité installée dans Windows, téléphones) est vérifié en recette réelle (CS136).
@@ -17,13 +16,11 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_acces_mkcert.py" -v
 """
 import hashlib
-import http.server
 import importlib.util
 import json
 import shutil
 import ssl
 import tempfile
-import threading
 import unittest
 from pathlib import Path
 
@@ -122,38 +119,6 @@ class TestAutorite(CasMkcert):
         autorite = Path(serveur.dossier_autorite(self.config)).resolve()
         cles = [p for p in (self.dossier / "donnees").rglob("rootCA-key.pem")]
         self.assertEqual([p.resolve().parent for p in cles], [autorite])
-
-
-class TestTelechargement(CasMkcert):
-
-    def servir(self, octets):
-        class Gestionnaire(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.send_header("Content-Length", str(len(octets)))
-                self.end_headers()
-                self.wfile.write(octets)
-
-            def log_message(self, *arguments):
-                pass
-        site = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Gestionnaire)
-        threading.Thread(target=site.serve_forever, daemon=True).start()
-        self.addCleanup(site.server_close)
-        self.addCleanup(site.shutdown)
-        return "http://127.0.0.1:%d/faux_mkcert.py" % site.server_address[1]
-
-    def test_garde_le_fichier_seulement_si_l_empreinte_est_juste(self):
-        octets = FAUX.read_bytes()
-        bon = {"mkcert": {"version": "1.4.4", "source": "",
-                          "fichiers": {"faux_mkcert.py": {"sha256": hashlib.sha256(octets).hexdigest()}}}}
-        mauvais = {"mkcert": {"version": "1.4.4", "source": "", "fichiers": {"faux_mkcert.py": {"sha256": "1" * 64}}}}
-        cible = self.dossier / "telecharge"
-        adresse = self.servir(octets)
-        with self.assertRaises(serveur.ErreurConfiguration):
-            serveur.telecharger_mkcert(mauvais, str(cible), "faux_mkcert.py", adresse)
-        self.assertEqual(list(cible.iterdir()) if cible.exists() else [], [])
-        chemin = serveur.telecharger_mkcert(bon, str(cible), "faux_mkcert.py", adresse)
-        self.assertEqual(Path(chemin).read_bytes(), octets)
 
 
 class TestFichierEmpreintes(unittest.TestCase):

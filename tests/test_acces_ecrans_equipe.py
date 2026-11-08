@@ -5,6 +5,8 @@ Ce qui est vérifié :
     comptes      : créer un compte (identifiant donné par Prévo, mot de passe provisoire montré une seule fois et
                    jamais laissé dans la page ; il ouvre bien une session « à changer »), modifier (rôle, technicien
                    lié), réinitialiser (nouveau provisoire), désactiver puis activer ; le serveur relu par l'API ;
+                   T301 : même prénom et même nom qu'un compte existant (casse ignorée) : refus dans la fenêtre, qui
+                   nomme le compte existant et montre la case « C'est une autre personne » ; cochée : « .2 » ;
     appareils    : invitation créée avec sa durée (QR SVG, lien = adresse des QR + /#/enroler/<jeton>, montré une
                    fois), un téléphone enrôlé par l'API avec ce lien apparaît dans la liste, révocation d'un appareil
                    (401 aussitôt), d'une invitation (plus personne ne s'enrôle), de tous les appareils ;
@@ -258,6 +260,36 @@ class TestComptes(CasEcranAcces):
         self.assertNotIn(nouveau, journal)
         self.assertIn("zoe.durand;", journal)
         self.assertIn(";creation;", journal)
+
+    def test_meme_nom_refuse_puis_cree_avec_la_case_autre_personne(self):
+        self.autoriser_erreur(re.compile(r"status of 400 .*/api/acces/comptes"))      # le refus attendu (T301)
+        page = self.page
+        avant = len(self.comptes_du_serveur())
+        self.ouvrir_acces()
+        page.wait_for_selector("#acces-comptes tbody tr")
+        page.click("#acces-creer-compte")
+        dialogue = self.dialogue()
+        case = dialogue.locator("[data-champ=autre_personne]")
+        self.assertFalse(case.is_visible())                                            # cachée d'abord
+        dialogue.locator("input[name=prenom]").fill("JULIEN")
+        dialogue.locator("input[name=nom]").fill("moreau")
+        dialogue.locator("select[name=role]").select_option("demandeur")
+        dialogue.locator("button:has-text('Créer le compte')").click()
+        refus = dialogue.locator("p.erreur-champ[role=alert]").last
+        refus.wait_for(state="visible")
+        self.assertEqual(refus.inner_text(), "Un compte existe déjà pour JULIEN moreau : « julien.moreau ». Réactivez-le "
+                                             "ou donnez un autre nom ; si c'est une autre personne, cochez « C'est une "
+                                             "autre personne ».")
+        self.assertTrue(case.is_visible())
+        self.assertEqual(len(self.comptes_du_serveur()), avant)                             # rien écrit
+        case.locator("label").click()
+        self.assertTrue(case.locator("input[type=checkbox]").is_checked())
+        dialogue.locator("button:has-text('Créer le compte')").click()
+        page.wait_for_selector("#acces-mot-de-passe-provisoire")
+        self.assertIn("julien.moreau.2", self.dialogue().inner_text())
+        self.fermer_dialogue()
+        compte = self.comptes_du_serveur()["julien.moreau.2"]
+        self.assertEqual((compte["prenom"], compte["nom"], compte["role"]), ("JULIEN", "moreau", "demandeur"))
 
 
 class TestAppareils(CasEcranAcces):

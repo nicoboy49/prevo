@@ -1,23 +1,26 @@
 """Tests du passage de parametres.version_schema au format courant (tâche T37, ARCHITECTURE.md §14.1 ;
-format 3 depuis le lot 6, §20.2).
+format 3 depuis le lot 6, §20.2 ; chantier « socle de données », T186 : étapes explicites, D168).
 
 Décision de Nicolas (2026-10-20) : JUSTE AVANT que version_schema passe au format courant sur une base
 existante, Prévo fait une sauvegarde automatique « AAAA-MM-JJ_HHMMSS_avant-format-vN » (N = format
 visé, 3 depuis le lot 6 ; une base au format 1 passe directement au format 3, une seule sauvegarde),
-restaurable depuis Paramètres comme les autres (Donnees.mettreAJourVersionSchema()).
+restaurable depuis Paramètres comme les autres (Donnees.migrerAuFormatCourant(), ancien nom
+Donnees.mettreAJourVersionSchema()). Depuis T186 (D168), le NAVIGATEUR ne fait ce passage qu'en mode dossier
+et en démo, par étapes explicites (Formats.migrer) : chaque table que le passage complète est réécrite, puis
+version_schema, avec une ligne de journal par étape. En mode serveur, c'est le serveur qui le fait à son
+démarrage (T185) : le navigateur n'écrit rien et montre un bandeau au responsable.
 
-    serveur  : sauvegarde d'abord (elle garde version_schema = 1), puis version 3 sur le disque et
-               ligne de journal ; second appel sans effet ; un autre poste passé au format 3
-               entre-temps : rien n'est réécrit ; écran Paramètres « Avant format 3 » puis
+    serveur  : le navigateur ne fait plus le passage : appel sans effet (ni sauvegarde, ni écriture, ni
+               journal) ; une base au format 2 (sans wiki_pages.csv ni wiki_journal.csv, ordres_travail.csv
+               sans la colonne astuce) ouverte par le responsable : aucun fichier changé à l'octet, pas d'OT
+               préventif généré, bandeau ; les tables du wiki lues vides, la colonne astuce signalée en
+               simple information ; écran Paramètres « Avant format 3 » (sauvegarde demandée à l'API) puis
                restauration de toutes les tables ; API brute (motif inconnu, « ../x », corps vide) ;
-    format 2 : la démo remise au format 2 (sans wiki_pages.csv ni wiki_journal.csv, ordres_travail.csv
-               sans la colonne astuce) passe au format 3 à l'ouverture : une sauvegarde
-               « avant-format-v3 », aucun autre fichier changé à l'octet que parametres.csv et
-               journal.csv, les deux tables du wiki toujours absentes (vides), la colonne astuce
-               signalée en simple information et lue vide ;
-    echec    : sauvegarde impossible → version inchangée sur le disque, ErreurStockage claire ;
-    dossier  : même passage avec StockageDossier (dossier simulé dans l'OPFS), restauration ;
-               règles de noms identiques à celles du serveur ;
+    dossier  : passage avec StockageDossier (dossier simulé dans l'OPFS) : sauvegarde d'abord, tables du
+               format 1 complétées, version 3, deux lignes de journal (une par étape), second appel sans
+               effet, restauration ; sauvegarde impossible → rien n'est écrit, ErreurStockage claire ; un
+               autre poste passé au format 3 entre-temps : version_schema pas réécrite ; règles de noms
+               identiques à celles du serveur ;
     démo     : aucune sauvegarde, aucune erreur ; passage en mémoire seulement.
 
 Lancer depuis la racine du projet :
@@ -43,7 +46,6 @@ MOTIF_NOM_AVANT_FORMAT_COURANT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-for
 MOTIF_NOM_MANUEL = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 DEBUT_ERREUR_SAUVEGARDE = "Sauvegarde avant le passage au format 3 impossible : "
 FIN_ERREUR_SAUVEGARDE = " ; la mise à jour sera retentée à la prochaine ouverture."
-CONFLIT_PARAMETRES = re.compile(r"status of 409.*/api/csv/parametres")
 
 # Appel de Donnees.mettreAJourVersionSchema() dans la page : { ok, valeur } ou { ok: false, nom, message }.
 APPELER_MISE_A_JOUR = """async () => {
@@ -119,67 +121,42 @@ class CasServeurV1(CasNavigateur):
         return fichier.read_bytes() if fichier.is_file() else None
 
 
+def resultat_sans_effet(depart):
+    """Valeur rendue par Donnees.migrerAuFormatCourant() quand il n'écrit rien."""
+    return {"misAJour": False, "sauvegarde": None, "depart": depart, "tables": [], "abimees": []}
+
+
 class TestServeur(CasServeurV1):
+    """D168 (T186) : en mode serveur, le navigateur ne fait plus le passage au format courant (le serveur le fait
+    à son démarrage, T185)."""
 
-    def test_sauvegarde_d_abord_puis_version_courante_sur_le_disque_et_journal_second_appel_sans_effet(self):
+    def test_le_navigateur_ne_fait_plus_le_passage_ni_sauvegarde_ni_ecriture_ni_journal(self):
         with ServeurPrevo() as serveur:
             self.ouvrir_application_v1(serveur)
+            journal_avant = self.octets(serveur, "journal.csv")
+            sauvegardes_avant = self.sauvegardes(serveur)
+            for _ in range(2):
+                resultat = self.mettre_a_jour()
+                self.assertTrue(resultat["ok"], resultat)
+                self.assertEqual(resultat["valeur"], resultat_sans_effet(1))
+            self.assertEqual(self.sauvegardes(serveur), sauvegardes_avant)
             self.assertEqual(self.sauvegardes(serveur, "*_avant-format-v*"), [])
-
-            resultat = self.mettre_a_jour()
-            self.assertTrue(resultat["ok"], resultat)
-            nom = resultat["valeur"]["sauvegarde"]
-            self.assertTrue(resultat["valeur"]["misAJour"])
-            self.assertRegex(nom, MOTIF_NOM_AVANT_FORMAT_COURANT)
-
-            # La sauvegarde existe sur le disque et garde l'état D'AVANT (version_schema = 1) :
-            # elle a donc bien été faite avant le passage de version (une seule : 1 → 3 directement).
-            self.assertEqual(self.sauvegardes(serveur, "*_avant-format-v*"), [nom])
-            copie = self.octets(serveur, "sauvegardes", nom, "parametres.csv")
-            self.assertEqual(copie, PARAMETRES_V1.read_bytes())
-            self.assertEqual(version_schema(copie), "1")
-            self.assertIsNotNone(self.octets(serveur, "sauvegardes", nom, "equipements.csv"))
-
-            # parametres.csv vaut 3 sur le disque (les autres réglages sont gardés), une ligne de journal.
-            apres = self.octets(serveur, "parametres.csv")
-            self.assertEqual(version_schema(apres), FORMAT_COURANT)
-            self.assertEqual({l["cle"] for l in lignes_csv(apres)}, {l["cle"] for l in lignes_csv(copie)})
-            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), FORMAT_COURANT)
-            actions = actions_journal_version(self.octets(serveur, "journal.csv"))
-            self.assertEqual(len(actions), 1, actions)
-            self.assertIn("passage au format 3 du fichier ; sauvegarde %s faite juste avant" % nom, actions[0])
-
-            # Second appel : rien (ni sauvegarde, ni écriture).
-            toutes_avant = self.sauvegardes(serveur)
-            second = self.mettre_a_jour()
-            self.assertEqual(second, {"ok": True, "valeur": {"misAJour": False, "sauvegarde": None}})
-            self.assertEqual(self.sauvegardes(serveur), toutes_avant)
-            self.assertEqual(self.octets(serveur, "parametres.csv"), apres)
-            self.assertEqual(len(actions_journal_version(self.octets(serveur, "journal.csv"))), 1)
-
-    def test_autre_poste_deja_passe_au_format_courant_rien_n_est_reecrit(self):
-        with ServeurPrevo() as serveur:
-            self.ouvrir_application_v1(serveur)
-            # Pas de relecture automatique pendant le test : le cache doit rester périmé.
-            self.page.evaluate("Donnees.arreterSurveillance()")
-            # Un autre poste a fait le passage juste après notre lecture (notre cache dit encore 1).
-            ecrit_par_l_autre_poste = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", b"version_schema;'3")
-            (serveur.dossier / "parametres.csv").write_bytes(ecrit_par_l_autre_poste)
-            self.autoriser_erreur(CONFLIT_PARAMETRES)     # écriture refusée (version périmée), puis relecture
-
-            resultat = self.mettre_a_jour()
-            self.assertTrue(resultat["ok"], resultat)
-            # Notre sauvegarde est faite (sans gravité : deux copies), mais la version n'est pas réécrite.
-            self.assertFalse(resultat["valeur"]["misAJour"])
-            self.assertRegex(resultat["valeur"]["sauvegarde"], MOTIF_NOM_AVANT_FORMAT_COURANT)
-            self.assertEqual(self.octets(serveur, "parametres.csv"), ecrit_par_l_autre_poste)
-            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), FORMAT_COURANT)
-            self.assertEqual(actions_journal_version(self.octets(serveur, "journal.csv")), [])
+            self.assertEqual(self.octets(serveur, "parametres.csv"), PARAMETRES_V1.read_bytes())
+            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "1")
+            self.assertEqual(self.octets(serveur, "journal.csv"), journal_avant)
 
     def test_ecran_parametres_avant_format_courant_puis_restauration_de_toutes_les_tables(self):
         with ServeurPrevo() as serveur:
             page = self.ouvrir_application_v1(serveur)
-            nom = self.mettre_a_jour()["valeur"]["sauvegarde"]
+            # La sauvegarde « avant-format-v3 » est celle que le serveur fait avant son passage (ici demandée à l'API).
+            statut, reponse = demander_sauvegarde(serveur, {"motif": "avant-format-v3"})
+            self.assertEqual(statut, 200, reponse)
+            nom = reponse["sauvegarde"]
+            self.assertRegex(nom, MOTIF_NOM_AVANT_FORMAT_COURANT)
+            # Puis le passage (fait ailleurs) : version 3 sur le disque.
+            passe = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", b"version_schema;'3")
+            (serveur.dossier / "parametres.csv").write_bytes(passe)
+            page.evaluate("Donnees.rechargerTable('parametres')")
             self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), FORMAT_COURANT)
 
             page.evaluate("location.hash = '#/parametres'")
@@ -202,74 +179,6 @@ class TestServeur(CasServeurV1):
             self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), "1")
             self.assertEqual(page.evaluate("Donnees.parametre('version_schema')"), "1")
 
-    def test_echec_de_la_sauvegarde_version_inchangee_et_erreur_claire(self):
-        with ServeurPrevo() as serveur:
-            self.ouvrir_application_v1(serveur)
-            journal_avant = self.octets(serveur, "journal.csv")
-            # La sauvegarde échoue (méthode remplacée dans la page : disque plein, Excel…).
-            self.page.evaluate("""() => { window.vraieSauvegarde = App.adaptateur.sauvegarder;
-                App.adaptateur.sauvegarder = async () => {
-                  throw new Donnees.ErreurStockage('Le disque est plein (simulé).'); }; }""")
-            resultat = self.mettre_a_jour()
-            self.assertFalse(resultat["ok"], resultat)
-            self.assertEqual(resultat["nom"], "ErreurStockage")
-            self.assertEqual(resultat["message"],
-                             DEBUT_ERREUR_SAUVEGARDE + "Le disque est plein (simulé)" + FIN_ERREUR_SAUVEGARDE)
-            # Rien n'a bougé : version 1 sur le disque et en mémoire, pas de journal, pas de sauvegarde.
-            self.assertEqual(self.octets(serveur, "parametres.csv"), PARAMETRES_V1.read_bytes())
-            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "1")
-            self.assertEqual(self.octets(serveur, "journal.csv"), journal_avant)
-            self.assertEqual(self.sauvegardes(serveur, "*_avant-format-v*"), [])
-
-            # Une erreur qui n'est pas une ErreurStockage (bogue, réseau) donne le même message clair.
-            self.page.evaluate("() => { App.adaptateur.sauvegarder = async () => { throw new TypeError('panne'); }; }")
-            resultat = self.mettre_a_jour()
-            self.assertEqual((resultat["ok"], resultat["nom"]), (False, "ErreurStockage"))
-            self.assertEqual(resultat["message"], DEBUT_ERREUR_SAUVEGARDE + "panne" + FIN_ERREUR_SAUVEGARDE)
-            self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), "1")
-
-            # Relecture de la vague 2 : un stockage (hors démo) qui ne sait pas sauvegarder, ou qui ne
-            # renvoie aucun nom, n'est pas dispensé de la sauvegarde → refus, version inchangée.
-            for remplacement, cause in (
-                    ("undefined", "ce mode de stockage ne sait pas faire de sauvegarde"),
-                    ("async () => undefined", "le stockage n'a pas confirmé la sauvegarde (aucun nom renvoyé)")):
-                self.page.evaluate("() => { App.adaptateur.sauvegarder = %s; }" % remplacement)
-                resultat = self.mettre_a_jour()
-                self.assertEqual((resultat["ok"], resultat["nom"]), (False, "ErreurStockage"), remplacement)
-                self.assertEqual(resultat["message"], DEBUT_ERREUR_SAUVEGARDE + cause + FIN_ERREUR_SAUVEGARDE)
-                self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), "1")
-                self.assertEqual(self.octets(serveur, "journal.csv"), journal_avant)
-
-            # La fois suivante (sauvegarde rétablie), le passage se fait.
-            self.page.evaluate("() => { App.adaptateur.sauvegarder = window.vraieSauvegarde; }")
-            resultat = self.mettre_a_jour()
-            self.assertTrue(resultat["ok"] and resultat["valeur"]["misAJour"], resultat)
-            self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), FORMAT_COURANT)
-
-    def test_passage_1_vers_3_tables_du_wiki_vides_colonne_astuce_vide_aucun_autre_fichier_change(self):
-        """Lot 6 (§20.2) : une base au format 1, sans fichiers du wiki ni colonne astuce, passe directement au format
-        3 ; les deux tables du wiki restent absentes (vides), la colonne astuce est lue vide (simple information),
-        et seuls parametres.csv et journal.csv changent sur le disque."""
-        with ServeurPrevo() as serveur:
-            for nom in ("wiki_pages.csv", "wiki_journal.csv"):
-                (serveur.dossier / nom).unlink()
-            retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "astuce")
-            self.autoriser_erreur(re.compile(r"status of 404.*/api/csv/wiki_(pages|journal)"))   # fichier absent = table vide
-            self.ouvrir_application_v1(serveur)
-            avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
-            resultat = self.mettre_a_jour()
-            self.assertTrue(resultat["ok"] and resultat["valeur"]["misAJour"], resultat)
-            self.assertRegex(resultat["valeur"]["sauvegarde"], MOTIF_NOM_AVANT_FORMAT_COURANT)
-            apres = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
-            self.assertEqual(set(apres), set(avant))                  # aucun fichier du wiki créé
-            self.assertEqual(sorted(nom for nom in avant if apres[nom] != avant[nom]), ["journal.csv", "parametres.csv"])
-            self.assertEqual(self.page.evaluate("[Donnees.lignes('wiki_pages').length, Donnees.lignes('wiki_journal').length]"),
-                             [0, 0])
-            self.assertEqual(self.page.evaluate(
-                "Donnees.lignes('ordres_travail').filter((ot) => ot.astuce !== '').length"), 0)
-            # (Le problème « info » de la colonne absente est prouvé par TestFormat2VersFormat3 : ici, la base a été
-            # lue d'abord avec les paramètres de la démo, au format 3, avant l'installation de ceux du format 1.)
-
 
 def retirer_derniere_colonne(chemin, nom):
     """Réécrit un CSV de Prévo (BOM, « ; », CRLF) sans sa dernière colonne, qui doit s'appeler `nom` : le
@@ -282,11 +191,11 @@ def retirer_derniere_colonne(chemin, nom):
     chemin.write_bytes(b"\xef\xbb\xbf" + sortie.getvalue().encode("utf-8"))
 
 
-class TestFormat2VersFormat3(CasServeurV1):
-    """Lot 6 (§20.2) : une base au format 2 (la démo sans wiki_pages.csv, wiki_journal.csv ni colonne astuce)
-    passe au format 3 à l'ouverture de l'application ; seuls parametres.csv et journal.csv changent."""
+class TestFormat2ModeServeur(CasServeurV1):
+    """Lot 6 (§20.2) et T186 (D168) : une base au format 2 (la démo sans wiki_pages.csv, wiki_journal.csv ni colonne
+    astuce) ouverte en mode serveur : le navigateur n'écrit rien, il le dit au responsable."""
 
-    def test_ouverture_d_une_base_au_format_2_sauvegarde_puis_format_3_sans_toucher_aux_donnees(self):
+    def test_ouverture_d_une_base_au_format_2_aucun_fichier_change_bandeau_au_responsable(self):
         with ServeurPrevo() as serveur:
             parametres = serveur.dossier / "parametres.csv"
             octets_v3 = parametres.read_bytes()
@@ -296,41 +205,47 @@ class TestFormat2VersFormat3(CasServeurV1):
                 (serveur.dossier / nom).unlink()
             retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "astuce")
             avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
+            sauvegardes_avant = self.sauvegardes(serveur)   # T187 : celles du démarrage (du jour, avant-mise-a-jour)
             self.assertNotIn("wiki_pages.csv", avant)
             self.assertNotIn(b";astuce", avant["ordres_travail.csv"].split(b"\r\n", 1)[0])
 
-            # Demandeur : il ne génère pas les OT préventifs échus (RG5), qui changeraient ordres_travail.csv.
-            preregler_profil(self.contexte, "demandeur", nom="Lucie Martin")
+            # Responsable : il verrait le bandeau, et générerait les OT préventifs échus (RG5) si la base était au
+            # format courant ; ici rien n'est généré (ordres_travail.csv et ot_operations.csv inchangés).
+            preregler_profil(self.contexte, "responsable")
             self.autoriser_erreur(re.compile(r"status of 404.*/api/csv/wiki_(pages|journal)"))   # fichier absent = table vide
             self.page.goto(serveur.url + "/#/accueil")
             attendre_pret(self.page)
 
-            # Une seule sauvegarde, « avant-format-v3 », qui garde l'état d'avant (format 2).
-            sauvegardes = self.sauvegardes(serveur, "*_avant-format-v*")
-            self.assertEqual(len(sauvegardes), 1, sauvegardes)
-            self.assertRegex(sauvegardes[0], MOTIF_NOM_AVANT_FORMAT_COURANT)
-            self.assertEqual(version_schema(self.octets(serveur, "sauvegardes", sauvegardes[0], "parametres.csv")), "2")
-            self.assertEqual(version_schema(parametres.read_bytes()), FORMAT_COURANT)
-
-            # Aucun autre fichier n'a changé à l'octet ; les nouvelles tables ne sont pas créées (vides).
+            # Aucune sauvegarde, aucun fichier changé à l'octet ni créé.
+            self.assertEqual(self.sauvegardes(serveur), sauvegardes_avant)
             apres = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
-            self.assertEqual(set(apres), set(avant))
-            changes = sorted(nom for nom in avant if apres[nom] != avant[nom])
-            self.assertEqual(changes, ["journal.csv", "parametres.csv"])
+            self.assertEqual(apres, avant)
+            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "2")
+            alertes = self.page.inner_text("#alertes-app")
+            self.assertIn("pas encore au format 3", alertes)
+            self.assertIn("relancez Prévo", alertes)
+            # Les tables du wiki absentes sont lues vides ; la colonne astuce absente : lue vide, simple information.
             self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_pages').length"), 0)
             self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_journal').length"), 0)
-            # La colonne astuce absente : lue vide, simple information (écrite au prochain enregistrement).
             self.assertEqual(self.page.evaluate(
                 "Donnees.lignes('ordres_travail').filter((ot) => ot.astuce !== '').length"), 0)
             self.assertEqual(self.page.evaluate(
                 "Donnees.problemes().filter((p) => p.table === 'ordres_travail' && p.champ === 'astuce')"
                 ".map((p) => p.gravite)"), ["info"])
-            actions = actions_journal_version(self.octets(serveur, "journal.csv"))
-            self.assertEqual(len(actions), 1, actions)
-            self.assertIn("passage au format 3 du fichier ; sauvegarde %s faite juste avant" % sauvegardes[0], actions[0])
-            # La base reste propre : aucun problème « erreur » ni « attention » nouveau.
             self.assertEqual(self.page.evaluate(
                 "Donnees.problemes().filter((p) => p.gravite !== 'info' && p.table.startsWith('wiki_')).length"), 0)
+
+    def test_demandeur_aucun_bandeau_rien_n_est_ecrit(self):
+        with ServeurPrevo() as serveur:
+            shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
+            avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
+            sauvegardes_avant = self.sauvegardes(serveur)   # T187 : celles du démarrage (du jour, avant-mise-a-jour)
+            preregler_profil(self.contexte, "demandeur", nom="Lucie Martin")
+            self.page.goto(serveur.url + "/#/accueil")
+            attendre_pret(self.page)
+            self.assertEqual({p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}, avant)
+            self.assertEqual(self.sauvegardes(serveur), sauvegardes_avant)
+            self.assertNotIn("pas encore au format", self.page.inner_text("#app"))
 
 
 # ---------------------------------------------------------------------------
@@ -550,22 +465,31 @@ class TestDossier(CasNavigateur):
             self.assertTrue(resultat["valeur"]["misAJour"])
             nom = resultat["valeur"]["sauvegarde"]
             self.assertRegex(nom, MOTIF_NOM_AVANT_FORMAT_COURANT)
+            self.assertEqual(resultat["valeur"]["depart"], 1)
+            # Écritures explicites (T186) : les trois tables du format 1 sont complétées (colonnes des formats 2 et 3).
+            self.assertEqual(sorted(resultat["valeur"]["tables"]), ["demandes", "equipements", "ordres_travail"])
+            self.assertEqual(resultat["valeur"]["abimees"], [])
 
-            # Sauvegarde complète (sans marqueur « .en-cours »), avec l'état d'avant.
-            self.assertEqual(self.lister("sauvegardes/" + nom), sorted(t + ".csv" for t in TABLES_V1))
-            self.assertEqual(self.lire("sauvegardes/%s/parametres.csv" % nom), PARAMETRES_V1.read_bytes())
+            # Sauvegarde complète (sans marqueur « .en-cours »), avec l'état d'avant (toutes les tables, à l'octet) et
+            # son manifeste.json (T188).
+            self.assertEqual(self.lister("sauvegardes/" + nom), sorted([t + ".csv" for t in TABLES_V1] + ["manifeste.json"]))
+            for table in TABLES_V1:
+                self.assertEqual(self.lire("sauvegardes/%s/%s.csv" % (nom, table)),
+                                 (PARAMETRES_V1.parent / (table + ".csv")).read_bytes(), table)
             self.assertEqual(version_schema(self.lire("parametres.csv")), FORMAT_COURANT)
+            entete_ordres = self.lire("ordres_travail.csv").decode("utf-8-sig").split("\r\n", 1)[0].split(";")
+            self.assertEqual(entete_ordres[-2:], ["anomalie_constatee", "astuce"])
+            # Une ligne de journal par étape (1 → 2, puis 2 → 3).
             actions = actions_journal_version(self.lire("journal.csv"))
-            self.assertEqual(len(actions), 1, actions)
-            self.assertIn("passage au format 3 du fichier ; sauvegarde %s faite juste avant" % nom, actions[0])
+            self.assertEqual(actions, ["passage au format %d du fichier ; sauvegarde %s faite juste avant" % (n, nom)
+                                       for n in (2, 3)])
 
             # Second appel : rien.
             sauvegardes_avant = self.lister("sauvegardes")
-            parametres_avant = self.lire("parametres.csv")
-            self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR),
-                             {"ok": True, "valeur": {"misAJour": False, "sauvegarde": None}})
+            fichiers_avant = {t: self.lire(t + ".csv") for t in TABLES_V1 + ("journal",)}
+            self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR), {"ok": True, "valeur": resultat_sans_effet(3)})
             self.assertEqual(self.lister("sauvegardes"), sauvegardes_avant)
-            self.assertEqual(self.lire("parametres.csv"), parametres_avant)
+            self.assertEqual({t: self.lire(t + ".csv") for t in TABLES_V1 + ("journal",)}, fichiers_avant)
 
             # Le nom est accepté par StockageDossier : listé, puis restauré (toutes les tables).
             liste = self.appeler("listerSauvegardes")
@@ -575,6 +499,69 @@ class TestDossier(CasNavigateur):
             self.assertTrue(restauration["ok"], restauration)
             self.assertEqual(sorted(restauration["valeur"]["restaurees"]), sorted(TABLES_V1))
             self.assertEqual(self.lire("parametres.csv"), PARAMETRES_V1.read_bytes())
+
+    def test_dossier_echec_de_la_sauvegarde_rien_n_est_ecrit_et_erreur_claire(self):
+        with ServeurStatique(RACINE) as statique:
+            self.ouvrir_dossier_v1(statique.url)
+            fichiers_avant = {t: self.lire(t + ".csv") for t in TABLES_V1 + ("journal",)}
+            # La sauvegarde échoue (méthode remplacée sur l'adaptateur : disque plein, Excel…).
+            self.page.evaluate("""() => { window.vraieSauvegarde = window.dos.sauvegarder;
+                window.dos.sauvegarder = async () => {
+                  throw new Donnees.ErreurStockage('Le disque est plein (simulé).'); }; }""")
+            resultat = self.page.evaluate(APPELER_MISE_A_JOUR)
+            self.assertFalse(resultat["ok"], resultat)
+            self.assertEqual(resultat["nom"], "ErreurStockage")
+            self.assertEqual(resultat["message"],
+                             DEBUT_ERREUR_SAUVEGARDE + "Le disque est plein (simulé)" + FIN_ERREUR_SAUVEGARDE)
+            # Rien n'a bougé : aucune table réécrite, version 1 sur le disque et en mémoire, pas de journal.
+            self.assertEqual({t: self.lire(t + ".csv") for t in TABLES_V1 + ("journal",)}, fichiers_avant)
+            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "1")
+            self.assertEqual(self.lister("sauvegardes"), [])
+
+            # Une erreur qui n'est pas une ErreurStockage (bogue) donne le même message clair.
+            self.page.evaluate("() => { window.dos.sauvegarder = async () => { throw new TypeError('panne'); }; }")
+            resultat = self.page.evaluate(APPELER_MISE_A_JOUR)
+            self.assertEqual((resultat["ok"], resultat["nom"]), (False, "ErreurStockage"))
+            self.assertEqual(resultat["message"], DEBUT_ERREUR_SAUVEGARDE + "panne" + FIN_ERREUR_SAUVEGARDE)
+
+            # Un stockage (hors démo) qui ne sait pas sauvegarder, ou qui ne renvoie aucun nom, n'est pas dispensé
+            # de la sauvegarde → refus, rien n'est écrit.
+            for remplacement, cause in (
+                    ("undefined", "ce mode de stockage ne sait pas faire de sauvegarde"),
+                    ("async () => undefined", "le stockage n'a pas confirmé la sauvegarde (aucun nom renvoyé)")):
+                self.page.evaluate("() => { window.dos.sauvegarder = %s; }" % remplacement)
+                resultat = self.page.evaluate(APPELER_MISE_A_JOUR)
+                self.assertEqual((resultat["ok"], resultat["nom"]), (False, "ErreurStockage"), remplacement)
+                self.assertEqual(resultat["message"], DEBUT_ERREUR_SAUVEGARDE + cause + FIN_ERREUR_SAUVEGARDE)
+                self.assertEqual({t: self.lire(t + ".csv") for t in TABLES_V1 + ("journal",)}, fichiers_avant)
+
+            # La fois suivante (sauvegarde rétablie), le passage se fait.
+            self.page.evaluate("() => { window.dos.sauvegarder = window.vraieSauvegarde; }")
+            resultat = self.page.evaluate(APPELER_MISE_A_JOUR)
+            self.assertTrue(resultat["ok"] and resultat["valeur"]["misAJour"], resultat)
+            self.assertEqual(version_schema(self.lire("parametres.csv")), FORMAT_COURANT)
+
+    def test_dossier_autre_poste_deja_passe_au_format_courant_version_pas_reecrite(self):
+        with ServeurStatique(RACINE) as statique:
+            self.ouvrir_dossier_v1(statique.url)
+            # Un autre poste a fait le passage juste après notre lecture (notre cache dit encore 1).
+            ecrit_par_l_autre_poste = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", b"version_schema;'3")
+            self.page.evaluate("""async (octets) => {
+                const racine = await (await navigator.storage.getDirectory()).getDirectoryHandle(%s);
+                const flux = await (await racine.getFileHandle('parametres.csv')).createWritable();
+                await flux.write(new Uint8Array(octets));
+                await flux.close();
+            }""" % json.dumps(NOM_DOSSIER_SIMULE), list(ecrit_par_l_autre_poste))
+            resultat = self.page.evaluate(APPELER_MISE_A_JOUR)
+            self.assertTrue(resultat["ok"], resultat)
+            # Notre sauvegarde est faite (sans gravité : deux copies) ; version_schema n'est pas réécrite (conflit, puis
+            # relecture : déjà 3) ; nos tables complétées le sont, et le journal dit « complétés », pas « passage ».
+            self.assertRegex(resultat["valeur"]["sauvegarde"], MOTIF_NOM_AVANT_FORMAT_COURANT)
+            self.assertEqual(self.lire("parametres.csv"), ecrit_par_l_autre_poste)
+            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), FORMAT_COURANT)
+            actions = actions_journal_version(self.lire("journal.csv"))
+            self.assertTrue(actions and all(a.startswith("fichiers complétés au format ") for a in actions), actions)
+            self.assertFalse([a for a in actions if "passage au format" in a], actions)
 
     def test_dossier_motif_refuse_et_regles_de_noms_identiques_au_serveur(self):
         with ServeurStatique(RACINE) as statique:
@@ -620,12 +607,11 @@ class TestDemo(CasNavigateur):
             App.adaptateur.sauvegarder = function () { window.appelsSauvegarde += 1; return original.apply(this, arguments); }; }""")
         # Le jeu de démo est déjà au format courant : rien à faire.
         self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), FORMAT_COURANT)
-        self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR),
-                         {"ok": True, "valeur": {"misAJour": False, "sauvegarde": None}})
+        self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR), {"ok": True, "valeur": resultat_sans_effet(3)})
         self.assertEqual(self.page.evaluate("window.appelsSauvegarde"), 0)
 
     def test_demo_fichiers_au_format_1_passage_en_memoire_seulement(self):
-        charger_scripts(self.page, ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js",
+        charger_scripts(self.page, ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
                                     "js/stockage-demo.js"])
         resultat = self.page.evaluate("""async (texteParametres) => {
             const demo = StockageDemo.creer({ parametres: texteParametres });
@@ -643,13 +629,15 @@ class TestDemo(CasNavigateur):
               journal: Donnees.lignes('journal').map((ligne) => ligne.action),
             };
         }""", PARAMETRES_V1.read_bytes().decode("utf-8-sig"))
-        self.assertEqual(resultat["premier"], {"misAJour": True, "sauvegarde": None})
-        self.assertEqual(resultat["second"], {"misAJour": False, "sauvegarde": None})
+        # Seul parametres.csv existe (format 3 de fichier : cle, valeur) : aucune table à compléter, deux étapes.
+        self.assertEqual(resultat["premier"], {"misAJour": True, "sauvegarde": None, "depart": 1, "tables": [],
+                                               "abimees": []})
+        self.assertEqual(resultat["second"], resultat_sans_effet(3))
         self.assertEqual(resultat["appelsSauvegarde"], 0)
         self.assertEqual(resultat["version"], FORMAT_COURANT)
         self.assertIn("version_schema;'3", resultat["fichier"])
-        self.assertEqual(len(resultat["journal"]), 1, resultat["journal"])
-        self.assertIn("passage au format 3 du fichier ; sans sauvegarde (démo)", resultat["journal"][0])
+        self.assertEqual(resultat["journal"], ["passage au format 2 du fichier ; sans sauvegarde (démo)",
+                                               "passage au format 3 du fichier ; sans sauvegarde (démo)"])
 
 
 if __name__ == "__main__":

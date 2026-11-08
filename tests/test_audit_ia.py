@@ -376,7 +376,8 @@ class TestEnLigneAudit(unittest.TestCase):
             with self.subTest(chemin=demande["chemin"]):
                 debut = time.monotonic()
                 statut, _, octets = requete(self.refuse, "POST", "/api/ia", demande)
-                self.assertEqual((statut, json.loads(octets.decode("utf-8"))), (403, {"erreur": REFUS_EN_LIGNE}))
+                self.assertEqual((statut, json.loads(octets.decode("utf-8"))), (403, {"erreur": REFUS_EN_LIGNE,
+                                                                                      "erreur_code": "ia.en_ligne_refuse"}))
                 self.assertLess(time.monotonic() - debut, 2, "refus immédiat : aucune connexion tentée")
         self.assertEqual(reglages_publics(self.refuse)[0], {"fournisseur": "openai", "url": "http://192.0.2.1",
                                                              "cle_reglee": True, "en_ligne": False, "portee": "distant"})

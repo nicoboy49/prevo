@@ -1,0 +1,9 @@
+{
+  "base": "f3-v1.2.0",
+  "description": "Sans wiki_pages.csv ni articles.csv : 22 tables.",
+  "supprimer": [
+    "wiki_pages.csv",
+    "articles.csv"
+  ],
+  "vider": []
+}

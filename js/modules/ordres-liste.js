@@ -16,13 +16,15 @@ Object.assign(Ordres, (() => {
   // ===========================================================================================
 
   // Choix du filtre « état » de la liste (valeur → libellé).
-  const ETATS_LISTE = [
-    { valeur: 'ouverts', libelle: 'Ouverts' },
-    { valeur: 'retard', libelle: 'En retard' },
-    { valeur: 'clotures', libelle: 'Clôturés' },
-    { valeur: 'annules', libelle: 'Annulés' },
-    { valeur: 'tous', libelle: 'Tous' },
-  ];
+  function etatsListe() {
+    return [
+      { valeur: 'ouverts', libelle: I18n.t('ordres.etats_liste.ouverts') },
+      { valeur: 'retard', libelle: I18n.t('ordres.etats_liste.retard') },
+      { valeur: 'clotures', libelle: I18n.t('ordres.etats_liste.clotures') },
+      { valeur: 'annules', libelle: I18n.t('ordres.etats_liste.annules') },
+      { valeur: 'tous', libelle: I18n.t('ordres.etats_liste.tous') },
+    ];
+  }
 
   function filtresParDefaut() {
     return { etat: 'ouverts', priorite: '', technicien: estTechnicien() ? monTechnicienId() : '', type: '', recherche: '' };
@@ -42,7 +44,7 @@ Object.assign(Ordres, (() => {
     if (!avecParametres) return filtres;
     const etat = (requete.get('etat') || requete.get('filtre') || requete.get('statut') || '').toLowerCase()
       .replace('en-retard', 'retard').replace('en_retard', 'retard');
-    if (ETATS_LISTE.some((e) => e.valeur === etat)) filtres.etat = etat;
+    if (etatsListe().some((e) => e.valeur === etat)) filtres.etat = etat;
     if (etat === 'p1') { filtres.etat = 'ouverts'; filtres.priorite = 'P1'; }   // « P1 ouverts » de l'accueil
     if (PRIORITES.includes((requete.get('priorite') || '').toUpperCase())) filtres.priorite = requete.get('priorite').toUpperCase();
     if (requete.has('technicien')) filtres.technicien = requete.get('technicien');
@@ -57,73 +59,73 @@ Object.assign(Ordres, (() => {
   }
 
   function optionsTechnicienFiltre() {
-    const options = [{ valeur: '', libelle: 'Tous les techniciens' }, { valeur: '__aucun', libelle: 'Non affectés' }];
+    const options = [{ valeur: '', libelle: I18n.t('ordres.options_technicien_filtre.tous_techniciens') }, { valeur: '__aucun', libelle: I18n.t('ordres.options_technicien_filtre.non_affectes') }];
     listeTechniciens('').forEach((t) => {
-      options.push({ valeur: t.valeur, libelle: t.valeur === monTechnicienId() ? 'Mes OT (' + nomTechnicien(t.valeur) + ')' : nomTechnicien(t.valeur) });
+      options.push({ valeur: t.valeur, libelle: t.valeur === monTechnicienId() ? I18n.t('ordres.options_technicien_filtre.mes_ot', { nomTechnicien: nomTechnicien(t.valeur) }) : nomTechnicien(t.valeur) });
     });
     return options;
   }
 
   function barreFiltresHtml(filtres) {
     return UI.html`
-      <form class="filtres ot-filtres" id="ot-filtres" data-hors-saisie role="search" aria-label="Filtrer les ordres de travail">
-        <label class="visuellement-cache" for="ot-filtre-recherche">Rechercher (n°, titre, équipement)</label>
-        <input type="search" id="ot-filtre-recherche" name="recherche" value="${filtres.recherche}" placeholder="N°, titre ou équipement" autocomplete="off">
-        <label class="visuellement-cache" for="ot-filtre-etat">État</label>
-        <select id="ot-filtre-etat" name="etat">${optionsHtml(ETATS_LISTE, filtres.etat)}</select>
-        <label class="visuellement-cache" for="ot-filtre-priorite">Priorité</label>
-        <select id="ot-filtre-priorite" name="priorite">${optionsHtml([{ valeur: '', libelle: 'Toutes priorités' }].concat(PRIORITES.map((p) => ({ valeur: p, libelle: 'Priorité ' + p }))), filtres.priorite)}</select>
-        <label class="visuellement-cache" for="ot-filtre-technicien">Technicien</label>
+      <form class="filtres ot-filtres" id="ot-filtres" data-hors-saisie role="search" aria-label="${I18n.t('ordres.barre_filtres.filtrer_ordres_travail')}">
+        <label class="visuellement-cache" for="ot-filtre-recherche">${I18n.t('ordres.barre_filtres.rechercher_titre_equipement')}</label>
+        <input type="search" id="ot-filtre-recherche" name="recherche" value="${filtres.recherche}" placeholder="${I18n.t('ordres.barre_filtres.titre_equipement')}" autocomplete="off">
+        <label class="visuellement-cache" for="ot-filtre-etat">${I18n.t('ordres.barre_filtres.etat')}</label>
+        <select id="ot-filtre-etat" name="etat">${optionsHtml(etatsListe(), filtres.etat)}</select>
+        <label class="visuellement-cache" for="ot-filtre-priorite">${I18n.t('commun.champ.priorite')}</label>
+        <select id="ot-filtre-priorite" name="priorite">${optionsHtml([{ valeur: '', libelle: I18n.t('ordres.barre_filtres.toutes_priorites') }].concat(PRIORITES.map((p) => ({ valeur: p, libelle: I18n.t('ordres.barre_filtres.priorite_p', { p }) }))), filtres.priorite)}</select>
+        <label class="visuellement-cache" for="ot-filtre-technicien">${I18n.t('commun.champ.technicien')}</label>
         <select id="ot-filtre-technicien" name="technicien">${optionsHtml(optionsTechnicienFiltre(), filtres.technicien)}</select>
-        <label class="visuellement-cache" for="ot-filtre-type">Type</label>
-        <select id="ot-filtre-type" name="type">${optionsHtml([{ valeur: '', libelle: 'Tous types' }].concat(TYPES.map((t) => ({ valeur: t, libelle: t }))), filtres.type)}</select>
+        <label class="visuellement-cache" for="ot-filtre-type">${I18n.t('ordres.barre_filtres.type')}</label>
+        <select id="ot-filtre-type" name="type">${optionsHtml([{ valeur: '', libelle: I18n.t('ordres.barre_filtres.tous_types') }].concat(TYPES.map((t) => ({ valeur: t, libelle: Schema.libelleValeur('ordres_travail', 'type', t) }))), filtres.type)}</select>
       </form>`;
   }
 
   function badgeRetard(ot) {
-    return enRetard(ot) ? UI.html` <span class="badge ko ot-retard">en retard</span>` : '';
+    return enRetard(ot) ? UI.html` <span class="badge ko ot-retard">${I18n.t('ordres.badge_retard.retard')}</span>` : '';
   }
 
   /** Mention « anomalie constatée » (OT préventif pendant lequel une anomalie a été vue, §14.6). */
   function badgeAnomalie(ot) {
-    return ot.anomalie_constatee === '1' ? UI.html` <span class="badge attention ot-badge-anomalie">anomalie constatée</span>` : '';
+    return ot.anomalie_constatee === '1' ? UI.html` <span class="badge attention ot-badge-anomalie">${I18n.t('ordres.badge_anomalie.anomalie_constatee')}</span>` : '';
   }
 
   function origineHtml(ot) {
-    if (ot.origine === 'DI' && ot.di_id) return UI.html`DI <a href="#/di/${encodeURIComponent(ot.di_id)}">${ot.di_id}</a>`;
-    return ot.origine || '';
+    if (ot.origine === 'DI' && ot.di_id) return UI.html`${I18n.t('ordres.origine_courte.di')} <a href="#/di/${encodeURIComponent(ot.di_id)}">${ot.di_id}</a>`;
+    return Schema.libelleValeur('ordres_travail', 'origine', ot.origine);
   }
 
   // Origine dans la liste : le n° de DI (lien) ou le mot (préventif, urgence, manuel).
   function origineCourte(ot) {
-    if (ot.origine === 'DI' && ot.di_id) return UI.html`<a href="#/di/${encodeURIComponent(ot.di_id)}" title="Demande d'intervention">${ot.di_id}</a>`;
-    return ot.origine || '';
+    if (ot.origine === 'DI' && ot.di_id) return UI.html`<a href="#/di/${encodeURIComponent(ot.di_id)}" title="${I18n.t('ordres.origine_courte.demande_intervention')}">${ot.di_id}</a>`;
+    return Schema.libelleValeur('ordres_travail', 'origine', ot.origine);
   }
 
   function colonnesListe() {
     return [
-      { cle: 'id', libelle: 'N°', rendu: (ot) => UI.html`<a href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>` },
-      { cle: 'priorite', libelle: 'Priorité', rendu: (ot) => UI.badgePriorite(ot.priorite) },
-      { cle: 'statut', libelle: 'Statut', valeurTri: (ot) => String(STATUTS.indexOf(ot.statut)), rendu: (ot) => UI.badgeStatut(ot.statut) },
-      { cle: 'equipement', libelle: 'Équipement', valeurTri: (ot) => repereEquipement(ot.equipement_id),
+      { cle: 'id', libelle: I18n.t('ordres.colonnes_liste.numero'), rendu: (ot) => UI.html`<a href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>` },
+      { cle: 'priorite', libelle: I18n.t('commun.champ.priorite'), rendu: (ot) => UI.badgePriorite(ot.priorite) },
+      { cle: 'statut', libelle: I18n.t('commun.champ.statut'), valeurTri: (ot) => String(STATUTS.indexOf(ot.statut)), rendu: (ot) => UI.badgeValeur('ordres_travail', 'statut', ot.statut) },
+      { cle: 'equipement', libelle: I18n.t('commun.champ.equipement'), valeurTri: (ot) => repereEquipement(ot.equipement_id),
         rendu: (ot) => UI.html`<b class="sans-coupure">${repereEquipement(ot.equipement_id)}</b>` },
-      { cle: 'titre', libelle: 'Titre', classe: 'ot-col-titre', rendu: (ot) => UI.html`${ot.titre}${badgeAnomalie(ot)}` },
-      { cle: 'type', libelle: 'Type' },
-      { cle: 'technicien', libelle: 'Technicien', valeurTri: (ot) => nomTechnicien(ot.technicien_id), rendu: (ot) => nomTechnicien(ot.technicien_id) },
-      { cle: 'date_prevue', libelle: 'Prévu le', classe: 'ot-col-date', rendu: (ot) => UI.html`<span class="sans-coupure">${UI.dateFr(ot.date_prevue)}</span>${badgeRetard(ot)}` },
-      { cle: 'origine', libelle: 'Origine', classe: 'ot-col-origine', rendu: origineCourte },
+      { cle: 'titre', libelle: I18n.t('ordres.colonnes_liste.titre'), classe: 'ot-col-titre', rendu: (ot) => UI.html`${ot.titre}${badgeAnomalie(ot)}` },
+      { cle: 'type', libelle: I18n.t('ordres.barre_filtres.type'), table: 'ordres_travail' },
+      { cle: 'technicien', libelle: I18n.t('commun.champ.technicien'), valeurTri: (ot) => nomTechnicien(ot.technicien_id), rendu: (ot) => nomTechnicien(ot.technicien_id) },
+      { cle: 'date_prevue', libelle: I18n.t('ordres.colonnes_liste.prevu'), classe: 'ot-col-date', rendu: (ot) => UI.html`<span class="sans-coupure">${UI.dateFr(ot.date_prevue)}</span>${badgeRetard(ot)}` },
+      { cle: 'origine', libelle: I18n.t('ordres.colonnes_liste.origine'), classe: 'ot-col-origine', rendu: origineCourte },
     ];
   }
 
   function cartesHtml(ordres) {
-    if (!ordres.length) return UI.vide('Aucun ordre de travail', 'Aucun OT ne correspond à ces filtres.', 'ordres');
+    if (!ordres.length) return UI.vide(I18n.t('ordres.cartes.aucun_ordre_travail'), I18n.t('ordres.cartes.aucun_ot_correspond_filtres'), 'ordres');
     return UI.html`<ul class="liste-cartes">${ordres.map((ot) => UI.html`
       <li><a href="#/ot/${encodeURIComponent(ot.id)}" class="${ot.priorite === 'P1' || ot.priorite === 'P2' ? 'accent-' + ot.priorite.toLowerCase() : ''}">
-        <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}</div>
+        <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}</div>
         <div class="carte-titre">${ot.titre}</div>
         <div class="carte-meta"><span>${repereEquipement(ot.equipement_id)}</span>
-          ${ot.date_prevue ? UI.html`<span>Prévu le ${UI.dateFr(ot.date_prevue)}</span>` : ''}
-          <span>${nomTechnicien(ot.technicien_id) || 'Non affecté'}</span><span>${ot.type}</span></div>
+          ${ot.date_prevue ? UI.html`<span>${I18n.t('ordres.cartes.prevu_date_prevue', { date_prevue: UI.dateFr(ot.date_prevue) })}</span>` : ''}
+          <span>${nomTechnicien(ot.technicien_id) || I18n.t('ordres.cartes.non_affecte')}</span><span>${Schema.libelleValeur('ordres_travail', 'type', ot.type)}</span></div>
       </a></li>`)}</ul>`;
   }
 
@@ -142,27 +144,30 @@ Object.assign(Ordres, (() => {
       try { history.replaceState(history.state, '', '#/ot'); } catch (erreur) { /* adresse gardée telle quelle */ }
     }
     const tous = Donnees.lignes('ordres_travail');
+    const boutonUrgence = UI.html`<a class="btn btn-danger" id="ot-urgence" href="#/ot/nouveau?urgence=1">${UI.icone('alerte')}${I18n.t('ordres.liste.ot_urgence')}</a>`;
+    const boutonNouveau = UI.html`<a class="btn btn-primaire" id="ot-nouveau" href="#/ot/nouveau">${UI.icone('ajouter')}${I18n.t('ordres.liste.nouvel_ot')}</a>`;
+    const boutonsCreation = estResponsable() ? UI.html`
+            ${boutonUrgence}
+            ${boutonNouveau}` : '';
     UI.remplir(conteneur, UI.html`
       <div class="entete-page">
-        <div><h1>Ordres de travail</h1><p>Préparer, planifier, exécuter et clôturer les interventions.</p></div>
+        <div><h1>${I18n.t('ordres.liste.ordres_travail')}</h1><p>${I18n.t('ordres.liste.preparer_planifier_executer_cloturer')}</p></div>
         <div class="actions">
-          ${estResponsable() ? UI.html`
-            <a class="btn btn-danger" id="ot-urgence" href="#/ot/nouveau?urgence=1">${UI.icone('alerte')}OT d'urgence</a>
-            <a class="btn btn-primaire" id="ot-nouveau" href="#/ot/nouveau">${UI.icone('ajouter')}Nouvel OT</a>` : ''}
+          ${boutonsCreation}
         </div>
       </div>
       ${barreFiltresHtml(filtres)}
       <div class="ot-liste-tete">
         <p class="note" id="ot-compteur" role="status"></p>
-        <button type="button" class="btn btn-secondaire" id="ot-export">${UI.icone('export')}Exporter en CSV</button>
+        <button type="button" class="btn btn-secondaire" id="ot-export">${UI.icone('export')}${I18n.t('ordres.liste.exporter_csv')}</button>
       </div>
       <div class="carte ot-liste-tableau"></div>
       <div class="ot-liste-cartes"></div>`);
 
     let affiches = [];
     const tableau = UI.tableau({
-      colonnes: colonnesListe(), lignes: [], libelle: 'Ordres de travail',
-      triInitial: { cle: 'priorite', sens: 'asc' }, vide: 'Aucun ordre de travail ne correspond à ces filtres.',
+      colonnes: colonnesListe(), lignes: [], libelle: I18n.t('ordres.liste.ordres_travail'),
+      triInitial: { cle: 'priorite', sens: 'asc' }, vide: I18n.t('ordres.liste.aucun_ordre_travail_correspond'),
       surClic: (ot) => App.naviguer('#/ot/' + encodeURIComponent(ot.id)),
     });
     UI.$('.ot-liste-tableau', conteneur).appendChild(tableau);
@@ -171,7 +176,7 @@ Object.assign(Ordres, (() => {
       affiches = trierParDefaut(filtrer(tous, memoire.filtres));
       tableau.mettreAJour(affiches);
       UI.remplir(UI.$('.ot-liste-cartes', conteneur), cartesHtml(affiches));
-      UI.$('#ot-compteur', conteneur).textContent = affiches.length + ' ordre(s) de travail sur ' + tous.length;
+      UI.$('#ot-compteur', conteneur).textContent = I18n.t('ordres.liste.ordre_travail', { n: affiches.length, nbTous: tous.length });
     }
 
     const formulaire = UI.$('#ot-filtres', conteneur);
@@ -222,7 +227,7 @@ Object.assign(Ordres, (() => {
     contenu.set([0xEF, 0xBB, 0xBF], 0);
     contenu.set(octets, 3);
     UI.telecharger('ordres-de-travail-' + aujourdhui() + '.csv', new Blob([contenu], { type: 'text/csv;charset=utf-8' }));
-    UI.toast(ordres.length + ' ordre(s) de travail exporté(s).', 'succes');
+    UI.toast(I18n.t('ordres.exporter_csv.ordre_travail_exporte', { n: ordres.length, nbOrdres: ordres.length }), 'succes');
   }
 
   // Outils prêtés aux fichiers suivants du module (usage interne).

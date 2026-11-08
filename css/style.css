@@ -302,7 +302,7 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 /* =========================================================================================
    5. Coque de l'application
    <div class="coque [replie]">
-     <aside class="menu-lateral"> .menu-tete (logo, titre, .menu-replier) · nav.menu · a.signature </aside>
+     <aside class="menu-lateral"> .menu-tete (logo, titre, .menu-replier) · nav.menu · .etat-poste · .menu-langue · a.signature </aside>
      <div class="zone-principale"> header.entete-mobile · .bandeau-demo · .bandeau-changement · main.contenu </div>
      <nav class="barre-bas"> 4 entrées + « Plus » </nav>
    </div>
@@ -379,11 +379,16 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
   background: var(--carte); border: 1px solid var(--trait); border-radius: 14px; line-height: 1.35;
 }
 .etat-poste > .icone { width: 30px; height: 30px; padding: 6px; border-radius: 50%; background: var(--teinte-bleu); color: var(--texte-bleu); }
+/* Langue de l'écran (D147, T278) : la liste seule, sous « Explications » ; cachée quand le menu n'a que ses icônes
+   (l'écran « Ce poste » la propose toujours) */
+.menu-langue select { font-size: .875rem; padding: .4rem .7rem; border-radius: 12px; }
+.menu-suggestion { font-size: .8125rem; padding: 0 .4rem; }
+.menu-suggestion a { color: var(--texte-2); text-decoration: underline; display: inline-flex; align-items: center; min-height: 44px; }   /* zone tactile de 44 px (test_bento) */
 
 /* Menu en icônes seules (replié sur grand écran, ou tablette) */
 .coque.replie .menu-lateral { padding: 16px 10px; align-items: stretch; }
 .coque.replie .menu-tete { flex-direction: column; padding: 4px 0 12px; gap: 10px; }
-.coque.replie .menu-tete .titre, .coque.replie .menu-groupe { display: none; }
+.coque.replie .menu-tete .titre, .coque.replie .menu-groupe, .coque.replie .menu-langue, .coque.replie .menu-suggestion { display: none; }
 .coque.replie .menu a, .coque.replie .signature, .coque.replie .etat-poste { justify-content: center; padding: 0; }
 .coque.replie .menu a .libelle, .coque.replie .signature .libelle, .coque.replie .etat-poste .libelle {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
@@ -520,6 +525,9 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 .alerte > .icone { width: 22px; height: 22px; margin-top: 1px; }
 .alerte .alerte-texte { flex: 1; min-width: 0; }
 .alerte .alerte-texte > :last-child { margin-bottom: 0; }
+/* T329 : brouillon gardé sur l'appareil (texte à recopier, boutons du bandeau) */
+.alerte .brouillon-texte { white-space: pre-wrap; font: inherit; margin: 8px 0; max-height: 12rem; overflow: auto; }
+.alerte .brouillon-abandonner, .alerte .brouillon-effacer, .alerte .brouillon-reprendre { margin-top: 8px; min-height: 44px; }
 .alerte.attention { background: var(--teinte-ambre-faible); border-color: var(--bord-ambre); color: var(--texte-ambre); }
 .alerte.important { background: var(--teinte-rouge-faible); border-color: var(--bord-rouge); color: var(--texte-important); }
 .alerte.succes { background: var(--teinte-vert-faible); border-color: var(--bord-vert); color: var(--texte-vert); }
@@ -779,7 +787,7 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
   .coque, .coque.replie { grid-template-columns: var(--largeur-menu-icones) minmax(0, 1fr); }
   .menu-lateral { padding: 16px 10px; }
   .menu-tete { flex-direction: column; padding: 4px 0 12px; gap: 10px; }
-  .menu-tete .titre, .menu-groupe, .menu-replier { display: none; }
+  .menu-tete .titre, .menu-groupe, .menu-replier, .menu-langue, .menu-suggestion { display: none; }
   .menu a, .signature, .etat-poste { justify-content: center; padding: 0; }
   .menu a .libelle, .signature .libelle, .etat-poste .libelle {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;

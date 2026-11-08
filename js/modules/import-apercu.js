@@ -13,13 +13,14 @@
 Object.assign(Import.assistant, (() => {
 
   const A = Import.assistant;
+  // Libellé (badge), filtre (bouton) et résumé (« 3 à créer ») : lus à l'affichage, jamais figés au chargement.
   const ACTIONS = {
-    creer: { libelle: 'À créer', filtre: 'À créer', ton: 'ok', resume: ['à créer', 'à créer'] },
-    mettre_a_jour: { libelle: 'À mettre à jour', filtre: 'À mettre à jour', ton: 'info', resume: ['à mettre à jour', 'à mettre à jour'] },
-    identique: { libelle: 'Identique', filtre: 'Identiques', ton: 'neutre', resume: ['identique', 'identiques'] },
-    refusee: { libelle: 'Refusée', filtre: 'Refusées', ton: 'ko', resume: ['refusée', 'refusées'] },
-    doublon_sur: { libelle: 'Doublon sûr', filtre: 'Doublons sûrs', ton: 'violet', resume: ['doublon sûr (ignoré)', 'doublons sûrs (ignorés)'] },
-    doublon_suppose: { libelle: 'Doublon supposé', filtre: 'Doublons supposés', ton: 'attention', resume: ['doublon supposé', 'doublons supposés'] },
+    creer: { get libelle() { return I18n.t('import.action.creer'); }, get filtre() { return I18n.t('import.filtre.creer'); }, ton: 'ok', resume: (n) => I18n.t('import.resume.creer', { n }) },
+    mettre_a_jour: { get libelle() { return I18n.t('import.action.mettre_a_jour'); }, get filtre() { return I18n.t('import.filtre.mettre_a_jour'); }, ton: 'info', resume: (n) => I18n.t('import.resume.mettre_a_jour', { n }) },
+    identique: { get libelle() { return I18n.t('import.action.identique'); }, get filtre() { return I18n.t('import.filtre.identique'); }, ton: 'neutre', resume: (n) => I18n.t('import.resume.identique', { n }) },
+    refusee: { get libelle() { return I18n.t('import.action.refusee'); }, get filtre() { return I18n.t('import.filtre.refusee'); }, ton: 'ko', resume: (n) => I18n.t('import.resume.refusee', { n }) },
+    doublon_sur: { get libelle() { return I18n.t('import.action.doublon_sur'); }, get filtre() { return I18n.t('import.filtre.doublon_sur'); }, ton: 'violet', resume: (n) => I18n.t('import.resume.doublon_sur', { n }) },
+    doublon_suppose: { get libelle() { return I18n.t('import.action.doublon_suppose'); }, get filtre() { return I18n.t('import.filtre.doublon_suppose'); }, ton: 'attention', resume: (n) => I18n.t('import.resume.doublon_suppose', { n }) },
   };
   const ACTIONS_REFERENTIELS = ['creer', 'mettre_a_jour', 'identique', 'refusee'];
   const ACTIONS_HISTORIQUE = ['creer', 'refusee', 'doublon_sur', 'doublon_suppose'];
@@ -30,7 +31,8 @@ Object.assign(Import.assistant, (() => {
     codes: ['code', 'famille', 'libelle'], compteurs: ['equipement', 'libelle'], controles: ['equipement', 'nature'],
     gammes: ['equipement', 'libelle', 'operations'], historique: ['ancien_numero', 'equipement', 'titre'],
   };
-  const REFERENCES = { localisations: 'Localisation', fournisseurs: 'Fournisseur' };
+  // Nature d'une référence créée par l'import (lue à l'affichage).
+  const REFERENCES = { get localisations() { return I18n.t('import.reference.localisation'); }, get fournisseurs() { return I18n.t('import.reference.fournisseur'); } };
   // Table où la trace « proposition IA utilisée » est écrite : celle de la fiche importée.
   const TABLE_PRINCIPALE = {
     localisations: 'localisations', equipements: 'equipements', articles: 'articles', fournisseurs: 'fournisseurs',
@@ -45,8 +47,9 @@ Object.assign(Import.assistant, (() => {
 
   function messageErreur(erreur, contexte) {
     if (erreur instanceof Import.ErreurImport) return erreur.message;
-    console.warn('Prévo (import) : ' + contexte + ' impossible (' + (erreur && erreur.message) + ').', erreur);
-    return contexte.charAt(0).toUpperCase() + contexte.slice(1) + ' impossible : ' + ((erreur && erreur.message) || 'erreur inconnue') + '.';
+    console.warn('Prévo (import) : ' + (contexte === 'apercu' ? 'aperçu' : contexte) + ' impossible (' + (erreur && erreur.message) + ').', erreur);
+    const raison = App.raisonErreur(erreur);
+    return contexte === 'apercu' ? I18n.t('import.erreur.apercu_impossible', { raison }) : I18n.t('import.erreur.import_impossible', { raison });
   }
 
   // ===========================================================================================
@@ -69,7 +72,7 @@ Object.assign(Import.assistant, (() => {
     } catch (erreur) {
       etat.apercu = null;
       etat.calcul = null;
-      return { ok: false, message: messageErreur(erreur, 'aperçu') };
+      return { ok: false, message: messageErreur(erreur, 'apercu') };
     }
   }
 
@@ -88,18 +91,15 @@ Object.assign(Import.assistant, (() => {
     const etat = A.etat();
     const calcul = etat.apercu ? { ok: true } : calculerApercu();
     const historique = etat.type === 'historique';
-    const element = A.section(4, 'Aperçu : ce que Prévo va faire', 'Rien n\'est encore écrit. Vérifiez ce que deviendra chaque '
-      + 'ligne du fichier ; les lignes refusées ne seront pas importées.');
+    const element = A.section(4, I18n.t('import.etape_apercu.apercu_prevo_va_faire'), I18n.t('import.etape_apercu.rien_encore_ecrit_verifiez'));
     element.appendChild(UI.element(UI.html`<div class="alertes" id="import-message-apercu"></div>`));
     if (historique) {
-      element.appendChild(UI.element(UI.html`<p class="note import-option">Chaque intervention acceptée devient un OT clôturé ;
-        un OT déjà dans Prévo n'est jamais modifié. Un doublon supposé n'est importé que si vous cochez « Importer quand même ».</p>`));
+      element.appendChild(UI.element(UI.html`<p class="note import-option">${I18n.t('import.etape_apercu.chaque_intervention_acceptee_devient')}</p>`));
     } else {
       element.appendChild(UI.element(UI.html`<div class="import-option">
         <label class="case"><input type="checkbox" id="import-mettre-a-jour"${etat.mettreAJour ? UI.brut(' checked') : ''}>
-          <span>Compléter et mettre à jour les fiches existantes</span></label>
-        <p class="aide">Seules les colonnes importées et remplies qui changent sont écrites ; une cellule vide n'efface rien.
-          Décochée : les fiches déjà dans Prévo ne sont pas touchées, seules les nouvelles sont créées.</p>
+          <span>${I18n.t('import.etape_apercu.completer_mettre_jour_fiches')}</span></label>
+        <p class="aide">${I18n.t('import.etape_apercu.seules_colonnes_importees_remplies')}</p>
       </div>`));
     }
     element.appendChild(UI.element(UI.html`<div class="import-resultats-apercu"></div>`));
@@ -157,20 +157,18 @@ Object.assign(Import.assistant, (() => {
 
   function resume(apercu, actions) {
     const totaux = apercu.totaux;
-    const morceaux = actions.filter((action) => totaux[action]).map((action) => {
-      const [un, plusieurs] = ACTIONS[action].resume;
-      return totaux[action] + ' ' + (totaux[action] > 1 ? plusieurs : un);
-    });
-    return A.pluriel(totaux.lignes, 'ligne lue', 'lignes lues') + (morceaux.length ? ' : ' + morceaux.join(', ') : '') + '.';
+    const morceaux = actions.filter((action) => totaux[action]).map((action) => ACTIONS[action].resume(totaux[action]));
+    const lues = I18n.t('import.resume.lignes_lues', { n: totaux.lignes });
+    return morceaux.length ? I18n.t('import.resume.lues_detail', { lues, detail: morceaux.join(', ') }) : I18n.t('import.resume.lues', { lues });
   }
 
   function references(apercu) {
     const liste = apercu.referencesCreees || [];
     if (!liste.length) return '';
     return UI.html`<div class="encadre info" id="import-references">
-      <b>${liste.length > 1 ? 'Créées aussi, car citées par les lignes à importer' : 'Créée aussi, car citée par les lignes à importer'} :</b>
-      <ul>${liste.map((reference) => UI.html`<li>${REFERENCES[reference.table] || libelleTable(reference.table)} « ${reference.libelle} »
-        <small class="import-cible">${reference.id}</small></li>`)}</ul>
+      <b>${I18n.t('import.references.creees_aussi', { n: liste.length })}</b>
+      <ul>${liste.map((reference) => UI.html`<li>${I18n.html('import.references.reference', { nature: REFERENCES[reference.table] || libelleTable(reference.table),
+        libelle: reference.libelle, id: reference.id })}</li>`)}</ul>
     </div>`;
   }
 
@@ -190,7 +188,7 @@ Object.assign(Import.assistant, (() => {
     if (!zone || !etat.apercu) return;
     const apercu = etat.apercu;
     const actions = etat.type === 'historique' ? ACTIONS_HISTORIQUE : ACTIONS_REFERENTIELS;
-    const filtres = [{ cle: 'tout', libelle: 'Toutes', total: apercu.totaux.lignes, attribut: 'lignes' }]
+    const filtres = [{ cle: 'tout', libelle: I18n.t('import.filtre.tout'), total: apercu.totaux.lignes, attribut: 'lignes' }]
       .concat(actions.map((action) => ({ cle: action, libelle: ACTIONS[action].filtre, total: apercu.totaux[action] || 0, attribut: action })));
     const refusees = apercu.totaux.refusee || 0;
     const filtrees = lignesFiltrees();
@@ -199,22 +197,22 @@ Object.assign(Import.assistant, (() => {
       <p class="import-resume" id="import-resume">${resume(apercu, actions)}</p>
       ${references(apercu)}
       <div class="import-barre">
-        <div class="import-filtres" role="group" aria-label="Afficher les lignes">
+        <div class="import-filtres" role="group" aria-label="${I18n.t('import.rendre_resultats.afficher_lignes')}">
           ${filtres.map((filtre) => UI.html`<button type="button" class="btn btn-secondaire import-filtre" data-filtre="${filtre.cle}"
             aria-pressed="${etat.filtre === filtre.cle ? 'true' : 'false'}"><span>${filtre.libelle} (<span data-total="${filtre.attribut}">${filtre.total}</span>)</span></button>`)}
         </div>
-        ${refusees ? UI.html`<button type="button" class="btn btn-secondaire" id="import-refus">${UI.icone('export')}Télécharger les lignes refusées (${refusees})</button>` : ''}
+        ${refusees ? UI.html`<button type="button" class="btn btn-secondaire" id="import-refus">${UI.icone('export')}${I18n.t('import.rendre_resultats.telecharger_lignes_refusees', { refusees })}</button>` : ''}
       </div>
-      <div class="import-cadre" tabindex="0" role="region" aria-label="Lignes du fichier">
+      <div class="import-cadre" tabindex="0" role="region" aria-label="${I18n.t('import.rendre_resultats.lignes_fichier')}">
         <table class="table import-lignes">
-          <caption class="visuellement-cache">Ce que Prévo fera de chaque ligne du fichier</caption>
-          <thead><tr><th scope="col" class="num">Ligne</th><th scope="col">Action</th><th scope="col">Fiche</th><th scope="col">Détail</th></tr></thead>
+          <caption class="visuellement-cache">${I18n.t('import.rendre_resultats.prevo_fera_chaque_ligne')}</caption>
+          <thead><tr><th scope="col" class="num">${I18n.t('import.rendre_resultats.ligne')}</th><th scope="col">${I18n.t('import.rendre_resultats.action')}</th><th scope="col">${I18n.t('import.rendre_resultats.fiche')}</th><th scope="col">${I18n.t('import.rendre_resultats.detail')}</th></tr></thead>
           <tbody>${affichees.length ? affichees.map(ligneApercu)
-            : UI.html`<tr><td colspan="4" class="vide-table">Aucune ligne pour ce filtre.</td></tr>`}</tbody>
+            : UI.html`<tr><td colspan="4" class="vide-table">${I18n.t('import.rendre_resultats.aucune_ligne_filtre')}</td></tr>`}</tbody>
         </table>
       </div>
       ${filtrees.length > affichees.length ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" id="import-plus">
-        Afficher ${Math.min(PAS_AFFICHAGE, filtrees.length - affichees.length)} lignes de plus (sur ${filtrees.length - affichees.length})</button></div>` : ''}`);
+        ${I18n.t('import.rendre_resultats.afficher_lignes_plus', { n: Math.min(PAS_AFFICHAGE, filtrees.length - affichees.length), reste: filtrees.length - affichees.length })}</button></div>` : ''}`);
     if (aFocaliser) {
       const cible = UI.$(aFocaliser, zone);
       if (cible) cible.focus();
@@ -223,8 +221,10 @@ Object.assign(Import.assistant, (() => {
 
   function fiche(ligne) {
     const etat = A.etat();
-    const valeurs = (FICHE[etat.type] || []).map((cle) => texte(ligne.valeurs && ligne.valeurs[cle])).filter(Boolean)
-      .map((valeur) => (valeur.length > 60 ? valeur.slice(0, 59) + '…' : valeur));
+    // Famille d'un code : valeur stockée de la liste, affichée par son libellé (D155).
+    const valeurs = (FICHE[etat.type] || []).map((cle) => (etat.type === 'codes' && cle === 'famille'
+      ? Schema.libelleValeur('codes_defaillance', 'famille', texte(ligne.valeurs && ligne.valeurs.famille)) : texte(ligne.valeurs && ligne.valeurs[cle]))).filter(Boolean)
+      .map((valeur) => (valeur.length > 60 ? I18n.t('import.texte_coupe', { debut: valeur.slice(0, 59) }) : valeur));
     const cible = ligne.cible && !ligne.doublon && ligne.action !== 'refusee' ? ligne.cible : '';
     return UI.html`${valeurs.length ? UI.html`<b>${valeurs[0]}</b>${valeurs.slice(1).map((v) => UI.html`<span class="import-fiche-suite">${v}</span>`)}` : '—'}
       ${cible ? UI.html`<small class="import-cible">${cible}</small>` : ''}`;
@@ -235,20 +235,21 @@ Object.assign(Import.assistant, (() => {
     const morceaux = [];
     if (ligne.changements && ligne.changements.length) {
       morceaux.push(UI.html`<ul class="import-changements">${ligne.changements.map((c) => UI.html`<li><span class="import-champ-nom">${c.libelle || c.champ}</span> :
-        <span class="import-avant">${texte(c.avant) || '(vide)'}</span> → <b class="import-apres">${texte(c.apres) || '(vide)'}</b></li>`)}</ul>`);
+        <span class="import-avant">${texte(c.avant) || I18n.t('import.detail.vide')}</span> → <b class="import-apres">${texte(c.apres) || I18n.t('import.detail.vide')}</b></li>`)}</ul>`);
     }
     if (ligne.doublon) {
       morceaux.push(UI.html`<p class="import-doublon">${ligne.doublon.ligne
-        ? UI.html`Même intervention que la ligne ${ligne.doublon.ligne} du fichier${ligne.doublon.ot ? UI.html` (${ligne.doublon.ot})` : ''}.`
-        : UI.html`Même intervention que l'OT ${ligne.doublon.ot} déjà dans Prévo.`}</p>`);
+        ? (ligne.doublon.ot ? I18n.t('import.detail.meme_intervention_ligne_ot', { ligne: ligne.doublon.ligne, ot: ligne.doublon.ot })
+          : I18n.t('import.detail.meme_intervention_ligne_fichier', { ligne: ligne.doublon.ligne }))
+        : UI.html`${I18n.t('import.detail.meme_intervention_ot_deja', { ot: ligne.doublon.ot })}`}</p>`);
     }
     if (ligne.raisons && ligne.raisons.length) {
       morceaux.push(UI.html`<ul class="import-raisons${ligne.action === 'refusee' ? ' import-refus' : ''}">${ligne.raisons.map((r) => UI.html`<li>${r}</li>`)}</ul>`);
     }
-    if (!morceaux.length) morceaux.push(UI.html`<span class="import-rien">${ligne.action === 'identique' ? 'Aucun changement.' : '—'}</span>`);
+    if (!morceaux.length) morceaux.push(UI.html`<span class="import-rien">${ligne.action === 'identique' ? I18n.t('import.detail.aucun_changement') : '—'}</span>`);
     if (ligne.action === 'doublon_suppose' || (ligne.doublon && etat.quandMeme.has(ligne.numero))) {
       morceaux.push(UI.html`<label class="case import-case-quand-meme"><input type="checkbox" class="import-quand-meme" data-numero="${ligne.numero}"${etat.quandMeme.has(ligne.numero) ? UI.brut(' checked') : ''}>
-        <span>Importer quand même</span></label>`);
+        <span>${I18n.t('import.detail.importer_quand_meme')}</span></label>`);
     }
     return morceaux;
   }
@@ -280,11 +281,11 @@ Object.assign(Import.assistant, (() => {
   function etapeImporter(zone) {
     const etat = A.etat();
     const tables = tablesAEcrire(etat.apercu);
-    const element = A.section(5, 'Importer', tables.length ? 'Dernière étape : c\'est seulement ici que Prévo écrit.' : '');
+    const element = A.section(5, I18n.t('import.etape_importer.importer'), tables.length ? I18n.t('import.etape_importer.derniere_etape_seulement_ici') : '');
     element.appendChild(UI.element(UI.html`<div class="import-bilan" id="import-bilan">${bilan(etat.apercu, tables)}</div>`));
     element.appendChild(UI.element(UI.html`<div class="import-progression" id="import-progression" hidden></div>`));
     element.appendChild(UI.element(UI.html`<div class="import-resultat" id="import-resultat" aria-live="polite"></div>`));
-    const bouton = UI.element(UI.html`<button type="button" class="btn btn-primaire" id="import-importer">${UI.icone('valider')}Importer</button>`);
+    const bouton = UI.element(UI.html`<button type="button" class="btn btn-primaire" id="import-importer">${UI.icone('valider')}${I18n.t('import.etape_importer.importer')}</button>`);
     bouton.disabled = !tables.length;
     bouton.addEventListener('click', () => importer(bouton));
     element.appendChild(A.navigation({ retour: 4, boutons: [bouton] }));
@@ -294,22 +295,21 @@ Object.assign(Import.assistant, (() => {
 
   function bilan(apercu, tables) {
     if (!tables.length) {
-      return UI.bandeau('attention', UI.html`<b>Rien à importer :</b> aucune ligne à créer ni à mettre à jour. Revenez à l'aperçu
-        (lignes refusées, case « Compléter et mettre à jour les fiches existantes ») ou à la correspondance des colonnes.`);
+      return UI.bandeau('attention', UI.html`${I18n.html('import.bilan.rien_importer_aucune_ligne')}`);
     }
     const modeDemo = App.mode === 'demo';
-    return UI.html`<p>En cliquant sur « Importer », Prévo écrit :</p>
+    return UI.html`<p>${I18n.t('import.bilan.cliquant_importer_prevo_ecrit')}</p>
       <ul class="import-tables">${tables.map((nomTable) => {
         const ecritures = apercu.ecritures[nomTable];
         const morceaux = [];
-        if (ecritures.creer.length) morceaux.push(A.pluriel(ecritures.creer.length, 'création'));
-        if (ecritures.modifier.length) morceaux.push(A.pluriel(ecritures.modifier.length, 'mise à jour', 'mises à jour'));
+        if (ecritures.creer.length) morceaux.push(I18n.t('import.bilan.creations', { n: ecritures.creer.length }));
+        if (ecritures.modifier.length) morceaux.push(I18n.t('import.bilan.mises_a_jour', { n: ecritures.modifier.length }));
         return UI.html`<li><b>${libelleTable(nomTable)}</b> : ${morceaux.join(', ')}</li>`;
       })}</ul>
       <p class="note">${modeDemo
-        ? 'Démo : rien n\'est écrit sur un disque. L\'état d\'avant l\'import est gardé en mémoire : « Annuler cet import » le rétablit.'
-        : 'Juste avant, Prévo fait une sauvegarde « Avant import » : « Annuler cet import » rend les tables touchées dans leur état d\'avant.'}
-        Chaque fiche écrite est notée au journal.</p>`;
+        ? I18n.t('import.bilan.demo_rien_ecrit_disque')
+        : I18n.t('import.bilan.juste_avant_prevo_fait')}
+        ${I18n.t('import.bilan.chaque_fiche_ecrite_notee')}</p>`;
   }
 
   // Progression : une table de plus à chaque écriture locale (Donnees signale chaque table écrite).
@@ -317,8 +317,8 @@ Object.assign(Import.assistant, (() => {
     const zone = zoneDe('#import-progression');
     const ecrites = new Set();
     zone.hidden = false;
-    UI.remplir(zone, UI.html`<p class="import-etat-progression" role="status">${App.mode === 'demo' ? 'Préparation…' : 'Sauvegarde avant l\'import…'}</p>
-      <progress max="${tables.length}" value="0" aria-label="Tables écrites"></progress>`);
+    UI.remplir(zone, UI.html`<p class="import-etat-progression" role="status">${App.mode === 'demo' ? I18n.t('import.suivre_progression.preparation') : I18n.t('import.suivre_progression.sauvegarde_avant_import')}</p>
+      <progress max="${tables.length}" value="0" aria-label="${I18n.t('import.suivre_progression.tables_ecrites')}"></progress>`);
     const etatProgression = UI.$('.import-etat-progression', zone);
     const barre = UI.$('progress', zone);
     const ecouter = (evenement) => {
@@ -328,7 +328,7 @@ Object.assign(Import.assistant, (() => {
         if (!tables.includes(nomTable) || ecrites.has(nomTable)) return;
         ecrites.add(nomTable);
         barre.value = ecrites.size;
-        etatProgression.textContent = 'Écriture : ' + libelleTable(nomTable) + ' (' + ecrites.size + ' sur ' + tables.length + ')…';
+        etatProgression.textContent = I18n.t('import.suivre_progression.ecriture_libelle_table_ecrites_size_nb_tables', { libelleTable: libelleTable(nomTable), ecritesSize: ecrites.size, nbTables: tables.length });
       });
     };
     Donnees.evenements.addEventListener('changement', ecouter);
@@ -361,10 +361,10 @@ Object.assign(Import.assistant, (() => {
       const resultat = await Import.importer(etat.apercu, { nomFichier: texte(etat.lecture && etat.lecture.nom),
         recalculer: () => Import.preparer(calcul.type, calcul.lignes, calcul.correspondance, calcul.options) });
       etat.resultat = resultat;
-      progression.finir({ complet: true, texte: 'Import terminé : ' + A.pluriel(resultat.tablesTouchees.length, 'table écrite', 'tables écrites') + '.' });
+      progression.finir({ complet: true, texte: I18n.t('import.importer.import_termine_tables', { n: resultat.tablesTouchees.length }) });
       await tracerIa(resultat);
       afficherResultat();
-      UI.toast('Import terminé.', 'succes');
+      UI.toast(I18n.t('import.importer.import_termine'), 'succes');
     } catch (erreur) {
       progression.finir(null);
       bouton.removeAttribute('aria-busy');
@@ -379,7 +379,7 @@ Object.assign(Import.assistant, (() => {
       }
       // Une table qui échoue n'est pas écrite (Donnees.modifier) : « partiel » seulement si une table l'a été.
       if (erreur && erreur.resultatPartiel && Object.keys(erreur.resultatPartiel.tables || {}).length) {
-        progression.finir({ complet: false, texte: 'Import arrêté en cours de route.' });
+        progression.finir({ complet: false, texte: I18n.t('import.importer.import_arrete_cours_route') });
         etat.resultat = erreur.resultatPartiel;
         etat.partiel = messageErreur(erreur, 'import');
         afficherResultat();
@@ -410,13 +410,13 @@ Object.assign(Import.assistant, (() => {
     const zone = zoneDe('#import-resultat');
     if (!zone) return;
     zone.textContent = '';
-    if (message) zone.appendChild(UI.bandeau('important', UI.html`<b>Rien n'a été importé.</b> ${message}`));
+    if (message) zone.appendChild(UI.bandeau('important', UI.html`${I18n.html('import.erreur_import.rien_ete_importe', { message })}`));
   }
 
   function tableauResultat(resultat) {
     return UI.html`<div class="table-defile"><table class="table import-tableau-resultat">
-      <caption class="visuellement-cache">Fiches écrites par table</caption>
-      <thead><tr><th scope="col">Table</th><th scope="col" class="num">Créées</th><th scope="col" class="num">Mises à jour</th></tr></thead>
+      <caption class="visuellement-cache">${I18n.t('import.tableau_resultat.fiches_ecrites_table')}</caption>
+      <thead><tr><th scope="col">${I18n.t('import.tableau_resultat.table')}</th><th scope="col" class="num">${I18n.t('import.tableau_resultat.creees')}</th><th scope="col" class="num">${I18n.t('import.tableau_resultat.mises_jour')}</th></tr></thead>
       <tbody>${resultat.tablesTouchees.map((nomTable) => {
         const bilanTable = resultat.tables[nomTable] || { crees: 0, misAJour: 0 };
         return UI.html`<tr data-table="${nomTable}"><td>${libelleTable(nomTable)}</td><td class="num import-crees">${bilanTable.crees}</td>
@@ -436,28 +436,25 @@ Object.assign(Import.assistant, (() => {
     if (retour) retour.hidden = true;
     UI.$$('#contenu #import-bilan, #contenu #import-etape-5 .import-intro').forEach((element) => { element.hidden = true; });
     const tables = resultat.tablesTouchees.map(libelleTable).join(', ');
-    const recommencer = UI.html`<button type="button" class="btn btn-secondaire" id="import-recommencer">${UI.icone('ajouter')}Importer d'autres données</button>`;
+    const recommencer = UI.html`<button type="button" class="btn btn-secondaire" id="import-recommencer">${UI.icone('ajouter')}${I18n.t('import.resultat.importer_autres_donnees')}</button>`;
     if (etat.annule) {
-      UI.remplir(zone, UI.html`${UI.brut(UI.bandeau('succes', UI.html`<b>Import annulé :</b> ${tables} ${resultat.tablesTouchees.length > 1 ? 'sont revenues' : 'est revenue'}
-        à l'état d'avant l'import.`).outerHTML)}
+      UI.remplir(zone, UI.html`${UI.brut(UI.bandeau('succes', I18n.html('import.resultat.import_annule', { n: resultat.tablesTouchees.length, tables })).outerHTML)}
         <div class="actions">${recommencer}</div>`);
     } else {
       const crees = resultat.tablesTouchees.reduce((somme, t) => somme + ((resultat.tables[t] || {}).crees || 0), 0);
       const misAJour = resultat.tablesTouchees.reduce((somme, t) => somme + ((resultat.tables[t] || {}).misAJour || 0), 0);
       const entete = etat.partiel
-        ? UI.bandeau('important', UI.html`<b>L'import s'est arrêté en cours de route :</b> ${etat.partiel}
-          Des fiches ont déjà été écrites (${Object.keys(resultat.tables).map(libelleTable).join(', ')}) : annulez cet import
-          pour revenir à l'état d'avant, puis recommencez.`)
-        : UI.bandeau('succes', UI.html`<b>Import terminé :</b> ${A.pluriel(crees, 'fiche créée', 'fiches créées')},
-          ${A.pluriel(misAJour, 'fiche mise à jour', 'fiches mises à jour')}.`);
+        ? UI.bandeau('important', I18n.html('import.resultat.import_arrete', { message: etat.partiel,
+          tables: Object.keys(resultat.tables).map(libelleTable).join(', ') }))
+        : UI.bandeau('succes', I18n.html('import.resultat.import_termine', { creees: I18n.t('import.resultat.fiches_creees', { n: crees }),
+          misesAJour: I18n.t('import.resultat.fiches_mises_a_jour', { n: misAJour }) }));
       UI.remplir(zone, UI.html`${UI.brut(entete.outerHTML)}
         ${tableauResultat(resultat)}
         ${resultat.sauvegarde
-          ? UI.html`<p class="note">Sauvegarde faite juste avant l'import : <b id="import-sauvegarde">${resultat.sauvegarde}</b>
-            (Paramètres, « Sauvegardes », type « Avant import »).</p>`
-          : UI.html`<p class="note">Démo : l'état d'avant l'import est gardé en mémoire tant que cette page reste ouverte.</p>`}
+          ? UI.html`<p class="note">${I18n.html('import.resultat.sauvegarde_faite_juste_avant', { sauvegarde: resultat.sauvegarde })}</p>`
+          : UI.html`<p class="note">${I18n.t('import.resultat.demo_etat_avant_import')}</p>`}
         <div class="actions">
-          <button type="button" class="btn btn-danger" id="import-annuler">${UI.icone('retour')}Annuler cet import</button>
+          <button type="button" class="btn btn-danger" id="import-annuler">${UI.icone('retour')}${I18n.t('import.resultat.annuler_import')}</button>
           ${etat.partiel ? '' : recommencer}
         </div>`);
       UI.$('#import-annuler', zone).addEventListener('click', (evenement) => annuler(evenement.currentTarget));
@@ -471,9 +468,8 @@ Object.assign(Import.assistant, (() => {
     const resultat = etat.resultat;
     if (!resultat || etat.enCours) return;
     const tables = resultat.tablesTouchees.map(libelleTable).join(', ');
-    const accord = await UI.confirmer('Annuler cet import ? Les tables touchées (' + tables + ') reviennent à leur état d\'avant '
-      + 'l\'import : les modifications faites depuis l\'import, sur ces tables, seront perdues.',
-    { titre: 'Annuler cet import', oui: 'Annuler l\'import', non: 'Garder l\'import', danger: true });
+    const accord = await UI.confirmer(I18n.t('import.annuler.annuler_import_tables_touchees', { tables }),
+    { titre: I18n.t('import.resultat.annuler_import'), oui: I18n.t('import.annuler.annuler_import'), non: I18n.t('import.annuler.garder_import'), danger: true });
     if (!accord) return;
     etat.enCours = true;
     bouton.disabled = true;
@@ -483,7 +479,7 @@ Object.assign(Import.assistant, (() => {
       etat.annule = true;
       etat.partiel = '';
       afficherResultat();
-      UI.toast('Import annulé.', 'succes');
+      UI.toast(I18n.t('import.annuler.import_annule'), 'succes');
     } catch (erreur) {
       App.signalerErreur(erreur, 'annulation de l\'import');
       bouton.disabled = false;

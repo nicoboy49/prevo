@@ -43,7 +43,10 @@ const Ordres = (() => {
   const TYPES = ['correctif immédiat', 'correctif différé', 'préventif systématique',
     'préventif conditionnel', 'amélioration', 'réglementaire'];
   const PRIORITES = ['P1', 'P2', 'P3', 'P4'];
-  const RAPPEL_CONSIGNATION = 'Cocher une case ne consigne rien : appliquez la procédure.';
+  // Lu à l'affichage (jamais figé au chargement).
+  function rappelConsignation() {
+    return I18n.t('ordres.rappel_consignation.cocher_case_consigne_rien');
+  }
 
   // Mémoire du module pendant la session : filtres de la liste, onglet ouvert de chaque fiche.
   // Partagée par les fichiers ordres-*.js (Ordres.interne.memoire).
@@ -139,7 +142,7 @@ const Ordres = (() => {
     return Donnees.lignes('techniciens')
       .filter((t) => t.actif !== '0' || t.id === idActuel)
       .map((t) => ({ valeur: t.id, libelle: nomTechnicien(t.id) + (t.metier ? ' — ' + t.metier : '') }))
-      .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'));
+      .sort((a, b) => UI.comparerTextes(a.libelle, b.libelle));
   }
 
   function libelleArticle(article) {
@@ -229,10 +232,12 @@ const Ordres = (() => {
     }
   }
 
-  /** « RAS », « R.A.S. », « rien à signaler »… (seuls, sans autre information). */
+  /** « RAS », « R.A.S. », « rien à signaler »… (seuls, sans autre information) ; leurs équivalents anglais aussi
+   *  (« NTR », « nothing to report », « N/A », « none », « nil ») : la règle est la même quelle que soit la langue de
+   *  l'écran (D146), le compte rendu étant une donnée (T287). */
   function estRienASignaler(compteRendu) {
     const compact = texteSimple(compteRendu).replace(/ /g, '');
-    return compact !== '' && /^(ras|rienasignaler)+$/.test(compact);
+    return compact !== '' && /^(ras|rienasignaler|ntr|nothingtoreport|na|none|nil)+$/.test(compact);
   }
 
   /** Pièces prévues d'un OT cumulées par article (quantité > 0 seulement) : Map article → quantité. */
@@ -288,9 +293,8 @@ const Ordres = (() => {
    * ou, si du stock a déjà été sorti pour l'OT, « 3 prévu(s), 1 déjà sorti(s) pour cet OT, 1 en stock ».
    */
   function detailManque(piece) {
-    return UI.nombreFr(piece.prevu) + ' prévu(s), '
-      + (piece.sorti > 0 ? UI.nombreFr(piece.sorti) + ' déjà sorti(s) pour cet OT, ' : '')
-      + UI.nombreFr(piece.stock) + ' en stock';
+    if (piece.sorti > 0) return I18n.t('ordres.detail_manque.prevu_deja_sorti_ot', { prevu: UI.nombreFr(piece.prevu), sorti: UI.nombreFr(piece.sorti), stock: UI.nombreFr(piece.stock) });
+    return I18n.t('ordres.detail_manque.prevu_stock', { n: piece.prevu, prevu: UI.nombreFr(piece.prevu), stock: UI.nombreFr(piece.stock) });
   }
 
   /**
@@ -314,18 +318,18 @@ const Ordres = (() => {
     const manques = [];
     const temps = (options && options.temps) || lignesDeLOt('ot_temps', ot.id);
     const compteRendu = texte(ot.compte_rendu);
-    if (!texte(ot.date_fin)) manques.push('la date de fin des travaux');
-    else if (texte(ot.date_debut) && texte(ot.date_fin) < texte(ot.date_debut)) manques.push('une date de fin postérieure à la date de début');
-    else if (dateFinDansLeFutur(ot.date_fin)) manques.push('une date de fin qui ne soit pas dans le futur');
-    if (!temps.some((ligne) => nombre(ligne.heures) > 0)) manques.push('au moins un temps passé (onglet Exécution)');
-    if (!texte(ot.cause_code)) manques.push('le code cause');
-    if (!texte(ot.remede_code)) manques.push('le code remède');
+    if (!texte(ot.date_fin)) manques.push(I18n.t('ordres.verifier_cloture.date_fin_travaux'));
+    else if (texte(ot.date_debut) && texte(ot.date_fin) < texte(ot.date_debut)) manques.push(I18n.t('ordres.verifier_cloture.date_fin_posterieure_date'));
+    else if (dateFinDansLeFutur(ot.date_fin)) manques.push(I18n.t('ordres.verifier_cloture.date_fin_soit_pas'));
+    if (!temps.some((ligne) => nombre(ligne.heures) > 0)) manques.push(I18n.t('ordres.verifier_cloture.moins_temps_passe_onglet'));
+    if (!texte(ot.cause_code)) manques.push(I18n.t('ordres.verifier_cloture.code_cause'));
+    if (!texte(ot.remede_code)) manques.push(I18n.t('ordres.verifier_cloture.code_remede'));
     if (estCorrectif(ot) && estRienASignaler(compteRendu)) {
-      manques.push('un vrai compte rendu : « RAS » ou « rien à signaler » est refusé sur un correctif (décrivez ce qui a été constaté et fait)');
+      manques.push(I18n.t('ordres.verifier_cloture.vrai_compte_rendu_ras'));
     } else if (compteRendu.length < 10) {
-      manques.push('un compte rendu d\'au moins 10 caractères');
+      manques.push(I18n.t('ordres.verifier_cloture.compte_rendu_moins_10'));
     }
-    if (ot.remise_service !== '1') manques.push('la case « Équipement remis en service en sécurité »');
+    if (ot.remise_service !== '1') manques.push(I18n.t('ordres.verifier_cloture.case_equipement_remis_service'));
     return manques;
   }
 
@@ -346,15 +350,17 @@ const Ordres = (() => {
   /**
    * RG8 : message d'avertissement si le technicien n'a pas une habilitation requise valide à la
    * date (date prévue, sinon aujourd'hui), sinon null. equipement : ligne ou identifiant.
-   * Ex. « TEC-0004 sans BR valide au 2026-10-21 ».
+   * Ex. « TEC-0004 sans BR valide au 2026-10-21 ». pourLesDonnees : texte écrit au journal (« avertissement
+   * habilitation : … »), dans la langue de l'installation (D156) ; sinon celle de l'écran.
    */
-  function verifierHabilitation(equipement, technicienId, dateReference) {
+  function verifierHabilitation(equipement, technicienId, dateReference, pourLesDonnees) {
     const ligne = typeof equipement === 'string' ? Donnees.trouver('equipements', equipement) : equipement;
     if (!ligne || !technicienId) return null;
     const date = texte(dateReference).slice(0, 10) || aujourdhui();
     const manquantes = habilitationsManquantes(ligne, technicienId, date);
     if (!manquantes.length) return null;
-    return technicienId + ' sans ' + manquantes.join(', ') + ' valide au ' + date;
+    if (pourLesDonnees) return I18n.donnees('ordres.verifier_habilitation.sans_valide', { technicienId, join: manquantes.join(', '), date });
+    return I18n.t('ordres.verifier_habilitation.sans_valide', { technicienId, join: manquantes.join(', '), date });
   }
 
   /**
@@ -366,37 +372,36 @@ const Ordres = (() => {
     const erreurs = [];
     const avertissements = [];
     let manquantes = [];
-    if (!ot) return { ok: false, erreurs: ['Ordre de travail introuvable.'], avertissements, piecesManquantes: manquantes };
+    if (!ot) return { ok: false, erreurs: [I18n.t('ordres.verifier_passage.ordre_travail_introuvable')], avertissements, piecesManquantes: manquantes };
     if (!transitionsPossibles(ot).includes(cible)) {
       erreurs.push(estVerrouille(ot)
-        ? 'Cet OT est « ' + ot.statut + ' » : il est verrouillé. Une reprise se fait par un nouvel OT lié.'
-        : 'Passage de « ' + ot.statut + ' » à « ' + cible + ' » impossible.');
+        ? I18n.t('ordres.verifier_passage.ot_verrouille_reprise_fait', { otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) })
+        : I18n.t('ordres.verifier_passage.passage_impossible', { otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut), cible: Schema.libelleValeur('ordres_travail', 'statut', cible) }));
     } else if (cible === 'En attente' && !texte(ot.motif_attente)) {
-      erreurs.push('Le motif de mise en attente est obligatoire.');
+      erreurs.push(I18n.t('ordres.verifier_passage.motif_mise_attente_obligatoire'));
     } else if (cible === 'Annulé' && !texte(ot.motif_annulation)) {
-      erreurs.push('Le motif d\'annulation est obligatoire.');
+      erreurs.push(I18n.t('ordres.verifier_passage.motif_annulation_obligatoire'));
     } else if (cible === 'Planifié') {
-      if (!texte(ot.technicien_id)) erreurs.push('Choisissez le technicien (onglet Préparation).');
-      if (!texte(ot.date_prevue)) erreurs.push('Indiquez la date prévue (onglet Préparation).');
+      if (!texte(ot.technicien_id)) erreurs.push(I18n.t('ordres.verifier_passage.choisissez_technicien_onglet_preparation'));
+      if (!texte(ot.date_prevue)) erreurs.push(I18n.t('ordres.verifier_passage.indiquez_date_prevue_onglet'));
       manquantes = piecesManquantes(ot.id);
-      manquantes.forEach((piece) => erreurs.push('Stock insuffisant pour « ' + piece.libelle + ' » : '
-        + detailManque(piece) + '.'));
+      manquantes.forEach((piece) => erreurs.push(I18n.t('ordres.verifier_passage.stock_insuffisant', { pieceLibelle: piece.libelle, detailManque: detailManque(piece) })));
       const habilitation = verifierHabilitation(equipementDe(ot), ot.technicien_id, ot.date_prevue);
-      if (habilitation) avertissements.push('Avertissement habilitation : ' + habilitation + '.');
+      if (habilitation) avertissements.push(I18n.t('ordres.verifier_passage.avertissement_habilitation', { habilitation }));
     } else if (cible === 'Clôturé techniquement') {
       const manques = verifierCloture(ot);
-      if (manques.length) erreurs.push('Il manque : ' + manques.join(' ; ') + '.');
+      if (manques.length) erreurs.push(I18n.t('ordres.verifier_passage.manque_join', { join: manques.join(' ; ') }));
     } else if (cible === 'Clôturé administrativement') {
       // RG4 revérifiée : la clôture technique doit être encore complète (aucune saisie ne l'a défaite).
       const manques = verifierCloture(ot);
-      if (manques.length) erreurs.push('La clôture technique n\'est plus complète, il manque : ' + manques.join(' ; ') + '. Rouvrez l\'OT pour compléter.');
+      if (manques.length) erreurs.push(I18n.t('ordres.verifier_passage.cloture_technique_plus_complete', { join: manques.join(' ; ') }));
     }
     return { ok: erreurs.length === 0, erreurs, avertissements, piecesManquantes: manquantes };
   }
 
   /**
-   * Coût d'un OT (RG7) en euros : { heures, pieces, soustraitance, total, detail }.
-   *   heures : Σ heures passées × taux horaire du technicien (main-d'œuvre, en €) ;
+   * Coût d'un OT (RG7), dans la devise réglée : { heures, pieces, soustraitance, total, detail }.
+   *   heures : Σ heures passées × taux horaire du technicien (main-d'œuvre, dans la devise réglée) ;
    *   pieces : Σ (sorties − retours de stock imputées à l'OT) × prix unitaire de l'article ;
    *   soustraitance : cout_soustraitance ; total : la somme.
    *   detail : { nombreHeures, temps: [{ technicien_id, date, heures, taux, montant }],
@@ -461,7 +466,7 @@ const Ordres = (() => {
   }
 
   return {
-    STATUTS, TYPES, PRIORITES, RAPPEL_CONSIGNATION,
+    STATUTS, TYPES, PRIORITES, rappelConsignation,
     // règles pures (ARCHITECTURE.md §10)
     transitionsPossibles, verifierPassage, verifierCloture, cout, verifierHabilitation, estOuvert, enRetard,
     estVerrouille, estCorrectif, estRienASignaler, piecesManquantes, filtrer, datePrevueParDefaut,

@@ -38,6 +38,8 @@
 .poste-etat-detecte b { color: var(--texte); font-weight: 600; }
 .poste-themes { display: flex; flex-direction: column; gap: .25rem; }
 .poste-themes legend { padding: 0 .4rem; }
+.poste-langue { margin-top: 1.1rem; }
+.poste-langue-portee { margin-top: .7rem; }           /* T298 : pour mon compte, pour ce poste */
 
 /* Fenêtre d'avertissement d'un fournisseur en ligne */
 .poste-avertissement-distant p { margin: 0; }

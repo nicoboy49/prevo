@@ -1,0 +1,6 @@
+{
+  "base": "f3-v1.2.0",
+  "description": "En-tête de ordres_travail.csv coupé au milieu du nom de colonne temps_prevu_h (fichier abîmé) ; les lignes de données sont intactes et plus larges que l'en-tête.",
+  "supprimer": [],
+  "vider": []
+}

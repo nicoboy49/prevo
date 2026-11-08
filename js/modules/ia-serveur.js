@@ -103,18 +103,19 @@ Object.assign(Ia, (() => {
       });
     } catch (erreur) {
       if (signal.aborted) throw erreur;
-      throw interne.erreurReseau('Le serveur Prévo ne répond pas : l\'IA est injoignable pour l\'instant.', erreur);
+      throw interne.erreurReseau(I18n.t('ia.appel_relais.serveur_prevo_repond_pas'), erreur);
     }
     const donnees = await interne.lireCorps(reponse, signal);
     if (reponse.status === 504) throw interne.messageDelai(Math.min(r.delaiS, interne.DELAI_RELAIS_S));
     if (reponse.status === 502) {
-      throw interne.erreurReseau('Le PC atelier ne joint pas le fournisseur d\'IA ('
-        + (interne.hoteAffiche(r.url) || 'adresse inconnue') + ').');
+      const hote = interne.hoteAffiche(r.url) || I18n.t('ia.appel_relais.adresse_inconnue');
+      throw interne.erreurReseau(I18n.t('ia.appel_relais.pc_atelier_joint_pas', { hote }));
     }
     if (reponse.status === 403) lireReglagesServeur();
     if (reponse.status !== 200 || !donnees || typeof donnees !== 'object') {
-      const detail = donnees && typeof donnees === 'object' && donnees.erreur ? ' : ' + donnees.erreur : ' (code ' + reponse.status + ').';
-      throw new Ia.IaIndisponible('Le serveur Prévo a refusé la demande à l\'IA' + detail);
+      const erreur = donnees && typeof donnees === 'object' && StockageServeur.texte(donnees, 'erreur');
+      if (erreur) throw new Ia.IaIndisponible(I18n.t('ia.appel_relais.serveur_refuse_erreur', { erreur }));
+      throw new Ia.IaIndisponible(I18n.t('ia.appel_relais.serveur_refuse_code', { status: reponse.status }));
     }
     return { statut: Number(donnees.statut) || 0, corps: donnees.corps };
   }

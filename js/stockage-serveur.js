@@ -11,15 +11,13 @@ const StockageServeur = (() => {
 
   const DELAI_DETECTION_MS = 2000;
   const NOM_APPLICATION = 'Prévo';
-  const MESSAGE_SERVEUR_INJOIGNABLE =
-    'Le serveur Prévo ne répond pas. Vérifiez que la fenêtre du serveur est ouverte sur le PC.';
   // Délai maximal d'une requête (réponse et lecture du corps comprises).
   const DELAI_REPONSE_MS = 15000;
-  const MESSAGE_DELAI_DEPASSE = 'Le serveur Prévo met trop de temps à répondre. Vérifiez le réseau puis '
-    + 'réessayez ; si vous enregistriez, rechargez la page pour voir si la modification a été faite.';
-  // Réponse « réussie » mais illisible (ex. page d'un portail Wi-Fi, proxy) : l'écriture a pu se faire.
-  const MESSAGE_REPONSE_INATTENDUE =
-    'Réponse inattendue du serveur ; l\'opération a peut-être été faite, rechargez la page.';
+  const CODE_FORMAT_PLUS_RECENT = 'format_plus_recent';      // 409 du serveur en lecture seule (T185, D169)
+  const CODE_FICHIER_ABIME = 'fichier_abime';                // 409 du serveur : fichier abîmé, jamais réécrit (T200)
+  const ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime';  // dérogation demandée (import ZIP, T200)
+  const ENTETE_ABIME_DEPUIS = 'X-Prevo-Abime-Depuis';        // CSV abîmé importé tel quel, et sa date (T213)
+  const MOTIF_DATE_HEURE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;   // dates de fichiers-abimes.json (T206)
 
   // ===========================================================================
   // Détection
@@ -55,15 +53,80 @@ const StockageServeur = (() => {
     }
   }
 
+  // Messages de ce module (lus au moment de l'erreur, jamais figés au chargement du module).
+  function messageServeurInjoignable() {
+    return I18n.t('socle.message_serveur_injoignable.serveur_prevo_repond_pas');
+  }
+
+  function messageDelaiDepasse() {
+    return I18n.t('socle.message_delai_depasse.serveur_prevo_met_trop');
+  }
+
+  // Réponse « réussie » mais illisible (ex. page d'un portail Wi-Fi, proxy) : l'écriture a pu se faire.
+  function messageReponseInattendue() {
+    return I18n.t('socle.message_reponse_inattendue.reponse_inattendue_serveur_operation');
+  }
+
+  // ===========================================================================
+  // Messages du serveur (D157, T246)
+  // ===========================================================================
+
+  // Un message du serveur arrive avec son code et ses valeurs, à côté du texte français :
+  // { erreur: '<français>', erreur_code: 'csv.table_inconnue', erreur_valeurs: { table: 'x' } } (même suffixe pour
+  // « message », « raison »… ; « _sans_point » : point final retiré). Une valeur peut être elle-même un message
+  // ({ code, valeurs, texte }) ou une liste (jointe par « , »). Le texte affiché est la clé serveur.<code> de la langue
+  // active (js/i18n/fr.js) ; le français reçu quand le navigateur ne connaît pas le code (serveur plus récent).
+  function messageTraduit(code, valeurs, repli, sansPoint) {
+    if (typeof code !== 'string' || !code) return repli;
+    const lues = {};
+    if (valeurs && typeof valeurs === 'object' && !Array.isArray(valeurs)) {
+      Object.keys(valeurs).forEach((nom) => { lues[nom] = valeurDuMessage(valeurs[nom]); });
+    }
+    const traduit = I18n.t('serveur.' + code, lues);
+    if (traduit === 'serveur.' + code) return repli;    // code inconnu de ce navigateur
+    return sansPoint ? traduit.replace(/\.+$/, '') : traduit;
+  }
+
+  function valeurDuMessage(valeur) {
+    if (Array.isArray(valeur)) return valeur.map(valeurDuMessage).join(', ');
+    if (valeur && typeof valeur === 'object') {
+      return messageTraduit(valeur.code, valeur.valeurs, String(valeur.texte || ''), valeur.sans_point === true);
+    }
+    return valeur;
+  }
+
+  // Texte du champ `champ` d'une réponse du serveur (« erreur », « message », « raison »…), dans la langue active.
+  function texteDuServeur(donnees, champ) {
+    if (!donnees || typeof donnees !== 'object' || typeof donnees[champ] !== 'string') {
+      return donnees && typeof donnees === 'object' ? donnees[champ] : undefined;
+    }
+    return messageTraduit(donnees[champ + '_code'], donnees[champ + '_valeurs'], donnees[champ],
+      donnees[champ + '_sans_point'] === true);
+  }
+
   // Transforme une réponse en erreur (409 → ErreurConflit, autre code ≥ 400 → ErreurStockage, avec le code HTTP
   // dans `codeHttp`). Lot 7 (§22.4, §22.5) : 401 = session absente ou expirée, appareil refusé → l'événement
   // EVENEMENT_SESSION_ABSENTE est émis sur document (l'écran de connexion, T155, l'écoute et s'affiche ; sans
   // écouteur, le message du serveur s'affiche comme toute erreur) ; 403 = rôle ou règle refusés → le message du
   // serveur (« Accès refusé : … ») tel quel.
+  // T185 (D169) : 409 au code « format_plus_recent » = le serveur a trouvé à son démarrage des données d'une version
+  // plus récente de Prévo et refuse toute écriture → Donnees.ErreurLectureSeule (jamais un conflit à réessayer).
+  // T200 : 409 au code « fichier_abime » (corps { erreur, code, table }) = le fichier de la table est abîmé et le serveur
+  // refuse de le réécrire ou de le compléter → Donnees.ErreurFichierAbime, AVANT le 409 générique (un conflit serait
+  // réessayé par Donnees.modifier, avec un faux message).
   async function erreurDepuisReponse(reponse) {
     const donnees = await lireJsonOuNull(reponse);
-    const message = (donnees && donnees.erreur)
-      || 'Le serveur a refusé la demande (code ' + reponse.status + ').';
+    const message = (donnees && donnees.erreur && texteDuServeur(donnees, 'erreur'))      // D157 : traduit par son code
+      || I18n.t('socle.erreur_depuis_reponse.serveur_refuse_demande_code', { status: reponse.status });
+    if (reponse.status === 409 && donnees && donnees.code === CODE_FORMAT_PLUS_RECENT
+      && typeof Donnees.ErreurLectureSeule === 'function') {
+      return new Donnees.ErreurLectureSeule(donnees.format);
+    }
+    if (reponse.status === 409 && donnees && donnees.code === CODE_FICHIER_ABIME
+      && typeof Donnees.ErreurFichierAbime === 'function') {
+      const table = typeof donnees.table === 'string' ? donnees.table : '';
+      return new Donnees.ErreurFichierAbime(table, table ? table + '.csv' : I18n.t('socle.erreur_depuis_reponse.table'));
+    }
     if (reponse.status === 409) {
       const versionActuelle = donnees && donnees.version_actuelle !== undefined
         ? donnees.version_actuelle : null;
@@ -100,9 +163,9 @@ const StockageServeur = (() => {
   // Erreur pendant l'envoi ou la lecture : délai dépassé (requête abandonnée) ou serveur injoignable.
   function erreurReseau(erreur) {
     if (erreur && erreur.name === 'AbortError') {
-      return new Donnees.ErreurStockage(MESSAGE_DELAI_DEPASSE, erreur);
+      return new Donnees.ErreurStockage(messageDelaiDepasse(), erreur);
     }
-    return new Donnees.ErreurStockage(MESSAGE_SERVEUR_INJOIGNABLE, erreur);
+    return new Donnees.ErreurStockage(messageServeurInjoignable(), erreur);
   }
 
   // Envoie la requête et rend la réponse, quel que soit son code (l'appelant décide).
@@ -141,10 +204,10 @@ const StockageServeur = (() => {
     try {
       donnees = JSON.parse(texte);
     } catch (erreur) {
-      throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE, erreur);
+      throw new Donnees.ErreurStockage(messageReponseInattendue(), erreur);
     }
     if (donnees === null || typeof donnees !== 'object') {
-      throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE);
+      throw new Donnees.ErreurStockage(messageReponseInattendue());
     }
     return donnees;
   }
@@ -164,7 +227,7 @@ const StockageServeur = (() => {
     return {
       derniereReussie: typeof copie.derniere_reussie === 'string' ? copie.derniere_reussie : null,
       joursSansCopie: typeof copie.jours_sans_copie === 'number' ? copie.jours_sans_copie : null,
-      erreur: typeof copie.erreur === 'string' && copie.erreur ? copie.erreur : null,
+      erreur: typeof copie.erreur === 'string' && copie.erreur ? texteDuServeur(copie, 'erreur') : null,
     };
   }
 
@@ -177,6 +240,37 @@ const StockageServeur = (() => {
       connecte: tailscale.connecte === true,
       nom: typeof tailscale.nom === 'string' && tailscale.nom ? tailscale.nom : null,
       joursAvantExpiration: typeof tailscale.jours_avant_expiration === 'number' ? tailscale.jours_avant_expiration : null,
+    };
+  }
+
+  // « format » de /api/info (T185, D168, D169) → { base, courant, plusRecent, migration, tablesAbimees, tablesVides,
+  // tableBloquee }, ou null quand le serveur n'a pas regardé le format des données. C'est le serveur qui passe les
+  // fichiers au format courant, à son démarrage ; migration dit ce qu'il a fait : 'faite', 'rien' (rien à faire, ou
+  // données plus récentes : plusRecent), 'impossible' (sauvegarde « avant-format-vN » impossible : rien d'écrit) ou
+  // 'incomplete' (un fichier tenu par un autre programme, tableBloquee : fermez Excel et relancez Prévo).
+  // tablesAbimees : fichiers jamais réécrits (en-tête illisible, ou fichier qu'une réécriture abîmerait).
+  // abimesDepuis (T206, « abimes_depuis ») : { table: 'AAAA-MM-JJTHH:MM:SS' }, date à laquelle le serveur a vu chaque
+  // table abîmée la première fois (fichiers-abimes.json) ; {} si le serveur ne la donne pas.
+  function formatLu(format) {
+    if (!format || typeof format !== 'object') return null;
+    const tables = (liste) => (Array.isArray(liste) ? liste.filter((table) => typeof table === 'string') : []);
+    const dates = (objet) => {
+      const resultat = {};
+      if (!objet || typeof objet !== 'object' || Array.isArray(objet)) return resultat;
+      Object.keys(objet).forEach((table) => {
+        if (typeof objet[table] === 'string' && MOTIF_DATE_HEURE.test(objet[table])) resultat[table] = objet[table];
+      });
+      return resultat;
+    };
+    return {
+      base: typeof format.base === 'number' ? format.base : null,
+      courant: typeof format.courant === 'number' ? format.courant : null,
+      plusRecent: format.plus_recent === true,
+      migration: typeof format.migration === 'string' ? format.migration : null,
+      tablesAbimees: tables(format.tables_abimees),
+      tablesVides: tables(format.tables_vides),
+      tableBloquee: typeof format.table_bloquee === 'string' && format.table_bloquee ? format.table_bloquee : null,
+      abimesDepuis: dates(format.abimes_depuis),
     };
   }
 
@@ -209,14 +303,24 @@ const StockageServeur = (() => {
     }
 
     // versionAttendue : version lue au chargement, ou null si le fichier ne doit pas exister.
-    async function enregistrer(table, octets, versionAttendue) {
+    // options.remplacerFichierAbime === true (import ZIP, T200) : en-tête X-Prevo-Remplacer-Abime: 1, le serveur
+    // remplace alors un fichier abîmé ; sans lui, il refuse (409 « fichier_abime » → ErreurFichierAbime).
+    // T213 : options.abimeDepuis ('AAAA-MM-JJTHH:MM:SS', avec remplacerFichierAbime) : l'import ZIP écrit un CSV marqué
+    // abîmé, tel quel ; en-tête X-Prevo-Abime-Depuis : le serveur l'accepte malgré son en-tête s'il le voit abîmé lui
+    // aussi, et garde cette date dans fichiers-abimes.json.
+    async function enregistrer(table, octets, versionAttendue, options) {
+      const derogation = Boolean(options) && options.remplacerFichierAbime === true
+        ? { [ENTETE_REMPLACER_ABIME]: '1' } : {};
+      if (derogation[ENTETE_REMPLACER_ABIME] && typeof options.abimeDepuis === 'string') {
+        derogation[ENTETE_ABIME_DEPUIS] = options.abimeDepuis;
+      }
       const reponse = await appelerOuErreur(urlTable(table), {
         method: 'PUT',
         headers: Object.assign({
           'Content-Type': 'text/csv; charset=utf-8',
           'X-Version-Attendue': versionAttendue === null || versionAttendue === undefined
             ? 'aucune' : versionAttendue,
-        }, entetesEcriture),
+        }, derogation, entetesEcriture),
         body: octets,
       });
       const donnees = await lireJson(reponse);
@@ -224,7 +328,8 @@ const StockageServeur = (() => {
     }
 
     async function ajouter(table, octets) {
-      const reponse = await appelerOuErreur(urlTable(table) + '/ajout', {
+      const adresse = urlTable(table) + '/ajout';
+      const reponse = await appelerOuErreur(adresse, {
         method: 'POST',
         headers: Object.assign({ 'Content-Type': 'text/csv; charset=utf-8' }, entetesEcriture),
         body: octets,
@@ -238,7 +343,7 @@ const StockageServeur = (() => {
       const reponse = await appelerOuErreur(base + '/api/versions', { method: 'GET' });
       const donnees = await lireJson(reponse);
       if (!donnees.tables || typeof donnees.tables !== 'object' || Array.isArray(donnees.tables)) {
-        throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE);
+        throw new Donnees.ErreurStockage(messageReponseInattendue());
       }
       const versions = {};
       Object.keys(donnees.tables).forEach(function (table) {
@@ -255,10 +360,14 @@ const StockageServeur = (() => {
         headers: Object.assign({ 'Content-Type': blob.type || 'application/octet-stream' }, entetesEcriture),
         body: blob,
       });
-      if (reponse.status === 409) {
-        throw new Donnees.ErreurStockage('Un document porte déjà ce nom.');
+      if (reponse.status >= 400) {
+        const erreur = await erreurDepuisReponse(reponse);
+        // 409 : document du même nom (conflit), sauf en lecture seule (T185 : ErreurLectureSeule telle quelle).
+        if (erreur instanceof Donnees.ErreurConflit) {
+          throw new Donnees.ErreurStockage(I18n.t('socle.creer.document_porte_deja_nom'));
+        }
+        throw erreur;
       }
-      if (reponse.status >= 400) { throw await erreurDepuisReponse(reponse); }
       const donnees = await lireJson(reponse);
       return donnees.nom;
     }
@@ -316,19 +425,26 @@ const StockageServeur = (() => {
     }
 
     // « Tester une sauvegarde » (lot 7, D133) : le serveur relit chaque CSV de la sauvegarde et compte ses lignes,
-    // sans rien écrire → { nom, ok, tables: [{ table, lignes, erreur }] } ; nom refusé ou sauvegarde absente →
-    // ErreurStockage. Propre au mode serveur (les autres adaptateurs n'ont pas cette méthode).
+    // sans rien écrire → { nom, ok, tables: [{ table, lignes, erreur }] } (erreur dans la langue active, D157) ; nom
+    // refusé ou sauvegarde absente → ErreurStockage. Propre au mode serveur (les autres adaptateurs n'ont pas cette
+    // méthode).
     async function testerSauvegarde(nom) {
       const reponse = await appelerOuErreur(base + '/api/sauvegarde/tester', {
         method: 'POST',
         headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, entetesEcriture),
         body: JSON.stringify({ nom: nom }),
       });
-      return lireJson(reponse);
+      const donnees = await lireJson(reponse);
+      if (Array.isArray(donnees.tables)) {
+        donnees.tables = donnees.tables.map((table) => (table && typeof table.erreur === 'string'
+          ? Object.assign({}, table, { erreur: texteDuServeur(table, 'erreur') }) : table));
+      }
+      return donnees;
     }
 
     // Lot 7 (§22.4) : GET /api/session → { comptes: bool, session: null | { identifiant, role, prenom, nom,
-    // technicienId, aChanger, appareil } } ; route publique (jamais 401), même sans comptes ({ comptes: false }).
+    // technicienId, aChanger, appareil, langue (T298 : celle du compte, '' pour la langue de l'installation) } } ;
+    // route publique (jamais 401), même sans comptes ({ comptes: false }).
     async function session() {
       const reponse = await appelerOuErreur(base + '/api/session', { method: 'GET' });
       const donnees = await lireJson(reponse);
@@ -339,7 +455,7 @@ const StockageServeur = (() => {
           identifiant: String(identite.identifiant || ''), role: String(identite.role || ''),
           prenom: String(identite.prenom || ''), nom: String(identite.nom || ''),
           technicienId: String(identite.technicien_id || ''), aChanger: Boolean(identite.a_changer),
-          appareil: Boolean(identite.appareil),
+          appareil: Boolean(identite.appareil), langue: String(identite.langue || ''),
         },
       }, donnees.installation_inachevee ? { installationInachevee: true } : {});   // §22.10 : aucun responsable
     }
@@ -353,12 +469,21 @@ const StockageServeur = (() => {
       return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port, porte: donnees.porte === true,
         cePcSeulement: donnees.ce_pc_seulement === true,
         copieExterne: copieExterneLue(donnees.copie_externe), tailscale: tailscaleLu(donnees.tailscale),
-        installationAFaire: donnees.installation_a_faire === true };
+        installationAFaire: donnees.installation_a_faire === true,
+        format: formatLu(donnees.format) };        // T185 : passage au format courant fait par le serveur
+    }
+
+    // T206 (contrat, point 4) : depuis quand chaque table est abîmée, { table: 'AAAA-MM-JJTHH:MM:SS' } (format de
+    // /api/info, « abimes_depuis » ; {} si le serveur ne le donne pas).
+    async function abimesDepuis() {
+      const format = (await info()).format;
+      return format ? format.abimesDepuis : {};
     }
 
     return {
       mode: 'serveur',
-      libelle: 'Serveur ' + location.host,
+      // Lu à chaque affichage (jamais figé à la création de l'adaptateur).
+      get libelle() { return I18n.t('socle.creer.serveur_host', { host: location.host }); },
       charger: charger,
       enregistrer: enregistrer,
       ajouter: ajouter,
@@ -371,6 +496,7 @@ const StockageServeur = (() => {
       restaurer: restaurer,
       testerSauvegarde: testerSauvegarde,
       info: info,
+      abimesDepuis: abimesDepuis,
       session: session,
     };
   }
@@ -378,6 +504,7 @@ const StockageServeur = (() => {
   return {
     detecter: detecter,
     creer: creer,
+    texte: texteDuServeur,     // D157 : message d'une réponse du serveur dans la langue active (modules à fetch propre)
     EVENEMENT_SESSION_ABSENTE: EVENEMENT_SESSION_ABSENTE,
   };
 })();

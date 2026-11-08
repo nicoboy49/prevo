@@ -27,30 +27,30 @@ Object.assign(Demandes, (() => {
     if (!aUnNom) filtre.portee = 'toutes';
 
     const optionsStatut = [
-      { valeur: 'Nouvelle', libelle: 'À traiter (nouvelles)' },
-      { valeur: 'Différée', libelle: 'Différées' },
-      { valeur: 'Acceptée', libelle: 'Acceptées' },
-      { valeur: 'Regroupée', libelle: 'Regroupées' },
-      { valeur: 'Refusée', libelle: 'Refusées' },
-      { valeur: 'tous', libelle: 'Tous les statuts' },
+      { valeur: 'Nouvelle', libelle: I18n.t('demandes.liste.traiter_nouvelles') },
+      { valeur: 'Différée', libelle: I18n.t('demandes.liste.differees') },
+      { valeur: 'Acceptée', libelle: I18n.t('demandes.liste.acceptees') },
+      { valeur: 'Regroupée', libelle: I18n.t('demandes.liste.regroupees') },
+      { valeur: 'Refusée', libelle: I18n.t('demandes.liste.refusees') },
+      { valeur: 'tous', libelle: I18n.t('demandes.liste.tous_statuts') },
     ];
 
     UI.remplir(conteneur, UI.html`
       <div class="entete-page">
-        <div><h1>Demandes d'intervention</h1>
-          <p>${App.estResponsable() ? 'Les demandes à traiter, et tout l\'historique.' : 'Suivez vos demandes et la décision du responsable maintenance.'}</p></div>
-        <div class="actions"><a class="btn btn-primaire" href="#/di/nouvelle">${UI.icone('ajouter')}Signaler un problème</a></div>
+        <div><h1>${I18n.t('demandes.liste.demandes_intervention')}</h1>
+          <p>${App.estResponsable() ? I18n.t('demandes.liste.demandes_traiter_tout_historique') : I18n.t('demandes.liste.suivez_demandes_decision_responsable')}</p></div>
+        <div class="actions"><a class="btn btn-primaire" href="#/di/nouvelle">${UI.icone('ajouter')}${I18n.t('demandes.liste.signaler_probleme')}</a></div>
       </div>
       <article class="carte di-liste">
         <div class="filtres" data-hors-saisie>
-          <input type="search" name="recherche" aria-label="Rechercher une demande"
-            placeholder="N°, équipement, symptôme, demandeur…" value="${filtre.recherche}">
-          <select name="statut" aria-label="Statut">
+          <input type="search" name="recherche" aria-label="${I18n.t('demandes.liste.rechercher_demande')}"
+            placeholder="${I18n.t('demandes.liste.equipement_symptome_demandeur')}" value="${filtre.recherche}">
+          <select name="statut" aria-label="${I18n.t('commun.champ.statut')}">
             ${optionsStatut.map((o) => UI.html`<option value="${o.valeur}" ${o.valeur === filtre.statut ? UI.brut('selected') : ''}>${o.libelle}</option>`)}
           </select>
-          ${aUnNom ? UI.html`<select name="portee" aria-label="Demandes affichées">
-            <option value="mes" ${filtre.portee === 'mes' ? UI.brut('selected') : ''}>Mes demandes</option>
-            <option value="toutes" ${filtre.portee === 'toutes' ? UI.brut('selected') : ''}>Toutes les demandes</option>
+          ${aUnNom ? UI.html`<select name="portee" aria-label="${I18n.t('demandes.liste.demandes_affichees')}">
+            <option value="mes" ${filtre.portee === 'mes' ? UI.brut('selected') : ''}>${I18n.t('demandes.liste.mes_demandes')}</option>
+            <option value="toutes" ${filtre.portee === 'toutes' ? UI.brut('selected') : ''}>${I18n.t('demandes.liste.toutes_demandes')}</option>
           </select>` : ''}
         </div>
         <div class="di-filtre-equipement"></div>
@@ -64,8 +64,8 @@ Object.assign(Demandes, (() => {
     const listeCartes = UI.$('.di-cartes', conteneur);
 
     if (filtre.equipement) {
-      const puce = UI.element(UI.html`<p class="di-puce-filtre">Équipement : <b>${libelleEquipement(filtre.equipement)}</b>
-        <button type="button" class="btn btn-fantome">${UI.icone('fermer')}Tous les équipements</button></p>`);
+      const puce = UI.element(UI.html`<p class="di-puce-filtre">${I18n.html('demandes.liste.equipement_libelle_equipement', { libelleEquipement: libelleEquipement(filtre.equipement) })}
+        <button type="button" class="btn btn-fantome">${UI.icone('fermer')}${I18n.t('demandes.liste.tous_equipements')}</button></p>`);
       UI.$('button', puce).addEventListener('click', () => {
         filtre.equipement = '';
         puce.remove();
@@ -89,22 +89,22 @@ Object.assign(Demandes, (() => {
     }
 
     const tableau = UI.tableau({
-      libelle: 'Demandes d\'intervention',
+      libelle: I18n.t('demandes.liste.demandes_intervention'),
       colonnes: [
-        { cle: 'id', libelle: 'N°', rendu: (l) => UI.html`<a href="#/di/${encodeURIComponent(l.id)}">${l.id}</a>` },
-        { cle: 'date_heure', libelle: 'Date', rendu: celluleDate },
-        { cle: 'equipement_id', libelle: 'Équipement', valeurTri: (l) => libelleEquipement(l.equipement_id), rendu: celluleEquipement },
-        { cle: 'symptome', libelle: 'Symptôme', classe: 'di-col-symptome', rendu: celluleSymptome },
-        { cle: 'impact', libelle: 'Impact', rendu: (l) => badgeImpact(l.impact) },
-        { cle: 'priorite', libelle: 'Priorité calculée', valeurTri: (l) => prioriteDeLaDemande(l), rendu: (l) => UI.badgePriorite(prioriteDeLaDemande(l)) },
-        { cle: 'statut', libelle: 'Statut', rendu: (l) => UI.badgeStatut(l.statut) },
-        { cle: 'motif_decision', libelle: 'Motif (refus, report)', classe: 'di-col-motif',
+        { cle: 'id', libelle: I18n.t('demandes.colonnes_liste.numero'), rendu: (l) => UI.html`<a href="#/di/${encodeURIComponent(l.id)}">${l.id}</a>` },
+        { cle: 'date_heure', libelle: I18n.t('commun.champ.date'), rendu: celluleDate },
+        { cle: 'equipement_id', libelle: I18n.t('commun.champ.equipement'), valeurTri: (l) => libelleEquipement(l.equipement_id), rendu: celluleEquipement },
+        { cle: 'symptome', libelle: I18n.t('commun.champ.symptome'), classe: 'di-col-symptome', rendu: celluleSymptome },
+        { cle: 'impact', libelle: I18n.t('demandes.liste.impact'), rendu: (l) => badgeImpact(l.impact) },
+        { cle: 'priorite', libelle: I18n.t('demandes.liste.priorite_calculee'), valeurTri: (l) => prioriteDeLaDemande(l), rendu: (l) => UI.badgePriorite(prioriteDeLaDemande(l)) },
+        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (l) => UI.badgeValeur('demandes', 'statut', l.statut) },
+        { cle: 'motif_decision', libelle: I18n.t('demandes.liste.motif_refus_report'), classe: 'di-col-motif',
           rendu: (l) => (['Refusée', 'Différée'].includes(l.statut) ? celluleTexte(l.motif_decision) : '') },
       ],
       lignes: [],
       triInitial: { cle: 'date_heure', sens: 'desc' },
       surClic: (l) => App.naviguer('#/di/' + encodeURIComponent(l.id)),
-      vide: 'Aucune demande ne correspond à ces filtres.',
+      vide: I18n.t('demandes.liste.aucune_demande_correspond_filtres'),
     });
     UI.$('.di-zone-tableau', conteneur).appendChild(tableau);
 
@@ -127,17 +127,17 @@ Object.assign(Demandes, (() => {
     }
     function mentionOrigine(demande) {
       return demande.ot_origine_id
-        ? UI.html`<small class="di-origine-liste">pendant l'OT préventif ${demande.ot_origine_id}</small>` : '';
+        ? UI.html`<small class="di-origine-liste">${I18n.t('demandes.liste.pendant_ot_preventif', { ot_origine_id: demande.ot_origine_id })}</small>` : '';
     }
 
     function carte(demande) {
       const priorite = prioriteDeLaDemande(demande);
       const motifVisible = ['Refusée', 'Différée'].includes(demande.statut) && demande.motif_decision;
       return UI.html`<li><a href="#/di/${encodeURIComponent(demande.id)}" class="${priorite === 'P1' || priorite === 'P2' ? 'accent-' + priorite.toLowerCase() : ''}">
-        <div class="carte-tete"><b>${demande.id}</b>${UI.badgePriorite(priorite)}${UI.badgeStatut(demande.statut)}</div>
+        <div class="carte-tete"><b>${demande.id}</b>${UI.badgePriorite(priorite)}${UI.badgeValeur('demandes', 'statut', demande.statut)}</div>
         <div class="carte-titre">${demande.symptome}${mentionOrigine(demande)}</div>
-        <div class="carte-meta"><span>${libelleEquipement(demande.equipement_id)}</span><span>${UI.dateHeureFr(demande.date_heure)}</span><span>${demande.impact}</span></div>
-        ${motifVisible ? UI.html`<div class="di-motif"><b>Motif :</b> ${demande.motif_decision}</div>` : ''}
+        <div class="carte-meta"><span>${libelleEquipement(demande.equipement_id)}</span><span>${UI.dateHeureFr(demande.date_heure)}</span><span>${Schema.libelleValeur('demandes', 'impact', demande.impact)}</span></div>
+        ${motifVisible ? UI.html`<div class="di-motif">${I18n.html('demandes.liste.motif_motif_decision', { motif_decision: demande.motif_decision })}</div>` : ''}
       </a></li>`;
     }
 
@@ -146,8 +146,8 @@ Object.assign(Demandes, (() => {
       tableau.mettreAJour(lignes);
       const triees = lignes.slice().sort((a, b) => String(b.date_heure).localeCompare(String(a.date_heure)));
       UI.remplir(listeCartes, triees.length ? UI.html`${triees.map(carte)}`
-        : UI.html`<li>${UI.vide('Aucune demande', 'Aucune demande ne correspond à ces filtres.', 'demandes')}</li>`);
-      compte.textContent = lignes.length + (lignes.length > 1 ? ' demandes' : ' demande');
+        : UI.html`<li>${UI.vide(I18n.t('demandes.liste.aucune_demande'), I18n.t('demandes.liste.aucune_demande_correspond_filtres'), 'demandes')}</li>`);
+      compte.textContent = lignes.length + (lignes.length > 1 ? ' ' + I18n.t('demandes.liste.demandes') : ' ' + I18n.t('demandes.liste.demande'));
     }
 
     zoneFiltres.addEventListener('input', (evenement) => {

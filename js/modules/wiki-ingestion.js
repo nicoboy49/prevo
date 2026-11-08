@@ -40,15 +40,15 @@
 //  - toute autre erreur de l'IA (injoignable, délai, refus D67) arrête le traitement : l'OT reste en file, l'erreur est
 //    rendue dans le bilan ; « Arrêter » (signal) laisse finir les envois partis, `annuler` les coupe.
 
-Object.assign(Wiki, (() => {
+Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // garde les accesseurs get (Object.assign les figerait)
 
   const SEUILS = Wiki.SEUILS;
   const STATUT_CLOTURE_ADMIN = 'Clôturé administrativement';
   const STATUTS_FILE = ['en file', 'à refaire'];
   const STATUTS_DEJA = ['en file', 'à refaire', 'à valider', 'validée', 'rien à ajouter', 'refusée'];
   const ESSAIS_COLLISION_MAX = 3;
-  const MOTIF_COLLISION = 'rejoué : page créée entre-temps';
-  const MOTIF_PAGES_CHANGEES = 'rejoué : pages changées pendant l\'envoi';
+  const motifCollision = () => I18n.donnees('wiki.motif_collision.rejoue_page_creee_entre');     // écrits au journal : langue de l'installation (D156)
+  const motifPagesChangees = () => I18n.donnees('wiki.motif_pages_changees.rejoue_pages_changees_pendant');
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -108,12 +108,12 @@ Object.assign(Wiki, (() => {
         });
         return nombre;
       }, { journal: false });
-      if (avecMessage && ajoutes) annoncer('OT ajouté à la file du wiki.', 'info');
+      if (avecMessage && ajoutes) annoncer(I18n.t('wiki.mettre_en_file.ot_ajoute_file_wiki'), 'info');
       return ajoutes || 0;
     } catch (erreur) {
       if (!avecMessage) throw erreur;
-      annoncer('OT non ajouté à la file du wiki (' + (erreur && erreur.message ? erreur.message : String(erreur))
-        + ') : il reste « hors du wiki », à ajouter depuis l\'écran Wiki.', 'attention');
+      const raison = typeof App !== 'undefined' ? App.raisonErreur(erreur) : erreur && erreur.message ? erreur.message : String(erreur);
+      annoncer(I18n.t('wiki.mettre_en_file.ot_non_ajoute_file', { raison }), 'attention');
       return 0;
     }
   }
@@ -413,7 +413,7 @@ Object.assign(Wiki, (() => {
   function donneesIngestion(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
     const ot = Donnees.trouver('ordres_travail', otId);
-    if (!ot) throw new Error('Wiki.donneesIngestion : OT inconnu « ' + otId + ' ».');
+    if (!ot) throw new Error(I18n.t('wiki.donnees_ingestion.wiki_donnees_ingestion_ot_inconnu', { otId }));
     const concernees = pagesConcernees(texte(ot.id), etat);
     // Longueurs de chaque texte (le modèle ne compte pas : il sait ainsi qu'une rubrique pleine se regroupe, qu'un
     // savoir-faire plein se découpe). Une sous-page porte le titre de sa mère (`mere`, vide pour une autre page).
@@ -459,7 +459,7 @@ Object.assign(Wiki, (() => {
   function lireIngestion(objet, donnees) {
     if (!objet || typeof objet !== 'object' || !Array.isArray(objet.pages) || !Array.isArray(objet.contradictions)
       || typeof objet.rien_a_ajouter !== 'boolean') {
-      throw new Ia.IaReponseInvalide('Réponse de l\'IA hors de la forme attendue : aucune proposition.');
+      throw Object.assign(new Ia.IaReponseInvalide(I18n.t('wiki.lire_ingestion.reponse_ia_hors_forme')), { raisons: [I18n.donnees('wiki.lire_ingestion.reponse_ia_hors_forme')] });
     }
     const envoyeeDe = new Map(liste(donnees.pages).map((page) => [Wiki.comparable(page.titre), page]));
     const pages = objet.pages.map((item) => {
@@ -480,12 +480,12 @@ Object.assign(Wiki, (() => {
     const changees = pages.filter((page) => !(page.action === 'modifier' && envoyeeDe.has(Wiki.comparable(page.titre))
       && page.texte === Wiki.ecrireTexte(Wiki.lireTexte(page.avant).rubriques, page.type)));
     const rien = objet.rien_a_ajouter || (!changees.length && !contradictions.length);
-    const controle = Wiki.controlerProposition({ rien: objet.rien_a_ajouter, pages: changees, contradictions }, {
+    // Raisons écrites au journal du wiki et renvoyées à l'IA : dans la langue de l'installation (D156).
+    const controle = I18n.enLangueDesDonnees(() => Wiki.controlerProposition({ rien: objet.rien_a_ajouter, pages: changees, contradictions }, {
       otIngere: { id: donnees.ot.id, dateIntervention: donnees.ot.dateIntervention, sourceTexte: sourceDe(donnees.ot) },
-      anterieure: Boolean(donnees.anterieure), pagesEnvoyees: liste(donnees.pages), catalogue: liste(donnees.catalogue),
-    });
+      anterieure: Boolean(donnees.anterieure), pagesEnvoyees: liste(donnees.pages), catalogue: liste(donnees.catalogue) }));
     if (!controle.ok) {
-      const erreur = new Ia.IaReponseInvalide('Proposition refusée : ' + controle.raisons.join(' '));
+      const erreur = new Ia.IaReponseInvalide(I18n.t('wiki.lire_ingestion.proposition_refusee', { raisons: controle.raisons.join(' ') }));
       erreur.raisons = controle.raisons;
       throw erreur;
     }
@@ -559,7 +559,7 @@ Object.assign(Wiki, (() => {
     const { donnees, etat, empreinte, lu, modele, essais, raisons } = envoi;
     return Donnees.modifier('wiki_journal', (lignes, outils) => {
       const ligne = lignes.find((candidate) => candidate.id === entree.id);
-      if (!ligne || !STATUTS_FILE.includes(texte(ligne.statut))) return 'déjà traitée';
+      if (!ligne || !STATUTS_FILE.includes(texte(ligne.statut))) return 'deja';     // issue interne : déjà traitée
       const frais = etatPropose({ journal: lignes });
       const changees = Array.from(empreinte).filter(([cle, envoye]) => {
         const page = pageDeCle(frais, cle);
@@ -575,14 +575,14 @@ Object.assign(Wiki, (() => {
         .some((page) => page && page.type === 'savoir-faire' && !anciens.has(Wiki.comparable(page.titre)));
       Object.assign(ligne, { modele, essais, traite_le: outils.maintenant() });
       if (changees.length || collision || apparues) {
-        const motif = collision ? MOTIF_COLLISION : MOTIF_PAGES_CHANGEES;
+        const motif = collision ? motifCollision() : motifPagesChangees();
         if (Number(essais) > ESSAIS_COLLISION_MAX) {
-          Object.assign(ligne, { statut: 'refusée', raisons: (collision ? 'Page créée en même temps par un autre OT'
-            : 'Pages changées pendant l\'envoi') + ', ' + essais + ' essais.', motif });
+          Object.assign(ligne, { statut: 'refusée', motif, raisons: collision ? I18n.donnees('wiki.ecrire_resultat.page_creee_meme_temps', { n: essais })
+            : I18n.donnees('wiki.ecrire_resultat.pages_changees_pendant_envoi', { n: essais }) });
           return 'refusée';
         }
         Object.assign(ligne, { statut: 'en file', motif });
-        return 'rejouée';
+        return 'rejouee';
       }
       Object.assign(ligne, {
         statut: lu.rien ? 'rien à ajouter' : 'à valider', raisons: (raisons || []).join('\n'),
@@ -594,7 +594,7 @@ Object.assign(Wiki, (() => {
         })),
         contradictions: JSON.stringify(lu.contradictions.map((c) => Object.assign({ statut: 'ouverte' }, c))),
       });
-      return lu.rien ? 'rien' : 'acceptée';
+      return lu.rien ? 'rien' : 'acceptee';
     }, { journal: false });
   }
 
@@ -625,14 +625,14 @@ Object.assign(Wiki, (() => {
         lu = Ia.lireReponse('ingestionWiki', reponse && reponse.contenu, donnees);
       } catch (erreur) {
         if (!erreur || erreur.name !== 'IaReponseInvalide') throw erreur;
-        raisons = erreur.raisons || [erreur.message];
+        raisons = erreur.raisons || [I18n.donnees('ia.module.reponse_ia_illisible_aucune')];   // sans raisons : réponse illisible
       }
       if (lu) return ecrireResultat(entree, { donnees, etat, empreinte, lu, modele, essais: String(essais), raisons: premierRefus });
       if (relances >= SEUILS.relancesMax) {
         await ecrireEntree(entree.id, { statut: 'refusée', raisons: raisons.join('\n'), modele, essais: String(essais) });
         return 'refusée';
       }
-      if (arrete(opts)) return 'arrêtée';          // « Arrêter » : la relance ne part pas, l'OT reste en file
+      if (arrete(opts)) return 'arretee';          // « Arrêter » : la relance ne part pas, l'OT reste en file
       premierRefus = premierRefus || raisons;
       envoyees = Object.assign({}, donnees, { relance: { reponse: texte(reponse && reponse.contenu), raisons } });
     }
@@ -668,11 +668,11 @@ Object.assign(Wiki, (() => {
           bilan.envois.push(envoi);
           const suivi = { entree, cles };
           suivi.promesse = traiterUne(entree, appeler, opts).then((issue) => {
-            if (issue === 'acceptée') bilan.acceptees += 1;
+            if (issue === 'acceptee') bilan.acceptees += 1;
             else if (issue === 'rien') bilan.rien += 1;
             else if (issue === 'refusée') bilan.refusees += 1;
-            else if (issue === 'rejouée') bilan.rejouees += 1;
-            else if (issue === 'arrêtée') arret = true;    // relance retenue par « Arrêter » ou `annuler`
+            else if (issue === 'rejouee') bilan.rejouees += 1;
+            else if (issue === 'arretee') arret = true;    // relance retenue par « Arrêter » ou `annuler`
           }, (erreur) => {
             arret = true;
             if (!bilan.erreur) bilan.erreur = erreur;
@@ -693,7 +693,8 @@ Object.assign(Wiki, (() => {
 
   return {
     file, mettreEnFile, horsDuWiki, etatPropose, pagesConcernees, donneesIngestion, lireIngestion, prochainsEnvois,
-    traiterFile, articlesConsommes, texteSourceOt, MOTIF_COLLISION, MOTIF_PAGES_CHANGEES,
+    traiterFile, articlesConsommes, texteSourceOt, get MOTIF_COLLISION() { return motifCollision(); },
+    get MOTIF_PAGES_CHANGEES() { return motifPagesChangees(); },
     cleDeLigne, idCanonique, titreEquipement, titreArticle,       // repris par wiki-journal.js (mêmes clés, mêmes titres)
   };
-})());
+})()));

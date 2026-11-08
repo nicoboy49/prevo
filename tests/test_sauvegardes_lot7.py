@@ -335,7 +335,9 @@ class TestCopieExterne(CasDansLeProcessus):
         self.assertEqual(etat["erreur"], "Dossier de copie « Sauvegardes Prevo » introuvable (clé USB absente ou "
                                          "partage réseau injoignable ?).")
         self.assertEqual(self.copie_externe_de_info(), {"derniere_reussie": "2026-06-10", "jours_sans_copie": 3,
-                                                        "erreur": etat["erreur"]})
+                                                        "erreur": etat["erreur"],
+                                                        "erreur_code": "copie.dossier_introuvable",
+                                                        "erreur_valeurs": {"nom": "Sauvegardes Prevo"}})
         reponse = self.serveur.requete("GET", "/api/info").octets.decode("utf-8")
         self.assertNotIn("Cle USB", reponse)                    # jamais le chemin complet aux autres postes
         self.assertNotIn(self.racine.name, reponse)
@@ -421,7 +423,8 @@ class TestPlafondEtAcces(CasDansLeProcessus):
         refus = s.requete("POST", "/api/sauvegarde")
         self.assertEqual(refus.statut, 429, refus.octets)
         self.assertEqual(refus.entetes["retry-after"], "50")
-        self.assertEqual(refus.json(), {"erreur": MESSAGE_PLAFOND % 50, "attente_secondes": 50})
+        self.assertEqual(refus.json(), {"erreur": MESSAGE_PLAFOND % 50, "erreur_code": "sauvegardes.plafond_manuelles",
+                                        "erreur_valeurs": {"n": 50}, "attente_secondes": 50})
         self.assertEqual(manuelles(self.sauvegardes), ["2026-06-15_095950"])   # rien de créé par le refus
         # Une sauvegarde à motif n'est jamais limitée (avant un import, avant un changement de format).
         for motif in ("avant-import", "avant-format-v3"):
@@ -489,7 +492,9 @@ class TestServeurReel(unittest.TestCase):
             self.assertEqual(seconde.statut, 429, seconde.octets)
             attente = int(seconde.entetes["retry-after"])
             self.assertTrue(1 <= attente <= 60, attente)
-            self.assertEqual(seconde.json(), {"erreur": MESSAGE_PLAFOND % attente, "attente_secondes": attente})
+            self.assertEqual(seconde.json(), {"erreur": MESSAGE_PLAFOND % attente,
+                                              "erreur_code": "sauvegardes.plafond_manuelles",
+                                              "erreur_valeurs": {"n": attente}, "attente_secondes": attente})
             self.assertEqual(manuelles(reel.dossier / "sauvegardes"), [premiere.json()["sauvegarde"]])
             # Un corps sans motif (ou motif null) est une sauvegarde manuelle, limitée elle aussi.
             self.assertEqual(requete(reel.port, "POST", "/api/sauvegarde", {"motif": None}).statut, 429)
@@ -548,7 +553,8 @@ class TestServeurReel(unittest.TestCase):
                                                                           "designation, localisation_id"),
                             par_table["equipements"]["erreur"])
             self.assertEqual(par_table["fournisseurs"], {"table": "fournisseurs", "lignes": None,
-                                                         "erreur": "Fichier vide : la ligne d'en-tête manque."})
+                                                         "erreur": "Fichier vide : la ligne d'en-tête manque.",
+                                                         "erreur_code": "sauvegardes.test_vide"})
             self.assertEqual(par_table["demandes"], {"table": "demandes", "lignes": attendu["demandes"], "erreur": None})
 
             # Sauvegarde d'un format plus ancien, réenregistrée par Excel : acceptée (lecture tolérante).
@@ -588,7 +594,10 @@ class TestServeurReel(unittest.TestCase):
         self.addCleanup(shutil.rmtree, racine, True)
         source = racine / "source"
         shutil.copytree(commun.DOSSIER_DEMO, source)
-        quotidienne = source / "sauvegardes" / "2026-06-01"
+        # T187 : la quotidienne du jour (le serveur ne la refait donc pas à son démarrage, et une quotidienne de plus
+        # de 30 jours serait supprimée par la rotation).
+        jour = datetime.date.today().isoformat()
+        quotidienne = source / "sauvegardes" / jour
         (quotidienne / "acces").mkdir(parents=True)
         shutil.copy2(source / "parametres.csv", quotidienne / "parametres.csv")
         (quotidienne / "acces" / "comptes.json").write_bytes(COMPTES_JSON)
@@ -600,17 +609,17 @@ class TestServeurReel(unittest.TestCase):
         configuration.write_text(json.dumps({"copie_sauvegardes": str(cible)}), encoding="utf-8")
         with commun.ServeurPrevo(source=source, arguments=["--config", str(configuration)]) as reel:
             attendre(lambda: (reel.dossier / "copie-externe.json").is_file(), message=reel.sortie_console())
-            self.assertEqual(contenu_du_dossier(cible / "2026-06-01"), {
+            self.assertEqual(contenu_du_dossier(cible / jour), {
                 "acces/comptes.json": COMPTES_JSON,
                 "parametres.csv": (source / "parametres.csv").read_bytes()})
-            self.assertEqual(copies_datees(cible), ["2026-06-01"])
-            self.assertEqual([chemin.name for chemin in cible.iterdir()], ["2026-06-01"])
+            self.assertEqual(copies_datees(cible), [jour])
+            self.assertEqual([chemin.name for chemin in cible.iterdir()], [jour])
             info = requete(reel.port, "GET", "/api/info").json()["copie_externe"]
             self.assertEqual(info, {"derniere_reussie": datetime.date.today().isoformat(), "jours_sans_copie": 0,
                                     "erreur": None})
             console = reel.sortie_console()
             self.assertIn("Copie externe    : %s" % cible, console)
-            self.assertIn("Copie externe des sauvegardes : sauvegarde du 2026-06-01 à jour", console)
+            self.assertIn("Copie externe des sauvegardes : sauvegarde du %s à jour" % jour, console)
 
 
 class TestCoherenceSchema(CasNavigateur):

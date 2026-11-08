@@ -18,7 +18,12 @@ Ce qui est vérifié :
     déconnexion    : bouton du menu → écran de connexion, session fermée sur le serveur, route gardée ; session
                      fermée ailleurs → 401 relu par App (événement prevo:session-absente) → écran de connexion, puis
                      la coque se rouvre sur la même route ;
-    sans comptes   : ServeurPrevo() (portée « ce PC ») : l'écran de profil de 1.2 comme avant, texte d'À propos inchangé.
+    sans comptes   : ServeurPrevo() (portée « ce PC ») : l'écran de profil de 1.2 comme avant, texte d'À propos inchangé ;
+    langue (T297)  : en haut de l'écran, visible sans menu, le globe et les langues écrites dans leur langue (aucun autre
+                     mot) ; English → écran en anglais, le choix tient au rechargement ; Français (sans choix) → clé
+                     retirée ; installation en anglais (langue_defaut = en) : appareil neuf en français → écran en
+                     anglais d'emblée (data-langue-installation de index.html), Français choisi gardé ; valeurs abîmées
+                     gardées par l'appareil : français, sans erreur.
 
 Serveur réel (ServeurPrevo(comptes=True) de tests/commun.py) sur une copie de la démo avec trois comptes ; aucune
 commande d'administrateur, aucune sortie réseau, jamais le dossier donnees/ réel.
@@ -32,7 +37,7 @@ import re
 import unittest
 
 from atelier import motif_refus_du_demandeur
-from commun import COMPTES_DE_TEST, CasNavigateur, ServeurPrevo, attendre_pret
+from commun import COMPTES_DE_TEST, RACINE, CasNavigateur, ServeurPrevo, attendre_pret
 
 AGENT = "Navigateur-de-test/1.0"
 LARGEURS_JS = "[document.documentElement.scrollWidth, document.documentElement.clientWidth]"
@@ -53,6 +58,32 @@ ERREUR_401_TABLES = re.compile(r"status of 401 .*/api/(?:versions|csv/)")
 ERREUR_403_MOT_DE_PASSE = re.compile(r"status of 403 .*/api/mot-de-passe")
 ERREUR_403_ENROLER = re.compile(r"status of 403 .*/api/enroler")
 MOTS_DE_PASSE = {valeurs[0]: valeurs[3] for valeurs in COMPTES_DE_TEST.values()}
+# Sélecteur de langue de l'écran de connexion (T297) : options, valeur, texte de la zone hors de la liste, étiquette.
+SELECTEUR_LANGUE_JS = """() => {
+  const zone = document.getElementById('connexion-langue');
+  const liste = document.getElementById('connexion-langue-liste');
+  const autour = [...zone.childNodes].filter((n) => n !== liste).map((n) => n.textContent).join('').trim();
+  const haut = (selecteur) => document.querySelector(selecteur).getBoundingClientRect().top;
+  return { options: [...liste.options].map((o) => [o.value, o.textContent, o.lang]), valeur: liste.value, autour,
+    etiquette: liste.getAttribute('aria-label'), lang: document.documentElement.lang,
+    globe: Boolean(zone.querySelector('svg.icone[aria-hidden="true"]')),
+    enHaut: haut('#connexion-langue') < haut('#ecran-connexion .marque'), hauteur: liste.getBoundingClientRect().height };
+}"""
+
+
+def texte_du_dictionnaire(code, cle):
+    """Valeur de `cle` dans js/i18n/<code>.js, lue dans le fichier (échappements « \\' » retirés)."""
+    source = (RACINE / "js" / "i18n" / (code + ".js")).read_text(encoding="utf-8")
+    trouve = re.search(r"^  '%s': '((?:[^'\\]|\\.)*)',$" % re.escape(cle), source, re.MULTILINE)
+    if not trouve:
+        raise AssertionError("clé %s absente de js/i18n/%s.js" % (cle, code))
+    return re.sub(r"\\(.)", r"\1", trouve.group(1))
+
+
+def langues_declarees():
+    """[(code, nom)] de js/i18n/langues.js, dans l'ordre."""
+    source = (RACINE / "js" / "i18n" / "langues.js").read_text(encoding="utf-8")
+    return re.findall(r"^I18n\.declarer\(\{ code: '([^']+)', nom: '([^']+)'", source, re.MULTILINE)
 NOUVEAU_MOT_DE_PASSE = "une phrase de passe pour zoe"
 
 
@@ -118,6 +149,72 @@ class CasConnexion(CasNavigateur):
 
 
 class TestConnexion(CasConnexion):
+
+    def test_refus_de_connexion_affiche_dans_la_langue_de_l_ecran(self):
+        """T285 (D157) : l'écran lit le message du serveur par son code (StockageServeur.texte) ; en français, inchangé."""
+        page = self.page
+        self.autoriser_erreur(ERREUR_401_CONNEXION)
+        page.goto(self.serveur.url + "/")
+        self.attendre_etat("connexion")
+        page.evaluate("""() => {
+          I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'en-GB', statut: 'automatique' });
+          I18n.ajouter('xx', { 'serveur.sessions.connexion_refusee': 'Refus (essai xx)' });
+          I18n.choisir('xx');
+        }""")
+        self.connecter("nicolas.briand", "pas le bon mot de passe")
+        page.wait_for_function("document.getElementById('connexion-erreur').textContent.includes('Refus (essai xx)')")
+        self.assertNotIn("Identifiant ou mot de passe", page.inner_text("#connexion-erreur"))
+        page.evaluate("I18n.choisir('fr')")
+        self.connecter("nicolas.briand", "pas le bon mot de passe")
+        page.wait_for_function("document.getElementById('connexion-erreur').textContent.includes('Identifiant ou mot de passe incorrect.')")
+
+    def choisir_langue(self, code):
+        with self.page.expect_navigation():
+            self.page.select_option("#connexion-langue-liste", code)
+        self.attendre_etat("connexion")
+
+    def bouton_connexion(self):
+        return self.page.inner_text("#connexion-valider").strip()
+
+    def test_selecteur_de_langue_sans_menu_et_choix_garde(self):
+        """T297 : installation sans réglage, appareil en français ; le sélecteur change la langue sans menu."""
+        page = self.page
+        page.goto(self.serveur.url + "/")
+        self.attendre_etat("connexion")
+        selecteur = page.evaluate(SELECTEUR_LANGUE_JS)
+        self.assertEqual(selecteur["options"], [[code, nom, code] for code, nom in langues_declarees()])
+        self.assertEqual((selecteur["valeur"], selecteur["lang"], selecteur["autour"]), ("fr", "fr", ""))
+        self.assertTrue(selecteur["globe"])
+        self.assertTrue(selecteur["enHaut"])
+        self.assertGreaterEqual(selecteur["hauteur"], 44)
+        self.assertEqual(selecteur["etiquette"], texte_du_dictionnaire("fr", "connexion.choix_langue.etiquette"))
+        self.assertTrue(page.is_visible("#connexion-langue-liste"))
+        self.assertEqual(self.bouton_connexion(), texte_du_dictionnaire("fr", "socle.connexion_valider.connecter"))
+        # English : l'écran se recharge en anglais ; le choix tient au rechargement.
+        self.choisir_langue("en")
+        self.assertEqual(self.bouton_connexion(), texte_du_dictionnaire("en", "socle.connexion_valider.connecter"))
+        self.assertEqual(page.evaluate("[document.documentElement.lang, localStorage.getItem('prevo.langue')]"), ["en", "en"])
+        self.assertEqual(page.evaluate(SELECTEUR_LANGUE_JS)["etiquette"],
+                         texte_du_dictionnaire("en", "connexion.choix_langue.etiquette"))
+        page.reload()
+        self.attendre_etat("connexion")
+        self.assertEqual(page.evaluate("I18n.langue"), "en")
+        # Français, la langue qu'aurait l'appareil sans choix : la clé est retirée.
+        self.choisir_langue("fr")
+        self.assertEqual(self.bouton_connexion(), texte_du_dictionnaire("fr", "socle.connexion_valider.connecter"))
+        self.assertEqual(page.evaluate("[document.documentElement.lang, localStorage.getItem('prevo.langue')]"), ["fr", None])
+        # Une seule liste, même après un retour à l'écran de connexion.
+        self.assertEqual(page.locator("#connexion-langue select").count(), 1)
+
+    def test_valeurs_abimees_gardees_par_l_appareil_francais_sans_erreur(self):
+        self.contexte.add_init_script("localStorage.setItem('prevo.langue', 'zz\\\"><b>x</b>'); "
+                                      "localStorage.setItem('prevo.langue.installation', '<img src=x onerror=alert(1)>');")
+        page = self.page
+        page.goto(self.serveur.url + "/")
+        self.attendre_etat("connexion")
+        selecteur = page.evaluate(SELECTEUR_LANGUE_JS)
+        self.assertEqual((selecteur["valeur"], selecteur["lang"]), ("fr", "fr"))
+        self.assertEqual(self.bouton_connexion(), texte_du_dictionnaire("fr", "socle.connexion_valider.connecter"))
 
     def test_responsable_a_1280_px_rester_connecte_profil_deduit_et_a_propos(self):
         page = self.page
@@ -343,7 +440,9 @@ class TestConnexion(CasConnexion):
         page.evaluate("App.adaptateur.listerVersions().catch(() => null)")
         self.attendre_etat("connexion")
         page.wait_for_selector("#connexion-motif", state="visible")
-        self.assertIn("Connexion nécessaire", page.inner_text("#connexion-motif"))
+        # T329 : le message dit quoi faire (le même compte retrouve l'écran et sa saisie : tests/test_saisie_gardee.py).
+        self.assertEqual(page.inner_text("#connexion-motif").strip(),
+                         texte_du_dictionnaire("fr", "socle.session_perdue.reconnectez_vous_meme_compte"))
         self.assertEqual(page.evaluate("location.hash"), "#/parc")
         self.connecter("julien.moreau")                                           # une autre personne, même route
         attendre_pret(page)
@@ -379,6 +478,33 @@ class TestAutresServeurs(CasNavigateur):
         page.fill("#connexion-identifiant", identifiant)
         page.fill("#connexion-mot-de-passe", MOTS_DE_PASSE[identifiant])
         page.click("#connexion-valider")
+
+    def test_connexion_dans_la_langue_d_une_installation_en_anglais(self):
+        """T297 : langue_defaut = en ; appareil neuf (navigateur fr-FR, rien de retenu) : écran en anglais d'emblée."""
+        page = self.page
+        self.autoriser_erreur(ERREUR_401_SONDE)
+        page.add_init_script(SUIVI_ETATS_JS)
+        with ServeurPrevo(comptes=True) as serveur:
+            with open(serveur.dossier / "parametres.csv", "ab") as fichier:
+                fichier.write(b"langue_defaut;en\r\n")
+            page.goto(serveur.url + "/")
+            page.wait_for_function("document.documentElement.dataset.etat === 'connexion'")
+            self.assertEqual(page.evaluate("[document.documentElement.dataset.langueInstallation, I18n.langue, "
+                                           "document.documentElement.lang]"), ["en", "en", "en"])
+            self.assertEqual(page.inner_text("#connexion-valider").strip(),
+                             texte_du_dictionnaire("en", "socle.connexion_valider.connecter"))
+            self.assertEqual(page.evaluate("document.getElementById('connexion-langue-liste').value"), "en")
+            self.assertEqual(page.evaluate("window.__etats.filter((etat) => etat === 'connexion').length"), 1)
+            # Français choisi : retenu (il diffère de l'installation), gardé au rechargement.
+            with page.expect_navigation():
+                page.select_option("#connexion-langue-liste", "fr")
+            page.wait_for_function("document.documentElement.dataset.etat === 'connexion'")
+            self.assertEqual(page.inner_text("#connexion-valider").strip(),
+                             texte_du_dictionnaire("fr", "socle.connexion_valider.connecter"))
+            self.assertEqual(page.evaluate("localStorage.getItem('prevo.langue')"), "fr")
+            page.reload()
+            page.wait_for_function("document.documentElement.dataset.etat === 'connexion'")
+            self.assertEqual(page.evaluate("I18n.langue"), "fr")
 
     def test_sans_comptes_ecran_de_profil_comme_avant(self):
         page = self.page

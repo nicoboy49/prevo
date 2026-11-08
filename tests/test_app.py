@@ -363,9 +363,10 @@ class TestServeur(CasApp):
             self.assertIn("Google ou de Microsoft", contenu)
             self.assertNotIn("pas encore disponibles", contenu)
             self.assertEqual(page.get_attribute("#contenu a[href='GUIDE.html']", "href"), "GUIDE.html")
-            for bibliotheque in ("PapaParse 5.7.0", "qrcode-generator 2.0.4", "jsQR 1.4.0", "JSZip 3.10.2",
+            for bibliotheque in ("PapaParse 5.7.0", "qrcode-generator 2.0.4", "jsQR 1.4.0",
                                  "ECharts 5.5.1", "SheetJS CE 0.20.3", "Sora", "MIT", "Apache-2.0", "OFL"):
                 self.assertIn(bibliotheque, contenu)
+            self.assertNotIn("JSZip", contenu)                  # T229 : retiré (ZIP lu et écrit par zip-flux.js)
             self.assertEqual(page.get_attribute("#contenu a[href='js/lib/LICENCES.txt']", "href"), "js/lib/LICENCES.txt")
             self.assertIn("Serveur", contenu)
             # Badge de signature du menu → À propos

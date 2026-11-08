@@ -19,11 +19,11 @@ const Suggestions = (() => {
   // ===========================================================================================
 
   // Type de chaque règle, en clair (badge des cartes : le texte dit le type, la couleur aide seulement).
-  const TITRES = {
-    S1: 'Créer une gamme',
-    S2: 'Revoir le préventif',
-    S3: 'Anomalies répétées',
-    S4: 'Allonger une gamme',
+  const TITRES = {          // lus à l'affichage (accesseurs)
+    get S1() { return I18n.t('suggestions.s1.creer_gamme'); },
+    get S2() { return I18n.t('suggestions.s2.revoir_preventif'); },
+    get S3() { return I18n.t('suggestions.s3.anomalies_repetees'); },
+    get S4() { return I18n.t('suggestions.s4.allonger_gamme'); },
   };
   const TYPES_CORRECTIFS = ['correctif immédiat', 'correctif différé'];
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
@@ -348,10 +348,12 @@ const Suggestions = (() => {
     if (texte(gamme.declencheur) === 'compteur') {
       const compteur = Donnees.trouver('compteurs', gamme.compteur_id);
       const unite = compteur ? texte(compteur.unite) : '';
-      return texte(gamme.periodicite_unites)
-        ? 'toutes les ' + UI.nombreFr(gamme.periodicite_unites) + (unite ? '\u00a0' + unite : '') : 'périodicité non renseignée';
+      const unites = UI.nombreFr(gamme.periodicite_unites);
+      if (!texte(gamme.periodicite_unites)) return I18n.t('suggestions.periodicite.periodicite_non_renseignee');
+      return unite ? I18n.t('suggestions.periodicite.toutes_unites_unite', { unites, unite }) : I18n.t('suggestions.periodicite.toutes_unites', { unites });
     }
-    return texte(gamme.periodicite_jours) ? 'tous les ' + UI.nombreFr(gamme.periodicite_jours) + '\u00a0j' : 'périodicité non renseignée';
+    const jours = UI.nombreFr(gamme.periodicite_jours);
+    return texte(gamme.periodicite_jours) ? I18n.t('suggestions.periodicite.tous_jours', { n: Donnees.nombre(gamme.periodicite_jours), jours }) : I18n.t('suggestions.periodicite.periodicite_non_renseignee');
   }
 
   function gammeEnClair(gammeId) {
@@ -360,12 +362,15 @@ const Suggestions = (() => {
   }
 
   function enumeration(elements) {
-    return elements.length < 2 ? elements.join('') : elements.slice(0, -1).join(', ') + ' et ' + elements[elements.length - 1];
+    const debut = elements.slice(0, -1).join(', ');
+    const dernier = elements[elements.length - 1];
+    return elements.length < 2 ? elements.join('') : I18n.t('suggestions.enumeration.debut_dernier', { debut, dernier });
   }
 
   /** « en 12 mois », ou « depuis le 12/03/2026 » quand une décision précédente borne les faits. */
   function periode(s, contexte) {
-    return s.depuis ? 'depuis le ' + UI.dateFr(s.depuis.slice(0, 10)) : 'en ' + contexte.reglages.fenetreMois + ' mois';
+    const mois = contexte.reglages.fenetreMois;
+    return s.depuis ? I18n.t('suggestions.periode.depuis_date', { date: UI.dateFr(s.depuis.slice(0, 10)) }) : I18n.t('suggestions.periode.en_mois', { n: mois });
   }
 
   /**
@@ -375,32 +380,45 @@ const Suggestions = (() => {
    */
   function frequence(intervalle) {
     if (intervalle === null || intervalle < 1) return '';
-    if (intervalle >= 14) return ' (environ une toutes les ' + arrondi(intervalle / 7) + ' semaines)';
-    return intervalle === 1 ? ' (environ une par jour)' : ' (environ une tous les ' + intervalle + ' jours)';
+    const semaines = arrondi(intervalle / 7);
+    if (intervalle >= 14) return I18n.t('suggestions.frequence.environ_toutes_semaines', { n: semaines });
+    return intervalle === 1 ? I18n.t('suggestions.frequence.environ_jour') : I18n.t('suggestions.frequence.environ_tous_jours', { n: intervalle });
   }
 
   function rediger(s, contexte) {
-    const pannes = s.nombre + ' pannes « ' + s.causeLibelle + ' » ' + periode(s, contexte);
+    const nombre = s.nombre;
+    const cause = s.causeLibelle;
+    const pannes = I18n.t('suggestions.rediger.nombre_pannes_cause_periode', { n: nombre, cause, periode: periode(s, contexte) });
+    const repere = s.repere;
     if (s.regle === 'S1') {
-      s.texte = s.repere + ' : ' + pannes + frequence(s.intervalleMedianJours) + ', aucune gamme active.';
-      s.question = 'Créer une gamme pour prévenir cette panne ?';
+      const environ = frequence(s.intervalleMedianJours);
+      s.texte = environ ? I18n.t('suggestions.rediger.aucune_gamme_active', { repere, pannes, environ }) : I18n.t('suggestions.rediger.aucune_gamme_active_sans_frequence', { repere, pannes });
+      s.question = I18n.t('suggestions.rediger.creer_gamme_prevenir_panne');
     } else if (s.regle === 'S2') {
-      const gammes = s.gammeIds.map(gammeEnClair);
-      s.texte = s.repere + ' : ' + pannes + ' malgré ' + (gammes.length > 1 ? 'les gammes ' : 'la gamme ') + enumeration(gammes)
-        + (s.intervalleMedianJours === null ? '.' : ' ; intervalle médian entre ces pannes : ' + s.intervalleMedianJours + ' jours.');
-      s.question = 'Raccourcir la périodicité, ajouter une opération à la check-list ou créer une gamme dédiée ? '
-        + 'À examiner : la gamme ne dit pas quelles pannes elle prévient.';
+      const gammes = enumeration(s.gammeIds.map(gammeEnClair));
+      const plusieurs = s.gammeIds.length > 1;
+      const intervalle = s.intervalleMedianJours;
+      if (intervalle === null) {
+        s.texte = plusieurs ? I18n.t('suggestions.rediger.malgre_gammes', { repere, pannes, gammes }) : I18n.t('suggestions.rediger.malgre_gamme', { repere, pannes, gammes });
+      } else {
+        s.texte = plusieurs ? I18n.t('suggestions.rediger.malgre_gammes_intervalle_median', { repere, pannes, gammes, n: intervalle })
+          : I18n.t('suggestions.rediger.malgre_gamme_intervalle_median', { repere, pannes, gammes, n: intervalle });
+      }
+      s.question = I18n.t('suggestions.rediger.raccourcir_periodicite_ajouter_operation');
     } else if (s.regle === 'S3') {
-      const visites = s.sur === VISITES_REGARDEES_S3 ? 'des ' + s.sur + ' dernières visites' : 'de ses ' + s.sur + ' visites';
-      s.texte = s.gammeIds[0] + ' (' + s.repere + ') : anomalie constatée à ' + s.nombre + ' ' + visites
-        + ' (' + s.dates.map((jour) => UI.dateFr(jour)).join(', ') + ').';
-      s.question = 'Raccourcir la périodicité ou compléter la check-list ?';
+      const gamme = s.gammeIds[0];
+      const sur = s.sur;
+      const dates = s.dates.map((jour) => UI.dateFr(jour)).join(', ');
+      s.texte = sur === VISITES_REGARDEES_S3 ? I18n.t('suggestions.rediger.anomalie_constatee_dernieres_visites', { gamme, repere, nombre, sur, dates })
+        : I18n.t('suggestions.rediger.anomalie_constatee_visites', { gamme, repere, nombre, sur, dates });
+      s.question = I18n.t('suggestions.rediger.raccourcir_periodicite_completer_check');
     } else {
-      const gamme = Donnees.trouver('gammes', s.gammeIds[0]);
-      s.texte = s.repere + ' : ' + s.nombre + ' visites de suite sans anomalie (gamme ' + s.gammeIds[0]
-        + (gamme ? ', ' + periodicite(gamme) : '') + '), aucune panne depuis la première (' + UI.dateFr(s.dates[0]) + ').';
-      s.question = 'Allonger la périodicité ? Vérifiez d\'abord qu\'aucune obligation (réglementaire, constructeur, '
-        + 'garantie) ne l\'impose.';
+      const gamme = s.gammeIds[0];
+      const ligne = Donnees.trouver('gammes', gamme);
+      const premiere = UI.dateFr(s.dates[0]);
+      s.texte = ligne ? I18n.t('suggestions.rediger.visites_suite_sans_anomalie', { repere, n: nombre, gamme, periodicite: periodicite(ligne), premiere })
+        : I18n.t('suggestions.rediger.visites_suite_sans_anomalie_sans_periodicite', { repere, n: nombre, gamme, premiere });
+      s.question = I18n.t('suggestions.rediger.allonger_periodicite_verifiez_abord');
     }
     return s;
   }
@@ -473,7 +491,7 @@ const Suggestions = (() => {
         .sort((a, b) => b.id.length - a.id.length);
       if (candidats.length) return { table: 'equipements', id: candidats[0].id };
     }
-    throw new Donnees.ErreurValidation('Suggestion inconnue : « ' + texte(cle) + ' ».');
+    throw new Donnees.ErreurValidation(I18n.t('suggestions.cible_decision.suggestion_inconnue', { cle: texte(cle) }));
   }
 
   function texteDecision(valeur) {
@@ -484,7 +502,7 @@ const Suggestions = (() => {
     const cible = cibleDecision(cle);
     const identifiant = await Donnees.journaliser(cible.table, cible.id, 'suggestion ' + cle + ' ' + decision + ' : ' + motif);
     if (!identifiant) {
-      throw new Donnees.ErreurStockage('La décision n\'a pas pu être inscrite au journal : la suggestion reste ouverte. Réessayez.');
+      throw new Donnees.ErreurStockage(I18n.t('suggestions.ecrire_decision.decision_pas_pu_etre'));
     }
     return identifiant;
   }
@@ -492,10 +510,11 @@ const Suggestions = (() => {
   /** « Ignorer » : motif obligatoire, suggestion ouverte seulement ; renvoie l'identifiant de la ligne du journal. */
   async function ignorer(cle, motif) {
     const propre = texteDecision(motif);
-    if (!propre) throw new Donnees.ErreurValidation('Indiquez pourquoi vous ignorez cette suggestion : le motif est inscrit au journal.');
-    if (propre.length > MOTIF_MAX) throw new Donnees.ErreurValidation('Le motif ne doit pas dépasser ' + MOTIF_MAX + ' caractères.');
+    if (!propre) throw new Donnees.ErreurValidation(I18n.t('suggestions.ignorer.indiquez_pourquoi_ignorez_suggestion'));
+    const maximum = MOTIF_MAX;
+    if (propre.length > maximum) throw new Donnees.ErreurValidation(I18n.t('suggestions.ignorer.motif_doit_pas_depasser', { n: maximum }));
     if (!trouver(cle, Donnees.aujourdhui())) {
-      throw new Donnees.ErreurValidation('Cette suggestion n\'est plus ouverte (déjà décidée, ou les faits ont changé).');
+      throw new Donnees.ErreurValidation(I18n.t('suggestions.ignorer.suggestion_plus_ouverte_deja'));
     }
     return ecrireDecision(cle, 'ignorée', propre);
   }

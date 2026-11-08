@@ -15,10 +15,6 @@ Object.assign(Parametres.interne, (() => {
     return App.mode === 'serveur' && typeof App.adaptateur.testerSauvegarde === 'function';
   }
 
-  function pluriel(nombre, singulier, plurielTexte) {
-    return nombre + ' ' + (nombre > 1 ? (plurielTexte || singulier + 's') : singulier);
-  }
-
   function libelleTable(nomTable) {
     const description = Schema.table(nomTable);
     return description ? description.libelle : nomTable;
@@ -29,46 +25,42 @@ Object.assign(Parametres.interne, (() => {
     const enErreur = tables.filter((table) => table.erreur).length;
     if (resultat.ok) {
       const total = tables.reduce((somme, table) => somme + (Number(table.lignes) || 0), 0);
-      return UI.bandeau('succes', UI.html`<b>Sauvegarde lisible :</b> ${pluriel(tables.length, 'table relue', 'tables relues')},
-        ${pluriel(total, 'ligne')} en tout.`);
+      return UI.bandeau('succes', UI.html`${I18n.html('sauvegardes.verdict.sauvegarde_lisible_tout', { tables: I18n.t('sauvegardes.verdict.tables_relues', { n: tables.length }), lignes: I18n.t('sauvegardes.verdict.lignes', { n: total }) })}`);
     }
     if (!tables.length) {
-      return UI.bandeau('important', UI.html`<b>Sauvegarde vide :</b> elle ne contient aucun fichier de données.`);
+      return UI.bandeau('important', UI.html`${I18n.html('sauvegardes.verdict.sauvegarde_vide_contient_aucun')}`);
     }
-    return UI.bandeau('important', UI.html`<b>Problème trouvé :</b> ${pluriel(enErreur, 'table', 'tables')} sur
-      ${tables.length} ne se ${enErreur > 1 ? 'relisent' : 'relit'} pas correctement (détail ci-dessous). Avant de
-      restaurer, préférez une autre sauvegarde pour ${enErreur > 1 ? 'ces tables' : 'cette table'}.`);
+    return UI.bandeau('important', UI.html`${I18n.html('sauvegardes.verdict.probleme_trouve_relisent_pas', { n: enErreur, nbTables: tables.length })}`);
   }
 
   function contenuResultat(sauvegarde, resultat) {
     const tables = Array.isArray(resultat.tables) ? resultat.tables : [];
     const decrite = Parametres.decrireSauvegarde(sauvegarde.nom);
     const contenu = UI.element(UI.html`<div class="form-colonne" id="resultat-test-sauvegarde" data-ok="${resultat.ok ? '1' : '0'}">
-      <p>Sauvegarde du <b>${decrite.date}</b> (${decrite.type.toLowerCase()}) : Prévo a relu chaque fichier sur le PC
-        serveur, sans rien modifier.</p>
+      <p>${I18n.html('sauvegardes.contenu_resultat.sauvegarde_prevo_relu_chaque', { date: decrite.date, typeEnMinuscule: decrite.type.toLowerCase() })}</p>
     </div>`);
     contenu.appendChild(verdict(resultat, tables));
     contenu.appendChild(UI.tableau({
-      libelle: 'Tables relues',
+      libelle: I18n.t('sauvegardes.contenu_resultat.tables_relues'),
       colonnes: [
-        { cle: 'table', libelle: 'Table', valeurTri: (l) => libelleTable(l.table),
-          rendu: (l) => UI.html`${libelleTable(l.table)} <span class="note">${l.table}.csv</span>` },
-        { cle: 'lignes', libelle: 'Lignes', type: 'nombre', valeurTri: (l) => l.lignes,
+        { cle: 'table', libelle: I18n.t('sauvegardes.contenu_resultat.table'), valeurTri: (l) => libelleTable(l.table),
+          rendu: (l) => UI.html`${I18n.html('sauvegardes.contenu_resultat.libelle_table_table_csv', { libelleTable: libelleTable(l.table), table: l.table })}` },
+        { cle: 'lignes', libelle: I18n.t('sauvegardes.contenu_resultat.lignes'), type: 'nombre', valeurTri: (l) => l.lignes,
           rendu: (l) => UI.html`<span data-lignes="${l.table}">${l.lignes === null || l.lignes === undefined ? '—' : String(l.lignes)}</span>` },
-        { cle: 'erreur', libelle: 'État', triable: false,
+        { cle: 'erreur', libelle: I18n.t('sauvegardes.contenu_resultat.etat'), triable: false,
           rendu: (l) => (l.erreur
-            ? UI.html`<span class="badge ko">Problème</span> <span class="test-sauvegarde-erreur" data-erreur="${l.table}">${l.erreur}</span>`
-            : UI.html`<span class="badge ok">Lisible</span>`) },
+            ? UI.html`<span class="badge ko">${I18n.t('sauvegardes.contenu_resultat.probleme')}</span> <span class="test-sauvegarde-erreur" data-erreur="${l.table}">${l.erreur}</span>`
+            : UI.html`<span class="badge ok">${I18n.t('sauvegardes.contenu_resultat.lisible')}</span>`) },
       ],
       lignes: tables,
-      vide: 'Aucun fichier de données dans cette sauvegarde.',
+      vide: I18n.t('sauvegardes.contenu_resultat.aucun_fichier_donnees_sauvegarde'),
     }));
     return contenu;
   }
 
   async function testerSauvegarde(sauvegarde) {
     const resultat = await App.adaptateur.testerSauvegarde(sauvegarde.nom);
-    await UI.fenetre({ titre: 'Tester une sauvegarde', contenu: contenuResultat(sauvegarde, resultat) });
+    await UI.fenetre({ titre: I18n.t('sauvegardes.tester_sauvegarde.tester_sauvegarde'), contenu: contenuResultat(sauvegarde, resultat) });
   }
 
   /**
@@ -77,7 +69,7 @@ Object.assign(Parametres.interne, (() => {
    */
   function actionsSauvegarde(sauvegarde, boutonRestaurer, pendant) {
     if (!serveurSaitTester()) return boutonRestaurer;
-    const bouton = UI.element(UI.html`<button type="button" class="btn btn-secondaire" data-tester="${sauvegarde.nom}">Tester</button>`);
+    const bouton = UI.element(UI.html`<button type="button" class="btn btn-secondaire" data-tester="${sauvegarde.nom}">${I18n.t('sauvegardes.actions_sauvegarde.tester')}</button>`);
     bouton.addEventListener('click', () => pendant(bouton, 'test d\'une sauvegarde', () => testerSauvegarde(sauvegarde)));
     const groupe = UI.element(UI.html`<span class="sauvegarde-actions"></span>`);
     groupe.append(bouton, boutonRestaurer);
@@ -87,9 +79,7 @@ Object.assign(Parametres.interne, (() => {
   /** Note de la carte « Sauvegardes » propre au PC serveur (fragment UI.html ; '' hors du mode serveur). */
   function noteSauvegardes() {
     if (!serveurSaitTester()) return '';
-    return UI.html`<p class="note sauvegardes-explication" id="note-sauvegardes-serveur">« Tester » relit une sauvegarde
-      et compte les lignes de chaque table, sans rien modifier. Une sauvegarde manuelle par minute au plus ; Prévo garde
-      les 60 dernières (les quotidiennes et les copies de sécurité ne sont pas comptées).</p>`;
+    return UI.html`<p class="note sauvegardes-explication" id="note-sauvegardes-serveur">${I18n.t('sauvegardes.note_sauvegardes.tester_relit_sauvegarde_compte')}</p>`;
   }
 
   return { actionsSauvegarde, noteSauvegardes };
