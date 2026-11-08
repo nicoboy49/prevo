@@ -1,0 +1,44 @@
+name: "Fix a translation / Corriger une traduction"
+description: "A wrong, unclear or missing text in Prévo (Turkish, Italian, Portuguese, English…). / Un texte faux, peu clair ou manquant dans Prévo (turc, italien, portugais, anglais…)."
+title: "[Translation] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Turkish, Italian and Portuguese are machine translations: corrections are welcome. To change the file yourself, see "Add or fix a language" in CONTRIBUTING.md.
+        Le turc, l'italien et le portugais sont des traductions automatiques : les corrections sont bienvenues. Pour modifier le fichier vous-même, voir « Ajouter ou corriger une langue » dans CONTRIBUTING.fr.md.
+
+        **Do not send any real data from your company. / N'envoyez aucune donnée réelle de votre entreprise.**
+  - type: input
+    id: langue
+    attributes:
+      label: "Language / Langue"
+      description: "Code or name: tr, it, pt-PT, en…"
+    validations:
+      required: true
+  - type: input
+    id: ecran
+    attributes:
+      label: "Screen / Écran"
+      description: "Where the text appears (menu, screen, button…). / Où le texte apparaît (menu, écran, bouton…)."
+    validations:
+      required: false
+  - type: textarea
+    id: texte_actuel
+    attributes:
+      label: "Text shown today / Texte affiché aujourd'hui"
+    validations:
+      required: true
+  - type: textarea
+    id: texte_propose
+    attributes:
+      label: "Better text / Texte proposé"
+    validations:
+      required: true
+  - type: textarea
+    id: contexte
+    attributes:
+      label: "Context (filled in by Prévo) / Contexte (rempli par Prévo)"
+      description: "Version, language and browser only. / Version, langue et navigateur seulement."
+    validations:
+      required: false

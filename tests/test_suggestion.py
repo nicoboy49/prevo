@@ -118,6 +118,59 @@ class TestLien(CasSuggestion):
             self.assertEqual(self.page.locator("#apropos-suggestion-lien").inner_text().strip(), "Suggest an improvement")
             self.assertEqual(self.page.locator("#menu-suggestion-lien").inner_text().strip(), "Suggest an improvement")
 
+    def test_mention_traduction_automatique_seulement_pour_une_langue_automatique(self):
+        """T343 (CS161) : français et anglais, aucune mention ; une langue déclarée « automatique » (ici tr, déclarée par
+        la copie servie de langues.js : la déclaration réelle vient à la fin du Lot 5) : « Traduction automatique —
+        corrections bienvenues » au pied du menu, dans « Ce poste » et dans « À propos », lien vers le formulaire
+        « Corriger une traduction » avec la langue et le contexte, nouvel onglet."""
+        version = version_et_date()[0]
+        with ServeurPrevo() as serveur:
+            for langue in (None, "en"):
+                with self.subTest(langue=langue):
+                    self.ouvrir(serveur, langue=langue)
+                    self.a_propos()
+                    self.assertEqual(self.page.locator("#menu-traduction-lien, #apropos-traduction-lien").count(), 0)
+                    self.assertEqual(self.page.locator("#menu-traduction").inner_html().strip(), "")
+            declaration = ("\nI18n.declarer({ code: 'tr', nom: 'Türkçe', locale: 'tr-TR', statut: 'automatique', "
+                           "aide: 'en' });\n")
+            langues = (RACINE / "js" / "i18n" / "langues.js").read_text(encoding="utf-8") + declaration
+            self.ouvrir_avec(serveur, "tr", lambda contexte: contexte.route("**/js/i18n/langues.js", lambda route: route.fulfill(
+                status=200, content_type="text/javascript; charset=utf-8", body=langues)))
+            self.assertEqual(self.page.evaluate("I18n.langue"), "tr")
+            adresses = []
+            for selecteur, ecran in (("#menu-traduction-lien", None), ("#apropos-traduction-lien", "#/apropos"),
+                                     ("#poste-traduction-lien", "#/poste")):
+                with self.subTest(selecteur=selecteur):
+                    if ecran:
+                        self.page.evaluate("(route) => { location.hash = route; }", ecran)
+                        self.page.wait_for_selector(selecteur)
+                    lien = self.page.locator(selecteur)
+                    self.assertTrue(lien.is_visible(), selecteur)
+                    self.assertEqual(lien.get_attribute("target"), "_blank")
+                    self.assertEqual(lien.get_attribute("rel"), "noopener noreferrer")
+                    adresses.append(lien.get_attribute("href"))
+            self.assertEqual(len(set(adresses)), 1, adresses)
+            morceaux, parametres = self.parametres_de(adresses[0])
+            self.assertEqual(morceaux.scheme + "://" + morceaux.netloc + morceaux.path, DEPOT + "/issues/new")
+            self.assertEqual(sorted(parametres), ["contexte", "langue", "template", "title"])
+            self.assertEqual(parametres["template"], "4-corriger-une-traduction.yml")
+            self.assertEqual(parametres["langue"], "tr")
+            self.assertIn(version, parametres["contexte"])
+            self.assertTrue((MODELES / parametres["template"]).is_file())
+
+    def ouvrir_avec(self, serveur, langue, preparer):
+        """Comme ouvrir(), avec une préparation du contexte (routes) avant le premier chargement."""
+        self.contexte.close()
+        self.contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1440, "height": 900})
+        self.contexte.add_init_script("try { localStorage.setItem('prevo.langue', %s); } catch (e) {}" % json.dumps(langue))
+        preparer(self.contexte)
+        preregler_profil(self.contexte, "responsable")
+        self.page = self.contexte.new_page()
+        self.surveiller(self.page)
+        self.page.goto(serveur.url + "/")
+        attendre_pret(self.page, 30000)
+        return self.page
+
     def test_repli_par_courriel_meme_contenu(self):
         with ServeurPrevo() as serveur:
             self.ouvrir(serveur)
@@ -172,7 +225,7 @@ class TestReduction(CasSuggestion):
 class TestModeles(unittest.TestCase):
 
     def test_les_deux_formulaires_portent_le_champ_contexte(self):
-        for nom in ("2-proposer-une-amelioration.yml", "3-suggest-an-improvement.yml"):
+        for nom in ("2-proposer-une-amelioration.yml", "3-suggest-an-improvement.yml", "4-corriger-une-traduction.yml"):
             with self.subTest(modele=nom):
                 texte = (MODELES / nom).read_text(encoding="utf-8")
                 self.assertIn("    id: contexte\n", texte)

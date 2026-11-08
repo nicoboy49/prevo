@@ -22,7 +22,9 @@ css/modules/*.css          mise en page propre à chaque module (une feuille par
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
 js/i18n.js                 I18n      : moteur de traduction (t, html, pluriels, repli, data-i18n ; multilingue)
-js/i18n/langues.js         langues déclarées ; js/i18n/<code>.js : textes d'une langue, un bloc par section
+js/i18n/langues.js         langues déclarées (statut automatique : mention « Traduction automatique — corrections
+                           bienvenues » et formulaire GitHub, Apropos.mentionTraduction ; aide: 'en' : aide longue
+                           prise en anglais, I18n.langueDeLAide, D158 ; Lot 5, T343) ; js/i18n/<code>.js : textes d'une langue, un bloc par section
 js/i18n/aide/<code>.js     aide longue d'une langue (clés aide.*, repli silencieux sur le français)
 js/i18n-chargeur.js        ajoute la langue active (si ce n'est pas le français) avant js/schema.js
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)

@@ -393,6 +393,7 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
    (l'écran « Ce poste » la propose toujours) */
 .menu-langue select { font-size: .875rem; padding: .4rem .7rem; border-radius: 12px; }
 .menu-suggestion { font-size: .8125rem; padding: 0 .4rem; }
+.menu-suggestion:empty { display: none; }   /* T343 : la mention de traduction n'existe que pour une langue automatique */
 .menu-suggestion a { color: var(--texte-2); text-decoration: underline; display: inline-flex; align-items: center; min-height: 44px; }   /* zone tactile de 44 px (test_bento) */
 
 /* Menu en icônes seules (replié sur grand écran, ou tablette) */

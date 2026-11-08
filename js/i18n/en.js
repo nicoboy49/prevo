@@ -4134,6 +4134,9 @@ I18n.ajouter('en', {
   'apropos.suggestion.lien_courriel': 'by e-mail',
   'apropos.suggestion.navigateur_inconnu': 'unknown browser',
   'apropos.suggestion.titre_formulaire': '[Improvement] ',
+  'apropos.traduction.automatique': 'Machine translation',
+  'apropos.traduction.corrections': 'corrections welcome',
+  'apropos.traduction.titre_formulaire': '[Translation] ',
 });
 // ==== fin apropos ====
 

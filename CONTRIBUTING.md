@@ -63,6 +63,9 @@ Prévo shows every text through its dictionaries; French is the reference.
 | Declared languages (code, name in its own language, locale, status) | `js/i18n/langues.js` |
 | Business terms (one French term = one translation everywhere) | [docs/GLOSSAIRE.md](docs/GLOSSAIRE.md) |
 
+**Report a wrong translation** without touching the code: the "Fix a translation" form on GitHub (Prévo links to
+it, with the language and its version, for every machine-translated language).
+
 **Fix a translation**: change the value in `js/i18n/<code>.js`, never the key. Keep the `{variables}` exactly as they
 are, and the plural forms the language needs (for example `{ one: '…', other: '…' }`). Then check:
 

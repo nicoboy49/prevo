@@ -1282,6 +1282,9 @@ const App = (() => {
     // T306 : « Suggérer une amélioration », sous la langue (l'adresse suit la langue active) ; cachée avec elle.
     const suggestion = UI.$('#menu-suggestion');
     if (suggestion) UI.remplir(suggestion, Apropos.lienSuggestion('menu-suggestion-lien'));
+    // T343 (CS161) : langue traduite automatiquement → « Traduction automatique — corrections bienvenues ».
+    const traduction = UI.$('#menu-traduction');
+    if (traduction) UI.remplir(traduction, Apropos.mentionTraduction('menu-traduction-lien'));
   }
 
   function appliquerRepli(replie) {
