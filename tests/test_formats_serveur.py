@@ -1,6 +1,7 @@
 """Tests du registre des formats côté serveur (serveur.py, section « Formats des données (miroir de js/formats.js,
 T184) ») : cle_de_colonne, colonnes_du_format, tables_du_format, format_du_fichier, version_de_base, ETAPES_FORMAT,
-migrer_tables (chantier « socle de données », T184 ; décisions D167, D168 ; ARCHITECTURE.md §5.6, §14.1, §20.2).
+migrer_tables (chantier « socle de données », T184 ; format 4 de la 2.2, T385 ; décisions D167, D168 ; ARCHITECTURE.md
+§5.6, §14.1, §20.2 ; CS169).
 
 Chaque jeu de tests/fixtures/formats (tests/jeux_formats.py) est copié dans un dossier temporaire (règle du chantier :
 jamais ailleurs). Côté serveur, une base est {table: {'entete', 'lignes': [{colonne: cellule}]}}, cellules lues par
@@ -9,9 +10,11 @@ lire_csv_tolerant (apostrophe de protection comprise) et réécrites par ecrire_
 1. TestRegistreServeur (Python seul, sans navigateur) : colonnes et tables de chaque format, cohérence des listes
    ajoutées avec COLONNES_PAR_TABLE et COLONNES_DES_FORMATS_SUIVANTS ; pour chaque jeu, format_du_fichier,
    version_de_base et migrer_tables : aucune cellule d'origine perdue ni modifiée (champ à champ), colonnes nouvelles
-   en fin avec leur défaut, tables créées (wiki compris), journal (f1 2 lignes, f2 1, f3 0), idempotence, pureté
-   (entrée inchangée), plus-recent (version 5) laissé intact par migrer_tables(base, 5, 3) ; cas fabriqués et
-   erreurs.
+   en fin avec leur défaut (après les colonnes inconnues, qui restent à leur place), tables créées (wiki et format 4
+   compris), journal (f1 3 lignes, f2 2, f3 1), idempotence, pureté (entrée inchangée), plus-recent (version 5)
+   laissé intact par migrer_tables(base, 5, 4) ; détail de l'étape 3→4 sur les bases 2.1.0 ; cas fabriqués et
+   erreurs. La reprise des observations en réserves (D183) n'est pas encore côté serveur (T390) : reserves_controle
+   est créée vide.
 2. TestConcordanceNavigateur (Chromium, page-vide.html en file://) : mêmes listes que Schema et Formats (colonnes,
    tables, défauts, étapes) ; mêmes résultats que Formats.formatDuFichier, Formats.versionDeBase, Formats.ETAPES et
    Donnees.csv.relireValeur / ecrireValeur sur des cas fabriqués ; pour chaque jeu, lecture + migration + écriture
@@ -21,12 +24,18 @@ lire_csv_tolerant (apostrophe de protection comprise) et réécrites par ecrire_
 Écarts PRÉEXISTANTS entre les deux lecteurs/écrivains CSV (pas entre Formats.migrer et migrer_tables, qui rendent les
 mêmes en-têtes), documentés par des tests expectedFailure, et cernés chacun par un test qui passe (l'écart est
 exactement celui décrit, rien d'autre) ; à trancher par l'orchestrateur :
-    A. colonnes-en-trop : Donnees.csv.serialiser réécrit les colonnes inconnues en fin de fichier, après toutes les
-       colonnes du schéma ; ecrire_tableau_csv garde l'en-tête tel quel (colonne_maison reste après designation).
-    B. colonnes-manquantes, melange : Donnees.csv.analyser complète chaque ligne avec tous les champs du schéma (défaut)
-       et serialiser écrit toujours toutes les colonnes du schéma ; le serveur lit et réécrit l'en-tête tel quel. Base
-       déjà au format 3 : ni Formats.migrer ni migrer_tables n'ajoutent rien (modele, valeur_remplacement ou astuce
-       manquent donc dans le fichier réécrit par le serveur, pas dans celui du navigateur).
+    A. colonnes-en-trop, reserves-a-reprendre : Donnees.csv.serialiser réécrit les colonnes inconnues en fin de
+       fichier, après toutes les colonnes du schéma ; ecrire_tableau_csv garde l'en-tête migré tel quel (colonne_maison
+       reste après designation ; remarque_maison reste avant les colonnes que l'étape 3→4 ajoute en fin de
+       controles_reglementaires). Seule la place de la colonne inconnue diffère.
+    B. colonnes-manquantes : Donnees.csv.analyser complète chaque ligne avec tous les champs du schéma (défaut) et
+       serialiser écrit toujours toutes les colonnes du schéma à leur place ; l'étape 3→4 ajoute aux deux en-têtes
+       migrés (identiques) les colonnes manquantes en fin (modele, valeur_remplacement, cout_arret_h), et le serveur
+       réécrit cet en-tête tel quel (modele en fin). Même écart pour plus-recent (base au format 5, rien n'est migré) :
+       ses fichiers, fabriqués avant le format 4, n'ont pas les colonnes du format 4 (equipements, ordres_travail,
+       habilitations, controles_reglementaires), que serialiser écrit (test_concordance_plus_recent). Le jeu melange
+       (ordres_travail sans astuce dans une base au format 3) n'est plus un écart depuis le format 4 : l'étape 3→4
+       ajoute astuce puis habilitation_requise en fin, à leur place du schéma.
     C. windows-1252 : Donnees.csv.analyser normalise les valeurs à la lecture (date_mes 12/03/2019 → 2019-03-12) ;
        lire_csv_tolerant garde les cellules brutes. Les deux lecteurs acceptent le fichier (Windows-1252).
 Pour vide et entete-tronque : même format détecté des deux côtés (0), aucune exception (octets non comparés).
@@ -45,7 +54,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from commun import RACINE, CasNavigateur, charger_scripts  # noqa: E402
+from commun import NB_TABLES, RACINE, CasNavigateur, charger_scripts  # noqa: E402
 from jeux_formats import JEUX, copier_jeu  # noqa: E402
 
 
@@ -59,21 +68,40 @@ def charger_serveur():
 serveur = charger_serveur()
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", "js/donnees.js"]
-FORMAT_COURANT = 3
+FORMAT_COURANT = 4
 CARACTERE_BOM = chr(0xFEFF)
 INSECABLE, INSECABLE_FINE, CADRATIN, IDEOGRAPHIQUE = chr(0xA0), chr(0x202F), chr(0x2003), chr(0x3000)
 ESPACE_NULLE, LIGNE_SUIVANTE, SEPARATEUR_DE_FICHIER = chr(0x200B), chr(0x85), chr(0x1C)
 
-# Ce que chaque format ajoute : recopie de ARCHITECTURE.md §14.1 (format 2) et §20.2 (format 3), indépendante de
-# serveur.py et de js/ (les tests les comparent).
+# Ce que chaque format ajoute : recopie de ARCHITECTURE.md §14.1 (format 2), §20.2 (format 3) et de la note de
+# conception du format 4 (2.2, §2.1 à §2.3), indépendante de serveur.py et de js/ (les tests les comparent).
 COLONNES_AJOUTEES = {
     2: {"equipements": ["valeur_remplacement"], "demandes": ["symptome_code", "ot_origine_id"],
         "ordres_travail": ["anomalie_constatee"]},
     3: {"ordres_travail": ["astuce"]},
+    4: {"equipements": ["cout_arret_h"], "ordres_travail": ["habilitation_requise"],
+        "habilitations": ["recyclage_mois", "justificatif", "catalogue_id", "nature_source"],
+        "controles_reglementaires": ["source_periodicite", "nature_source", "catalogue_id", "catalogue_relu_le"]},
 }
-TABLES_AJOUTEES = {2: [], 3: ["wiki_pages", "wiki_journal"]}
+TABLES_AJOUTEES = {2: [], 3: ["wiki_pages", "wiki_journal"], 4: ["reserves_controle", "garanties",
+                                                                 "contrats_prestataires"]}
 DEFAUTS_AJOUTES = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0",
-                   "astuce": ""}
+                   "astuce": "", "cout_arret_h": "", "habilitation_requise": "", "recyclage_mois": "",
+                   "justificatif": "", "catalogue_id": "", "nature_source": "", "source_periodicite": "saisie",
+                   "catalogue_relu_le": ""}
+# Défauts des champs des tables du format 4 (note de conception §2.3), sans apostrophe.
+DEFAUTS_DES_TABLES_AJOUTEES = {"reserves_controle": {"levee": "0"}, "garanties": {"actif": "1"},
+                               "contrats_prestataires": {"reconduction_tacite": "0", "actif": "1"}}
+# Description de l'étape 3→4, au mot près (note de conception du format 4, §2.4 ; la même dans js/formats.js).
+DESCRIPTION_FORMAT_4 = (
+    "Format 4 (version 2.2) : colonnes equipements.cout_arret_h, ordres_travail.habilitation_requise, "
+    "habilitations.recyclage_mois, habilitations.justificatif, habilitations.catalogue_id, habilitations.nature_source, "
+    "controles_reglementaires.source_periodicite (défaut saisie), controles_reglementaires.nature_source, "
+    "controles_reglementaires.catalogue_id et controles_reglementaires.catalogue_relu_le en fin de table ; tables "
+    "reserves_controle (observations reprises, une réserve par ligne, D183), garanties et contrats_prestataires "
+    "(vides).")
+# Format des fichiers de chaque jeu et format de la base (version_schema) ; les autres jeux : format 3 (2.0 et 2.1).
+FORMAT_DES_JEUX = 3
 FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2}
 VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "plus-recent": 5}
 FORMATS_PARTICULIERS = {
@@ -84,20 +112,26 @@ FORMATS_PARTICULIERS = {
     ("plus-recent", "pieces_v5"): None,          # table inconnue du schéma
 }
 LIGNES_DE_JOURNAL = {
-    1: ["passage au format 2 du fichier", "passage au format 3 du fichier"],
-    2: ["passage au format 3 du fichier"],
+    1: ["passage au format 2 du fichier", "passage au format 3 du fichier", "passage au format 4 du fichier"],
+    2: ["passage au format 3 du fichier", "passage au format 4 du fichier"],
+    3: ["passage au format 4 du fichier"],
 }
 # Concordance navigateur / serveur : jeux dont les octets doivent être identiques, table par table.
 JEUX_CONCORDANTS = ("f1", "f2-v1.1.0", "f3-v1.2.0", "f3-v2.0.0", "sans-bom", "table-absente", "plus-recent",
-                    "f3-v2.1.0", "reserves-a-reprendre")
+                    "f3-v2.1.0", "melange")
 # Écarts préexistants entre lecteurs/écrivains (docstring du module) : jeu → (table touchée, nature de l'écart).
 ECARTS_DOCUMENTES = {
     "colonnes-en-trop": ("equipements", "colonnes"),      # A : colonnes inconnues réécrites en fin par serialiser
+    "reserves-a-reprendre": ("controles_reglementaires", "colonnes"),     # A : remarque_maison
     "colonnes-manquantes": ("equipements", "colonnes"),   # B : colonnes du schéma toujours écrites par serialiser
-    "melange": ("ordres_travail", "colonnes"),            # B
     "windows-1252": ("equipements", "valeurs"),           # C : dates normalisées par analyser
 }
 JEUX_ABIMES = {"vide": "equipements", "entete-tronque": "ordres_travail"}
+
+
+def tables_ajoutees_apres(format):
+    """Tables que les formats suivants (jusqu'au format courant) ajoutent."""
+    return [table for f in range(format + 1, FORMAT_COURANT + 1) for table in TABLES_AJOUTEES[f]]
 
 
 def colonnes_attendues(table, format):
@@ -207,19 +241,24 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
 
     def test_colonnes_et_tables_de_chaque_format(self):
         self.assertEqual(serveur.VERSION_SCHEMA_CSV, FORMAT_COURANT)
-        tables_du_brief = [t for t in serveur.TABLES if t not in TABLES_AJOUTEES[3]]
+        tables_du_brief = [t for t in serveur.TABLES if t not in tables_ajoutees_apres(1)]
         self.assertEqual(len(tables_du_brief), 22)
+        self.assertEqual(len(serveur.TABLES), NB_TABLES)
+        self.assertEqual(len(serveur.TABLES), 22 + len(tables_ajoutees_apres(1)))          # 27 au format 4
         self.assertEqual(serveur.tables_du_format(1), tables_du_brief)
         self.assertEqual(serveur.tables_du_format(2), tables_du_brief)
-        self.assertEqual(serveur.tables_du_format(3), list(serveur.TABLES))
+        self.assertEqual(serveur.tables_du_format(3), tables_du_brief + TABLES_AJOUTEES[3])
+        self.assertEqual(serveur.tables_du_format(4), list(serveur.TABLES))
         self.assertEqual(serveur.tables_du_format(), list(serveur.TABLES))
         for table in serveur.TABLES:
             with self.subTest(table=table):
-                for format in (1, 2, 3):
+                for format in range(1, FORMAT_COURANT + 1):
                     self.assertEqual(serveur.colonnes_du_format(table, format), colonnes_attendues(table, format))
                 self.assertEqual(serveur.colonnes_du_format(table), list(serveur.COLONNES_PAR_TABLE[table]))
-        self.assertEqual(serveur.colonnes_du_format("pieces_v4", 3), [])
+        self.assertEqual(serveur.colonnes_du_format("pieces_v5", 3), [])
         self.assertEqual(serveur.colonnes_du_format("wiki_pages", 2), [])
+        self.assertEqual(serveur.colonnes_du_format("reserves_controle", 3), [])
+        self.assertEqual(serveur.colonnes_du_format("controles_reglementaires", 3)[-1], "observations_levees")
         self.assertEqual(serveur.colonnes_du_format(None), [])
         self.assertEqual(serveur.colonnes_du_format(["equipements"]), [])
 
@@ -233,14 +272,24 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
                 self.assertEqual(list(serveur.COLONNES_PAR_TABLE[table][-len(formats):]), list(formats))
                 self.assertEqual(list(formats.values()), sorted(formats.values()))
                 self.assertTrue(all(1 < f <= FORMAT_COURANT for f in formats.values()))
-        self.assertEqual(set(serveur.PREMIER_FORMAT_DES_TABLES), set(TABLES_AJOUTEES[3]))
-        self.assertEqual(list(serveur.TABLES[-2:]), TABLES_AJOUTEES[3])
+        # Même registre que la recopie de ce test : format de chaque colonne et de chaque table ajoutée
+        self.assertEqual(serveur.PREMIER_FORMAT_DES_COLONNES,
+                         {t: {c: f for f, tables in sorted(COLONNES_AJOUTEES.items()) for c in tables.get(t, [])}
+                          for t in sorted({t for tables in COLONNES_AJOUTEES.values() for t in tables})})
+        self.assertEqual(serveur.PREMIER_FORMAT_DES_TABLES,
+                         {t: f for f, tables in TABLES_AJOUTEES.items() for t in tables})
+        self.assertEqual(list(serveur.TABLES[-5:]), TABLES_AJOUTEES[3] + TABLES_AJOUTEES[4])  # après wiki_journal
         for table, defauts in serveur.DEFAUTS_DES_CHAMPS.items():
             with self.subTest(table=table):
                 self.assertTrue(set(defauts) <= set(serveur.COLONNES_PAR_TABLE[table]))
                 self.assertTrue(all(isinstance(v, str) for v in defauts.values()))
         self.assertEqual({c: serveur.DEFAUTS_DES_CHAMPS.get(t, {}).get(c, "")
                           for f in COLONNES_AJOUTEES.values() for t, cs in f.items() for c in cs}, DEFAUTS_AJOUTES)
+        for table, defauts in DEFAUTS_DES_TABLES_AJOUTEES.items():
+            self.assertEqual(serveur.DEFAUTS_DES_CHAMPS[table], defauts, table)
+        # Motif de la sauvegarde faite juste avant le passage au format courant (CONCEPTION-L1 §2.3)
+        self.assertEqual([m for m in serveur.MOTIFS_SAUVEGARDE if m.startswith("avant-format-v")],
+                         ["avant-format-v%d" % f for f in range(2, FORMAT_COURANT + 1)])
 
     def test_jeux_tous_classes_pour_la_concordance(self):
         self.assertEqual(set(JEUX), set(JEUX_CONCORDANTS) | set(ECARTS_DOCUMENTES) | set(JEUX_ABIMES))
@@ -267,9 +316,16 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
                         attendu = FORMATS_PARTICULIERS[(jeu, table)]
                         vus.add((jeu, table))
                     else:
-                        attendu = format_attendu(table, FORMAT_DES_FICHIERS.get(jeu, FORMAT_COURANT))
+                        attendu = format_attendu(table, FORMAT_DES_FICHIERS.get(jeu, FORMAT_DES_JEUX))
                     self.assertEqual(serveur.format_du_fichier(table, contenu["entete"]), attendu)
         self.assertEqual(vus, set(FORMATS_PARTICULIERS), "cas particuliers absents des jeux")
+        # Jeux de la 2.1.0 : les quatre tables que le format 4 complète sont au format 3 (colonne inconnue en fin de
+        # controles_reglementaires comprise) ; une table que le format 4 n'a pas changée est au format 4
+        for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
+            base = self.base(jeu)
+            for table in COLONNES_AJOUTEES[4]:
+                self.assertEqual(serveur.format_du_fichier(table, base[table]["entete"]), 3, (jeu, table))
+            self.assertEqual(serveur.format_du_fichier("fournisseurs", base["fournisseurs"]["entete"]), 4)
 
     def test_format_du_fichier_en_tetes_fabriques_sans_exception(self):
         ot = lambda format: serveur.colonnes_du_format("ordres_travail", format)  # noqa: E731
@@ -278,20 +334,33 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
             def __str__(self):
                 raise ValueError("illisible")
 
-        self.assertEqual([serveur.format_du_fichier("ordres_travail", ot(f)) for f in (1, 2, 3)], [1, 2, 3])
-        self.assertEqual(serveur.format_du_fichier("ordres_travail", list(reversed(ot(3)))), 3)
-        self.assertEqual(serveur.format_du_fichier("ordres_travail", tuple(ot(3))), 3)
+        self.assertEqual([serveur.format_du_fichier("ordres_travail", ot(f)) for f in (1, 2, 3, 4)], [1, 2, 3, 4])
+        self.assertEqual(serveur.format_du_fichier("ordres_travail", list(reversed(ot(4)))), 4)
+        self.assertEqual(serveur.format_du_fichier("ordres_travail", tuple(ot(4))), 4)
         self.assertEqual(serveur.format_du_fichier(
-            "ordres_travail", [CARACTERE_BOM + "id"] + ["  %s \t" % n for n in ot(3)[1:]]), 3)
+            "ordres_travail", [CARACTERE_BOM + "id"] + ["  %s \t" % n for n in ot(4)[1:]]), 4)
         self.assertEqual(serveur.format_du_fichier("ordres_travail", ["avant"] + ot(2) + ["apres", "astuce"]), 3)
-        self.assertEqual(serveur.format_du_fichier("ordres_travail", [n for n in ot(3) if n != "titre"]), 0)
-        self.assertEqual(serveur.format_du_fichier("parametres", ["Cle", "Valeur"]), 3)
         self.assertEqual(serveur.format_du_fichier(
-            "ordres_travail", ["Date Création" if n == "date_creation" else n for n in ot(3)]), 3)
-        self.assertEqual(serveur.format_du_fichier("wiki_pages", serveur.colonnes_du_format("wiki_pages", 3)), 3)
+            "ordres_travail", ["avant"] + ot(3) + ["apres", "habilitation_requise"]), 4)
+        self.assertEqual(serveur.format_du_fichier("ordres_travail", [n for n in ot(4) if n != "titre"]), 0)
+        self.assertEqual(serveur.format_du_fichier("parametres", ["Cle", "Valeur"]), FORMAT_COURANT)
+        self.assertEqual(serveur.format_du_fichier(
+            "ordres_travail", ["Date Création" if n == "date_creation" else n for n in ot(4)]), 4)
+        # wiki_pages n'a pas changé depuis le format 3 : son en-tête est aussi celui du format 4
+        self.assertEqual(serveur.format_du_fichier("wiki_pages", serveur.colonnes_du_format("wiki_pages", 3)),
+                         FORMAT_COURANT)
         self.assertEqual(serveur.format_du_fichier("wiki_pages", serveur.colonnes_du_format("wiki_pages", 3)[1:]), 0)
         self.assertEqual(serveur.format_du_fichier("wiki_journal", []), 0)
-        self.assertIsNone(serveur.format_du_fichier("pieces_v4", ["id"]))
+        controles = serveur.colonnes_du_format("controles_reglementaires", 4)
+        self.assertEqual(serveur.format_du_fichier(
+            "controles_reglementaires", [n for n in controles if n != "catalogue_relu_le"]), 3)
+        reserves = serveur.colonnes_du_format("reserves_controle")
+        self.assertEqual(serveur.format_du_fichier("reserves_controle", reserves), 4)
+        self.assertEqual(serveur.format_du_fichier("reserves_controle", reserves[:-1]), 0)
+        self.assertEqual(serveur.format_du_fichier("garanties", []), 0)
+        self.assertEqual(serveur.format_du_fichier(
+            "contrats_prestataires", serveur.colonnes_du_format("contrats_prestataires", 4)), 4)
+        self.assertIsNone(serveur.format_du_fichier("pieces_v5", ["id"]))
         self.assertIsNone(serveur.format_du_fichier(None, ["id"]))
         self.assertIsNone(serveur.format_du_fichier(["ordres_travail"], ["id"]))
         etranges = [None, "id;origine", 42, {}, [None, None, 3, {}], [Etrange()], ot(3) + [Etrange()]]
@@ -303,7 +372,7 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
         for jeu in JEUX:
             with self.subTest(jeu=jeu):
                 self.assertEqual(serveur.version_de_base(lignes_de_parametres(self.base(jeu))),
-                                 VERSION_DE_BASE.get(jeu, FORMAT_COURANT))
+                                 VERSION_DE_BASE.get(jeu, FORMAT_DES_JEUX))
 
     def test_version_de_base_regle(self):
         def version(valeur, cle="version_schema"):
@@ -357,6 +426,9 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
                 if de >= FORMAT_COURANT:
                     self.assertIs(apres, base)          # déjà au format courant (ou plus récent) : rien ne change
                     continue
+                # Colonnes d'origine à leur place (inconnues comprises), colonnes nouvelles en fin, après elles, avec
+                # leur défaut (comme tests/test_formats_js.py) ; une colonne du schéma absente d'un fichier abîmé ou
+                # en retard sur sa base (melange, colonnes-manquantes) est complétée de même
                 for table, contenu in apres.items():
                     with self.subTest(jeu=jeu, table=table):
                         self.assertEqual(serveur.format_du_fichier(table, contenu["entete"]), FORMAT_COURANT)
@@ -365,18 +437,22 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
                                                        "lignes": []})
                             continue
                         entete_avant = avant[table]["entete"]
-                        nouvelles = [c for f in range(de + 1, FORMAT_COURANT + 1)
-                                     for c in COLONNES_AJOUTEES[f].get(table, [])]
+                        nouvelles = [c for c in serveur.COLONNES_PAR_TABLE[table] if c not in entete_avant]
                         self.assertEqual(contenu["entete"], entete_avant + nouvelles)     # nouvelles en fin
+                        defauts = serveur.DEFAUTS_DES_CHAMPS.get(table, {})
                         for ligne in contenu["lignes"]:
-                            self.assertEqual({c: ligne[c] for c in nouvelles}, {c: DEFAUTS_AJOUTES[c] for c in nouvelles})
+                            self.assertEqual({c: ligne[c] for c in nouvelles}, {c: defauts.get(c, "") for c in nouvelles})
+                        ajoutees = [c for f in range(de + 1, FORMAT_COURANT + 1)
+                                    for c in COLONNES_AJOUTEES[f].get(table, [])]
+                        self.assertEqual(nouvelles[len(nouvelles) - len(ajoutees):], ajoutees)
                 self.assertEqual(sorted(apres), sorted(serveur.TABLES))
-                self.assertNotIn("wiki_pages", avant)
-                self.assertEqual(apres["wiki_pages"]["lignes"], [])
-                self.assertEqual(apres["wiki_journal"]["lignes"], [])
-                # version_schema écrite comme Prévo l'écrit, relue 3
+                # Les tables des formats suivants sont créées (vides) ; celles du jeu sont gardées
+                for table in tables_ajoutees_apres(de):
+                    self.assertNotIn(table, avant)
+                    self.assertEqual(apres[table]["lignes"], [], table)
+                # version_schema écrite comme Prévo l'écrit, relue 4
                 self.assertEqual([l["valeur"] for l in apres["parametres"]["lignes"] if l["cle"] == "version_schema"],
-                                 ["'3"])
+                                 ["'%d" % FORMAT_COURANT])
                 self.assertEqual(serveur.version_de_base(apres["parametres"]["lignes"]), FORMAT_COURANT)
                 # Rejouée d'après la version relue : rien ne change ; depuis le format d'origine : même base
                 rejouee = serveur.migrer_tables(apres, serveur.version_de_base(apres["parametres"]["lignes"]),
@@ -391,32 +467,77 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
         avant = self.base("f1")
         apres, journal, _ = serveur.migrer_tables(avant, 1, FORMAT_COURANT)
         self.assertEqual(sorted(avant), ["demandes", "equipements", "ordres_travail", "parametres"])
-        self.assertEqual(len(apres), 24)
-        self.assertEqual(journal, ["passage au format 2 du fichier", "passage au format 3 du fichier"])
-        self.assertEqual(apres["ordres_travail"]["entete"][-2:], ["anomalie_constatee", "astuce"])
+        self.assertEqual(len(apres), NB_TABLES)
+        self.assertEqual(journal, LIGNES_DE_JOURNAL[1])
+        self.assertEqual(apres["ordres_travail"]["entete"][-3:], ["anomalie_constatee", "astuce", "habilitation_requise"])
         self.assertEqual(apres["demandes"]["entete"][-2:], ["symptome_code", "ot_origine_id"])
-        self.assertEqual(apres["equipements"]["entete"][-1], "valeur_remplacement")
-        self.assertTrue(all(l["anomalie_constatee"] == "0" and l["astuce"] == "" for l in apres["ordres_travail"]["lignes"]))
+        self.assertEqual(apres["equipements"]["entete"][-2:], ["valeur_remplacement", "cout_arret_h"])
+        self.assertTrue(all(l["anomalie_constatee"] == "0" and l["astuce"] == "" and l["habilitation_requise"] == ""
+                            for l in apres["ordres_travail"]["lignes"]))
         self.assertEqual(len(apres["ordres_travail"]["lignes"]), 12)
-        # parametres.csv de f1 porte version_schema;'1 (dernière ligne) : la cellule devient '3, rien d'autre ne change
+        # parametres.csv de f1 porte version_schema;'1 (dernière ligne) : la cellule devient '4, rien d'autre ne change
         self.assertEqual(avant["parametres"]["lignes"][-1], {"cle": "version_schema", "valeur": "'1"})
         self.assertEqual(apres["parametres"]["lignes"][:-1], avant["parametres"]["lignes"][:-1])
-        self.assertEqual(apres["parametres"]["lignes"][-1], {"cle": "version_schema", "valeur": "'3"})
+        self.assertEqual(apres["parametres"]["lignes"][-1], {"cle": "version_schema", "valeur": "'4"})
         sans_version = {"parametres": {"entete": avant["parametres"]["entete"],
                                        "lignes": avant["parametres"]["lignes"][:-1]}}
         self.assertEqual(serveur.version_de_base(sans_version["parametres"]["lignes"]), 1)
         ajoutee = serveur.migrer_tables(sans_version, 1, FORMAT_COURANT)[0]["parametres"]["lignes"]
-        self.assertEqual(ajoutee, avant["parametres"]["lignes"][:-1] + [{"cle": "version_schema", "valeur": "'3"}])
+        self.assertEqual(ajoutee, avant["parametres"]["lignes"][:-1] + [{"cle": "version_schema", "valeur": "'4"}])
         avant2 = self.base("f2-v1.1.0")
         apres2, journal2, _ = serveur.migrer_tables(avant2, 2, FORMAT_COURANT)
-        self.assertEqual(journal2, ["passage au format 3 du fichier"])
+        self.assertEqual(journal2, LIGNES_DE_JOURNAL[2])
         self.assertEqual(len(avant2), 22)
-        self.assertEqual(sorted(set(apres2) - set(avant2)), ["wiki_journal", "wiki_pages"])
-        self.assertEqual(apres2["ordres_travail"]["entete"], avant2["ordres_travail"]["entete"] + ["astuce"])
+        self.assertEqual(sorted(set(apres2) - set(avant2)), sorted(tables_ajoutees_apres(2)))
+        self.assertEqual(apres2["ordres_travail"]["entete"],
+                         avant2["ordres_travail"]["entete"] + ["astuce", "habilitation_requise"])
         for table in avant2:
-            if table != "ordres_travail":
-                self.assertEqual(apres2[table]["entete"], avant2[table]["entete"], table)
+            self.assertEqual(apres2[table]["entete"],
+                             avant2[table]["entete"] + COLONNES_AJOUTEES[3].get(table, [])
+                             + COLONNES_AJOUTEES[4].get(table, []), table)
         self.assertEqual(len(apres2["parametres"]["lignes"]), len(avant2["parametres"]["lignes"]))
+
+    def test_migration_f3_au_format_4_detail(self):
+        """Bases 2.1.0 (f3-v2.1.0 et sa variante reserves-a-reprendre) : une étape, 3→4 ; seules equipements,
+        ordres_travail, habilitations et controles_reglementaires changent (colonnes en fin, source_periodicite =
+        saisie, les autres vides), parametres (version_schema « '4 ») ; les trois tables du format 4 sont créées vides
+        (reprise des réserves : T390) ; la colonne inconnue remarque_maison reste à sa place, AVANT les colonnes du
+        format 4 (règle de 2→3, la même que tests/test_formats_js.py)."""
+        for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
+            with self.subTest(jeu=jeu):
+                avant = self.base(jeu)
+                apres, journal, etapes = serveur.migrer_tables(avant, 3, FORMAT_COURANT)
+                self.assertEqual(journal, ["passage au format 4 du fichier"])
+                self.assertEqual(etapes, [{"de": 3, "vers": 4, "description": DESCRIPTION_FORMAT_4}])
+                self.assertEqual(sorted(set(apres) - set(avant)), sorted(TABLES_AJOUTEES[4]))
+                for table in TABLES_AJOUTEES[4]:
+                    self.assertEqual(apres[table], {"entete": list(serveur.COLONNES_PAR_TABLE[table]), "lignes": []})
+                for table in avant:
+                    if table == "parametres" or table in COLONNES_AJOUTEES[4]:
+                        continue
+                    self.assertEqual(apres[table], avant[table], "%s : réécrite sans colonne nouvelle" % table)
+                    self.assertEqual(octets_de_table(apres[table]), self.fichiers[jeu][table], table)
+                for table, ajoutees in COLONNES_AJOUTEES[4].items():
+                    self.assertEqual(apres[table]["entete"], avant[table]["entete"] + ajoutees, table)
+                    self.assertTrue(avant[table]["lignes"], "%s : aucune ligne dans le jeu" % table)
+                    self.assertEqual(len(apres[table]["lignes"]), len(avant[table]["lignes"]))
+                    for ligne_avant, ligne in zip(avant[table]["lignes"], apres[table]["lignes"]):
+                        self.assertEqual(ligne, dict(ligne_avant, **{c: DEFAUTS_AJOUTES[c] for c in ajoutees}))
+                self.assertEqual([l for l in apres["parametres"]["lignes"] if l["cle"] != "version_schema"],
+                                 [l for l in avant["parametres"]["lignes"] if l["cle"] != "version_schema"])
+                self.assertEqual([l["valeur"] for l in apres["parametres"]["lignes"] if l["cle"] == "version_schema"],
+                                 ["'4"])
+        avant = self.base("reserves-a-reprendre")
+        controles = serveur.migrer_tables(avant, 3, FORMAT_COURANT)[0]["controles_reglementaires"]
+        self.assertEqual(controles["entete"][-6:], ["observations_levees", "remarque_maison"]
+                         + COLONNES_AJOUTEES[4]["controles_reglementaires"])
+        self.assertEqual([l["remarque_maison"] for l in controles["lignes"]],
+                         [l["remarque_maison"] for l in avant["controles_reglementaires"]["lignes"]])
+        self.assertEqual({l["source_periodicite"] for l in controles["lignes"]}, {"saisie"})
+        # Observations et observations_levees inchangées (CS169) : cellules du fichier gardées telles quelles
+        self.assertEqual([(l["observations"], l["observations_levees"]) for l in controles["lignes"]],
+                         [(l["observations"], l["observations_levees"])
+                          for l in avant["controles_reglementaires"]["lignes"]])
 
     def test_plus_recent_laisse_intact(self):
         fichiers = self.fichiers["plus-recent"]
@@ -438,8 +559,9 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
     # -- ETAPES_FORMAT ------------------------------------------------------------------------------------------
 
     def test_etapes_chaine_sans_trou_et_descriptions(self):
-        self.assertEqual([(e.de, e.vers) for e in serveur.ETAPES_FORMAT], [(1, 2), (2, 3)])
+        self.assertEqual([(e.de, e.vers) for e in serveur.ETAPES_FORMAT], [(1, 2), (2, 3), (3, 4)])
         self.assertEqual(serveur.ETAPES_FORMAT[-1].vers, serveur.VERSION_SCHEMA_CSV)
+        self.assertEqual(serveur.ETAPES_FORMAT[2].description, DESCRIPTION_FORMAT_4)
         for etape in serveur.ETAPES_FORMAT:
             with self.subTest(etape=etape.vers):
                 for table, colonnes in COLONNES_AJOUTEES[etape.vers].items():
@@ -477,7 +599,7 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
             "ordres_travail": {"entete": [CARACTERE_BOM + "id", " titre "],
                                "lignes": [{CARACTERE_BOM + "id": "OT-1", " titre ": "T"}]},
             "demandes": {"entete": [" %s " % n for n in serveur.colonnes_du_format("demandes", 3)], "lignes": []},
-            "pieces_v4": {"entete": ["id", "stock"], "lignes": [{"id": "P-1", "stock": "3"}], "note": "table inconnue"},
+            "pieces_v5": {"entete": ["id", "stock"], "lignes": [{"id": "P-1", "stock": "3"}], "note": "table inconnue"},
         }
         avant = copy.deepcopy(base)
         deux = serveur.ETAPES_FORMAT[0].appliquer(base)
@@ -500,7 +622,7 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
         self.assertEqual(len(ordres["entete"]), len(serveur.colonnes_du_format("ordres_travail", 2)))
         self.assertEqual(ordres["lignes"][0]["statut"], "Créé")
         self.assertEqual(deux["demandes"]["entete"], [" %s " % n for n in serveur.colonnes_du_format("demandes", 3)])
-        self.assertEqual(deux["pieces_v4"], avant["pieces_v4"])
+        self.assertEqual(deux["pieces_v5"], avant["pieces_v5"])
         self.assertEqual(deux["parametres"], {"entete": ["cle", "valeur"],
                                               "lignes": [{"cle": "version_schema", "valeur": "'2"}]})
         self.assertNotIn("wiki_pages", deux)
@@ -526,6 +648,50 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
         self.assertEqual(serveur.ETAPES_FORMAT[0].appliquer({"equipements": None, "parametres": {"lignes": [None]}})[
             "parametres"]["lignes"], [{"cle": "", "valeur": ""}, {"cle": "version_schema", "valeur": "'2"}])
 
+    def test_etape_3_4_cas_fabriques(self):
+        """Étape 3→4 générique (miroir de tests/test_formats_js.py) : colonnes du format 4 en fin d'en-tête, après les
+        colonnes inconnues (à leur place), défaut saisie ; valeur déjà là jamais écrasée ; table du format 4 déjà là
+        gardée telle quelle (lignes comprises) ; tables absentes créées vides ; colonnes avec BOM ou espaces
+        reconnues ; pure et idempotente."""
+        colonnes3 = serveur.colonnes_du_format("controles_reglementaires", 3)
+        base = {
+            "controles_reglementaires": {"entete": colonnes3 + ["remarque_maison"], "lignes": [
+                dict({c: "" for c in colonnes3}, id="CTR-0001", remarque_maison="r"),
+                dict({c: "" for c in colonnes3}, id="CTR-0002", remarque_maison="", source_periodicite="catalogue"),
+            ]},
+            "habilitations": {"entete": ["id", "note", "intitule", " Recyclage Mois "], "lignes": [
+                {"id": "HAB-0001", "note": "n", "intitule": "B1V", " Recyclage Mois ": "36"}]},
+            "reserves_controle": {"entete": ["id", "controle_id", "texte"], "lignes": [
+                {"id": "RES-00007", "controle_id": "CTR-0001", "texte": "garde-corps"}]},
+            "parametres": {"entete": ["cle", "valeur"], "lignes": [{"cle": "version_schema", "valeur": "'3"}]},
+        }
+        avant = copy.deepcopy(base)
+        quatre = serveur.ETAPES_FORMAT[2].appliquer(base)
+        self.assertEqual(base, avant)
+        self.assertEqual(serveur.ETAPES_FORMAT[2].appliquer(quatre), quatre)
+        controles = quatre["controles_reglementaires"]
+        self.assertEqual(controles["entete"][-5:], ["remarque_maison"] + COLONNES_AJOUTEES[4]["controles_reglementaires"])
+        self.assertEqual([(l["remarque_maison"], l["source_periodicite"], l["nature_source"], l["catalogue_relu_le"])
+                          for l in controles["lignes"]], [("r", "saisie", "", ""), ("", "catalogue", "", "")])
+        # Colonne déjà là (nom avec espaces et majuscules) : reconnue, pas de doublon ; les autres en fin
+        habilitations = quatre["habilitations"]
+        self.assertEqual(habilitations["entete"], ["id", "note", "intitule", " Recyclage Mois ", "technicien_id",
+                                                   "date_obtention", "date_echeance", "justificatif", "catalogue_id",
+                                                   "nature_source"])
+        self.assertEqual(habilitations["lignes"][0][" Recyclage Mois "], "36")
+        self.assertNotIn("recyclage_mois", habilitations["lignes"][0])
+        # Table du format 4 déjà là : lignes gardées, colonnes manquantes en fin (levee : défaut 0)
+        reserves = quatre["reserves_controle"]
+        self.assertEqual(reserves["entete"][:3], ["id", "controle_id", "texte"])
+        self.assertEqual(sorted(reserves["entete"]), sorted(serveur.COLONNES_PAR_TABLE["reserves_controle"]))
+        self.assertEqual(reserves["lignes"][0]["texte"], "garde-corps")
+        self.assertEqual(reserves["lignes"][0]["levee"], "0")
+        self.assertEqual(len(reserves["lignes"]), 1)
+        self.assertEqual(quatre["garanties"], {"entete": list(serveur.COLONNES_PAR_TABLE["garanties"]), "lignes": []})
+        self.assertEqual(quatre["contrats_prestataires"]["lignes"], [])
+        self.assertEqual(quatre["parametres"]["lignes"], [{"cle": "version_schema", "valeur": "'4"}])
+        self.assertEqual(len(serveur.ETAPES_FORMAT[2].appliquer(None)), NB_TABLES)
+
     def test_migrer_etapes_choisies_et_erreurs(self):
         base = {"ordres_travail": {"entete": serveur.colonnes_du_format("ordres_travail", 1), "lignes": []}}
         vers_deux, journal, etapes = serveur.migrer_tables(base, 1, 2)
@@ -534,13 +700,19 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
         self.assertEqual(len(vers_deux), 22)
         self.assertEqual(vers_deux["parametres"]["lignes"], [{"cle": "version_schema", "valeur": "'2"}])
         self.assertEqual(etapes, [{"de": 1, "vers": 2, "description": serveur.ETAPES_FORMAT[0].description}])
-        self.assertEqual(serveur.migrer_tables(base, 0, 3)[1], LIGNES_DE_JOURNAL[1])
+        self.assertEqual(serveur.migrer_tables(base, 0, FORMAT_COURANT)[1], LIGNES_DE_JOURNAL[1])
+        self.assertEqual(serveur.migrer_tables(base, 2.5, FORMAT_COURANT)[1], LIGNES_DE_JOURNAL[2])
+        self.assertEqual(serveur.migrer_tables(base, 3.5, FORMAT_COURANT)[1], LIGNES_DE_JOURNAL[3])
+        self.assertEqual(serveur.migrer_tables(base, 1, 4.0)[1], LIGNES_DE_JOURNAL[1])
+        self.assertEqual(serveur.migrer_tables(base, float("-inf"), FORMAT_COURANT)[1], LIGNES_DE_JOURNAL[1])
+        vers_trois = serveur.migrer_tables(base, 1, 3)
+        self.assertEqual(vers_trois[1], LIGNES_DE_JOURNAL[1][:2])
+        self.assertEqual(len(vers_trois[0]), 24)
+        self.assertEqual(vers_trois[0]["ordres_travail"]["entete"][-1], "astuce")
         self.assertEqual(serveur.migrer_tables(base, 2.5, 3)[1], ["passage au format 3 du fichier"])
-        self.assertEqual(serveur.migrer_tables(base, 1, 3.0)[1], LIGNES_DE_JOURNAL[1])
-        self.assertEqual(serveur.migrer_tables(base, float("-inf"), 3)[1], LIGNES_DE_JOURNAL[1])
         self.assertIs(serveur.migrer_tables(base, 2, 2)[0], base)
-        self.assertIs(serveur.migrer_tables(base, float("inf"), 3)[0], base)
-        for vers in (4, 0, 2.5, "3", True, None, float("nan")):
+        self.assertIs(serveur.migrer_tables(base, float("inf"), FORMAT_COURANT)[0], base)
+        for vers in (FORMAT_COURANT + 1, 0, 2.5, "3", True, None, float("nan")):
             with self.subTest(vers=vers), self.assertRaisesRegex(ValueError, "format cible inconnu"):
                 serveur.migrer_tables(base, 1, vers)
         for de in (float("nan"), "1", None, True):
@@ -703,13 +875,17 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
                      "titre" + INSECABLE, INSECABLE_FINE + "titre", CADRATIN + "titre", "titre" + IDEOGRAPHIQUE,
                      "ti" + ESPACE_NULLE + "tre", "titre" + LIGNE_SUIVANTE, "titre" + SEPARATEUR_DE_FICHIER,
                      "titre\t", "titre\n", "_titre_", "titres", "", CARACTERE_BOM]
-        entetes = [[v if n == "titre" else n for n in serveur.colonnes_du_format("ordres_travail", 3)] for v in variantes]
-        entetes += [serveur.colonnes_du_format("ordres_travail", f) for f in (1, 2)] + [[], ["id"]]
+        entetes = [[v if n == "titre" else n for n in serveur.colonnes_du_format("ordres_travail")] for v in variantes]
+        entetes += [serveur.colonnes_du_format("ordres_travail", f) for f in (1, 2, 3)] + [[], ["id"]]
         js = self.evaluer("(entetes) => entetes.map((e) => Formats.formatDuFichier('ordres_travail', e))", entetes)
         self.assertEqual(js, [serveur.format_du_fichier("ordres_travail", e) for e in entetes])
         self.assertIn(0, js)
         self.assertIn(3, js)
-        autres = {"pieces_v4": ["id"], "parametres": ["Clé", " VALEUR "], "wiki_pages": []}
+        self.assertIn(FORMAT_COURANT, js)
+        autres = {"pieces_v5": ["id"], "parametres": ["Clé", " VALEUR "], "wiki_pages": [],
+                  "reserves_controle": serveur.colonnes_du_format("reserves_controle")[::-1], "garanties": ["id"],
+                  "contrats_prestataires": serveur.colonnes_du_format("contrats_prestataires"),
+                  "controles_reglementaires": serveur.colonnes_du_format("controles_reglementaires", 3) + ["note"]}
         js = self.evaluer("(cas) => Object.fromEntries(Object.entries(cas).map(([t, e]) => [t, Formats.formatDuFichier(t, e)]))",
                           autres)
         self.assertEqual(js, {t: serveur.format_du_fichier(t, e) for t, e in autres.items()})
@@ -746,10 +922,18 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
              "ordres_travail": {"entete": [CARACTERE_BOM + "id", " titre "],
                                 "lignes": [{CARACTERE_BOM + "id": "OT-1", " titre ": "T"}]},
              "wiki_pages": {"entete": ["id", "type"], "lignes": [{"id": "WP-1", "type": "composant"}]},
-             "pieces_v4": {"entete": ["id"], "lignes": [{"id": "P-1"}]}},
+             "pieces_v5": {"entete": ["id"], "lignes": [{"id": "P-1"}]}},
             {"parametres": {"entete": ["cle", "valeur", "note"], "lignes": [
                 {"cle": "entreprise_nom", "valeur": "A", "note": "n"}, {"cle": "version_schema", "valeur": "1"}]}},
             {},
+            # Format 4 : colonne inconnue avant les colonnes ajoutées, valeur déjà là, table du format 4 déjà là
+            # (contrôles sans observations : la reprise des réserves, D183, n'y change rien)
+            {"controles_reglementaires": {"entete": ["id", "remarque_maison", "observations", " Nature Source "],
+                                          "lignes": [{"id": "CTR-1", "remarque_maison": "r", "observations": "",
+                                                      " Nature Source ": "norme"}]},
+             "habilitations": {"entete": ["id", "intitule"], "lignes": [{"id": "HAB-1", "intitule": "B1V"}]},
+             "reserves_controle": {"entete": ["id", "texte"], "lignes": [{"id": "RES-00003", "texte": "t"}]},
+             "garanties": {"entete": ["id", "note"], "lignes": [{"id": "GAR-0001", "note": "n"}]}},
         ]
         js = self.evaluer("""(bases) => bases.map((tables) => Formats.ETAPES.map((etape) =>
           etape.appliquer({ tables: tables }).tables))""", bases)
@@ -780,25 +964,64 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
         self.verifier_concordance("sans-bom")
 
     def test_concordance_table_absente(self):
-        navigateur, _ = self.verifier_concordance("table-absente")
-        self.assertNotIn("articles", navigateur["octets"])
-        self.assertNotIn("wiki_pages", navigateur["octets"])
+        # Base au format 3 sans articles.csv ni wiki_pages.csv : l'étape 3→4 (fonction pure) crée, des deux côtés,
+        # chaque table du format absente, vide (en-tête seul) ; le passage au démarrage, lui, ne crée pas de fichier
+        # (tests/test_formats_navigateur.py, serveur.passer_les_fichiers_au_format_courant).
+        navigateur, cote_serveur = self.verifier_concordance("table-absente")
+        self.assertNotIn("articles", self.fichiers["table-absente"])
+        for table in ("articles", "wiki_pages"):
+            self.assertEqual(navigateur["octets"][table],
+                             serveur.ecrire_tableau_csv(list(serveur.COLONNES_PAR_TABLE[table]), []), table)
 
     def test_concordance_plus_recent(self):
-        # Tables connues : mêmes octets ; la table inconnue pieces_v5 n'est écrite que par le serveur, telle quelle.
-        _, cote_serveur = self.verifier_concordance("plus-recent")
+        # Base au format 5 : rien n'est migré. Tables connues : mêmes octets, sauf les tables que le format 4 complète
+        # (le jeu, fabriqué en T378 avant le format 4, n'a pas leurs colonnes) : écart B, le navigateur écrit les
+        # colonnes du schéma (défaut compris), le serveur le fichier tel quel ; la table inconnue pieces_v5 n'est
+        # écrite que par le serveur, telle quelle.
+        en_retard = tuple(COLONNES_AJOUTEES[4])
+        navigateur, cote_serveur = self.verifier_concordance("plus-recent", tables_ecartees=en_retard)
+        for table in en_retard:
+            with self.subTest(table=table):
+                contenu = table_de_base(self.fichiers["plus-recent"][table])
+                self.assertNotIn(COLONNES_AJOUTEES[4][table][0], contenu["entete"])
+                self.assertEqual(cote_serveur["octets"][table], self.fichiers["plus-recent"][table])
+                self.assertEqual(navigateur["octets"][table], au_modele_de_donnees(table, contenu))
         self.assertEqual(cote_serveur["octets"]["pieces_v5"], self.fichiers["plus-recent"]["pieces_v5"])
 
     def test_concordance_f3_v2_1_0(self):
         self.verifier_concordance("f3-v2.1.0")
 
+    def test_concordance_melange(self):
+        # Ancien écart B : depuis le format 4, l'étape 3→4 complète ordres_travail (astuce puis habilitation_requise,
+        # en fin, à leur place du schéma) des deux côtés : mêmes octets.
+        navigateur, _ = self.verifier_concordance("melange")
+        self.assertEqual(navigateur["entetes"]["ordres_travail"][-2:], ["astuce", "habilitation_requise"])
+
+    def test_reserves_a_reprendre_seule_la_place_de_la_colonne_inconnue_differe(self):
+        # Jeu canonique (T378) : toutes les tables ont les mêmes octets des deux côtés, sauf controles_reglementaires
+        # (écart A) ; même en-tête migré (remarque_maison avant les colonnes du format 4) ; le navigateur écrit
+        # remarque_maison en fin de fichier, le serveur à sa place ; les cellules (CRLF, LF et CR dans une cellule,
+        # « ; », guillemets, apostrophe de protection) sont les mêmes.
+        navigateur, cote_serveur = self.verifier_concordance("reserves-a-reprendre",
+                                                             tables_ecartees=("controles_reglementaires",))
+        ajoutees = COLONNES_AJOUTEES[4]["controles_reglementaires"]
+        self.assertEqual(navigateur["entetes"]["controles_reglementaires"][-5:], ["remarque_maison"] + ajoutees)
+        premiere_ligne = {cote: chemin["octets"]["controles_reglementaires"].split(b"\r\n", 1)[0].decode("utf-8-sig")
+                          for cote, chemin in (("navigateur", navigateur), ("serveur", cote_serveur))}
+        self.assertEqual(premiere_ligne["navigateur"].split(";")[-5:], ajoutees + ["remarque_maison"])
+        self.assertEqual(premiere_ligne["serveur"].split(";")[-5:], ["remarque_maison"] + ajoutees)
+        entete_n, lignes_n = serveur.lire_csv_tolerant(navigateur["octets"]["controles_reglementaires"])
+        entete_s, lignes_s = serveur.lire_csv_tolerant(cote_serveur["octets"]["controles_reglementaires"])
+        self.assertEqual(sorted(entete_n), sorted(entete_s))
+        self.assertEqual([dict(zip(entete_n, ligne)) for ligne in lignes_n],
+                         [dict(zip(entete_s, ligne)) for ligne in lignes_s])
+
+    @unittest.expectedFailure
     def test_concordance_reserves_a_reprendre(self):
-        # Jeu canonique (T378) : controles_reglementaires a les mêmes octets des deux côtés (CRLF, LF et CR dans une
-        # cellule, « ; », guillemets, apostrophe de protection) ; sa colonne inconnue est gardée.
-        navigateur, cote_serveur = self.verifier_concordance("reserves-a-reprendre")
-        for chemin in (navigateur, cote_serveur):
-            self.assertIn("remarque_maison", chemin["entetes"]["controles_reglementaires"])
-            self.assertIn(b"remarque_maison", chemin["octets"]["controles_reglementaires"].split(b"\r\n", 1)[0])
+        """Écart A (préexistant, CONCEPTION-L1 §3.6) : Donnees.csv.serialiser écrit remarque_maison en fin de fichier,
+        après les colonnes du format 4 ; ecrire_tableau_csv la garde à sa place, avant elles (en-tête migré, le même
+        des deux côtés). Voir test_reserves_a_reprendre_seule_la_place_de_la_colonne_inconnue_differe."""
+        self.verifier_concordance("reserves-a-reprendre")
 
     @unittest.expectedFailure
     def test_concordance_colonnes_en_trop(self):
@@ -809,16 +1032,10 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
 
     @unittest.expectedFailure
     def test_concordance_colonnes_manquantes(self):
-        """Écart B (préexistant) : Donnees.csv.analyser complète modele et valeur_remplacement (défaut '') et
-        serialiser écrit toutes les colonnes du schéma ; le serveur réécrit l'en-tête tel quel (base au format 3 :
-        aucune étape ne s'applique, des deux côtés)."""
+        """Écart B (préexistant) : l'étape 3→4 ajoute modele, valeur_remplacement et cout_arret_h en fin des deux
+        en-têtes migrés ; serialiser écrit toutes les colonnes du schéma à leur place (modele en 7e), le serveur
+        réécrit l'en-tête migré tel quel (modele en fin)."""
         self.verifier_concordance("colonnes-manquantes")
-
-    @unittest.expectedFailure
-    def test_concordance_melange(self):
-        """Écart B (préexistant) : ordres_travail sans astuce dans une base au format 3 ; le navigateur écrit astuce
-        (analyser + serialiser), le serveur non (aucune étape ne s'applique)."""
-        self.verifier_concordance("melange")
 
     @unittest.expectedFailure
     def test_concordance_windows_1252(self):
@@ -861,7 +1078,8 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
                 self.assertEqual(navigateur["formats"][table], 0)
                 self.assertEqual(navigateur["de"], cote_serveur["de"])
                 self.assertEqual(navigateur["journal"], cote_serveur["journal"])
-                self.assertEqual(cote_serveur["journal"], [])
+                # Base au format 3 : l'étape 3→4 s'applique, des deux côtés
+                self.assertEqual(cote_serveur["journal"], LIGNES_DE_JOURNAL[FORMAT_DES_JEUX])
 
 
 if __name__ == "__main__":

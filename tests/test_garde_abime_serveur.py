@@ -184,6 +184,14 @@ class CasCopies(unittest.TestCase):
     def octets_du_jeu(self, nom, fichier):
         return (self.jeu(nom) / fichier).read_bytes()
 
+    def ordres_sains(self):
+        """ordres_travail.csv de f3-v1.2.0 passé au format courant par migrer_tables (colonnes ajoutées en fin, avec
+        leur défaut) : un fichier sain dont l'en-tête commence par les colonnes du schéma (T385 : format 4)."""
+        entete, lignes = SERVEUR.lire_csv_tolerant(self.octets_du_jeu("f3-v1.2.0", "ordres_travail.csv"))
+        base = {"ordres_travail": {"entete": entete, "lignes": [dict(zip(entete, ligne)) for ligne in lignes]}}
+        table = SERVEUR.migrer_tables(base, 3, SERVEUR.VERSION_SCHEMA_CSV)[0]["ordres_travail"]
+        return SERVEUR.ecrire_tableau_csv(table["entete"], [[l[n] for n in table["entete"]] for l in table["lignes"]])
+
     def config(self, dossier):
         config = SERVEUR.Configuration(str(dossier), [])
         SERVEUR.creer_dossiers(config)
@@ -335,7 +343,7 @@ class TestEcrituresInternes(CasCopies):
 
     def test_enregistrer_csv_refuse_apres_la_sauvegarde_du_jour(self):
         dossier = self.jeu("entete-tronque")
-        sain = self.octets_du_jeu("f3-v1.2.0", "ordres_travail.csv")
+        sain = self.ordres_sains()
         config = self.config(dossier)
         avant = fichiers_de(dossier)
         with SERVEUR.VERROU_ECRITURE, self.assertRaises(SERVEUR.ErreurHttp) as refus:
@@ -387,12 +395,13 @@ class TestEcrituresInternes(CasCopies):
         avant = fichiers_de(dossier)
         with mock.patch.object(SERVEUR, "raisons_fichier_abime", return_value=["raison de test"]):
             etat, messages = self.migrer(dossier)
+        # Première table que le passage réécrit (ordre de TABLES) : equipements depuis le format 4 (cout_arret_h)
         self.assertEqual((etat["migration"], etat["table_bloquee"], etat["base"]),
-                         ("incomplete", "ordres_travail", 2))
-        self.assertTrue(any("ordres_travail.csv ne peut pas être écrit" in m and "abîmé" in m for m in messages),
+                         ("incomplete", "equipements", 2))
+        self.assertTrue(any("equipements.csv ne peut pas être écrit" in m and "abîmé" in m for m in messages),
                         messages)
         apres = fichiers_de(dossier)
-        for chemin in ("ordres_travail.csv", "parametres.csv"):
+        for chemin in ("equipements.csv", "ordres_travail.csv", "parametres.csv"):
             self.assertEqual(apres[chemin], avant[chemin], chemin)
 
     def test_passage_au_format_laisse_un_journal_a_guillemet_ouvert(self):
@@ -400,7 +409,7 @@ class TestEcrituresInternes(CasCopies):
         coupe = (dossier / "journal.csv").read_bytes() + 'J-9;2026-04-01 10:00;"Poste coupé'.encode()
         (dossier / "journal.csv").write_bytes(coupe)
         etat, messages = self.migrer(dossier)
-        self.assertEqual((etat["migration"], etat["base"]), ("faite", 3))
+        self.assertEqual((etat["migration"], etat["base"]), ("faite", SERVEUR.VERSION_SCHEMA_CSV))
         self.assertEqual((dossier / "journal.csv").read_bytes(), coupe)
         self.assertTrue(any("lignes du journal du passage non écrites" in m for m in messages), messages)
 
@@ -439,7 +448,7 @@ class TestRoutes(CasCopies):
     def test_put_sur_entete_tronque_refuse_sauf_derogation_puis_fichier_sain(self):
         source = self.jeu("entete-tronque")
         abime = (source / "ordres_travail.csv").read_bytes()
-        sain = self.octets_du_jeu("f3-v1.2.0", "ordres_travail.csv")
+        sain = self.ordres_sains()
         with ServeurPrevo(source=source) as serveur:
             chemin = serveur.dossier / "ordres_travail.csv"
             self.assertEqual(chemin.read_bytes(), abime)              # le démarrage ne l'a pas touché
@@ -507,7 +516,7 @@ class TestRoutes(CasCopies):
         technicien qui l'envoie reçoit 403 et rien n'est écrit ; le responsable remplace le fichier abîmé."""
         source = self.jeu("entete-tronque")
         abime = (source / "ordres_travail.csv").read_bytes()
-        entete, lignes = lire_tableau(self.octets_du_jeu("f3-v1.2.0", "ordres_travail.csv"))
+        entete, lignes = lire_tableau(self.ordres_sains())
         corps = ecrire_tableau(entete, lignes)
         with ServeurPrevo(source=source, comptes=True) as serveur:
             chemin = serveur.dossier / "ordres_travail.csv"

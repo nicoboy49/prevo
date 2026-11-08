@@ -26,7 +26,7 @@ BOM = b"\xef\xbb\xbf"
 # les CSV de ces tests portent le vrai en-tête ; les lignes de données peuvent être plus courtes.
 ENTETE_EQUIPEMENTS = (
     "id;repere;designation;localisation_id;parent_id;marque;modele;num_serie;date_mes;criticite;statut;"
-    "heures_fonct_jour;habilitation_requise;consignation;document;actif;valeur_remplacement")
+    "heures_fonct_jour;habilitation_requise;consignation;document;actif;valeur_remplacement;cout_arret_h")
 ENTETE_JOURNAL = "id;date_heure;poste;profil;table;id_ligne;action"
 CSV_EQUIPEMENTS = BOM + (
     ENTETE_EQUIPEMENTS + "\r\n"

@@ -553,7 +553,8 @@ class TestManifesteEtDocuments(CasDossier):
 
 class TestMotifs(unittest.TestCase):
 
-    MOTIFS = ("avant-format-v2", "avant-format-v3", "avant-import", "avant-import-zip", "avant-mise-a-jour")
+    MOTIFS = ("avant-format-v2", "avant-format-v3", "avant-format-v4", "avant-import", "avant-import-zip",
+              "avant-mise-a-jour")
 
     def test_liste_fermee_et_noms(self):
         self.assertEqual(SERVEUR.MOTIFS_SAUVEGARDE, self.MOTIFS)

@@ -251,13 +251,6 @@ périodicités réglementaires seront sourcées et modifiables.
   sujet ntfy) seront des clés de `parametres` (des lignes, pas des colonnes).
 
 <!-- plan:debut -->
-- `reserves_controle` (2.2) : une ligne par réserve d'un rapport de contrôle (contrôle, texte, échéance de levée, date de levée, OT lié), pour suivre les réserves une à une.
-- `controles_reglementaires.source_periodicite` (2.2) : d'où vient la périodicité proposée (texte de référence ou saisie).
-- `habilitations.recyclage_mois` (2.2) : durée de validité avant recyclage, pour calculer l'échéance.
-- `habilitations.justificatif` (2.2) : document (attestation, CACES) rattaché à l'habilitation.
-- `garanties` (2.2) : garantie d'un équipement (équipement, fournisseur, début, fin, conditions).
-- `contrats_prestataires` (2.2) : contrat de maintenance ou de contrôle (prestataire, périmètre, début, fin, préavis).
-- `equipements.cout_arret_h` (2.2) : coût d'une heure d'arrêt de la machine, pour le coût de l'arrêt du rapport mensuel.
 - `equipements.plaque_photo` (2.3) : photo de la plaque signalétique, d'où l'IA propose la fiche.
 - `equipements.annee_fabrication` (2.3) : année de fabrication lue sur la plaque.
 - `consignations` (2.3) : fiche de consignation structurée par machine (énergie, point d'isolement, dispositif, vérification, validation), affichée par QR code ; aide, ne remplace pas la procédure.

@@ -353,9 +353,11 @@ class TestApiServeur(CasAvecServeur):
             self.assertFalse(adresse.startswith('http://127.'))
 
     def test_versions_24_tables(self):
-        # 22 tables du brief, puis wiki_pages et wiki_journal (format 3, lot 6, ARCHITECTURE.md §20.2).
+        # 22 tables du brief, puis wiki_pages et wiki_journal (format 3, lot 6, ARCHITECTURE.md §20.2), puis les tables
+        # du format 4 (2.2, T385).
         self.assertEqual(len(TABLES), NB_TABLES)
-        self.assertEqual(list(TABLES[-2:]), ['wiki_pages', 'wiki_journal'])
+        self.assertEqual(list(TABLES[22:24]), ['wiki_pages', 'wiki_journal'])
+        self.assertEqual(list(TABLES[24:]), ['reserves_controle', 'garanties', 'contrats_prestataires'])
         self.mettre_csv('localisations', BOM + b'id;libelle;parent_id;type\r\n')
         tables = self.requete('GET', '/api/versions').json()['tables']
         self.assertEqual(set(tables), set(TABLES))

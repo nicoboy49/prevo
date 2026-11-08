@@ -1,4 +1,5 @@
 """docs/FORMAT.md : le plan des versions à venir ne contient rien d'existant, et la doc cite ce qu'elle doit citer.
+Les noms de la 2.2 (format 4, T385) ont quitté le plan et existent dans js/schema.js et serveur.py.
 
 Sans navigateur : js/schema.js et serveur.py sont lus comme du texte."""
 import os
@@ -7,6 +8,16 @@ import unittest
 
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOC = os.path.join(RACINE, 'docs', 'FORMAT.md')
+# Les 7 lignes de la 2.2 retirées du bloc du plan une fois le format 4 livré (T385) : (table, colonne ou None).
+NOMS_LIVRES_EN_2_2 = (
+    ('reserves_controle', None),
+    ('controles_reglementaires', 'source_periodicite'),
+    ('habilitations', 'recyclage_mois'),
+    ('habilitations', 'justificatif'),
+    ('garanties', None),
+    ('contrats_prestataires', None),
+    ('equipements', 'cout_arret_h'),
+)
 
 
 def lire(*chemin):
@@ -76,7 +87,18 @@ class TestFormatDoc(unittest.TestCase):
 
     def test_le_bloc_plan_n_est_pas_vide(self):
         self.assertTrue(bloc_plan(self.doc).strip())
-        self.assertGreaterEqual(len(self.plan), 5)
+        self.assertGreaterEqual(len(self.plan), 1)
+
+    def test_les_noms_de_la_2_2_existent_des_deux_cotes_et_ont_quitte_le_plan(self):
+        for table, colonne in NOMS_LIVRES_EN_2_2:
+            with self.subTest(table=table, colonne=colonne):
+                self.assertNotIn((table, colonne), self.plan, 'nom de la 2.2 encore dans le bloc du plan')
+                for nom, existant in (('js/schema.js', self.schema), ('serveur.py', self.serveur)):
+                    self.assertIn(table, existant, 'table « %s » absente de %s' % (table, nom))
+                    if colonne is not None:
+                        self.assertIn(colonne, existant[table],
+                                      'colonne « %s.%s » absente de %s' % (table, colonne, nom))
+        self.assertFalse(re.search(r'\(2\.2\)', bloc_plan(self.doc)), 'ligne (2.2) restée dans le bloc du plan')
 
     def test_rien_du_plan_n_existe_deja(self):
         for table, colonne in self.plan:

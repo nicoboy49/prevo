@@ -112,8 +112,9 @@ DOSSIER_APPLICATION = os.path.dirname(os.path.abspath(__file__))
 BOM_UTF8 = b'\xef\xbb\xbf'
 FIN_DE_LIGNE = b'\r\n'
 
-# Les 24 tables de la GMAO (fichier = <nom>.csv dans le dossier de données) ; wiki_pages et
-# wiki_journal depuis le format 3 (lot 6, ARCHITECTURE.md §20.2).
+# Les 27 tables de la GMAO (fichier = <nom>.csv dans le dossier de données) ; wiki_pages et
+# wiki_journal depuis le format 3 (lot 6, ARCHITECTURE.md §20.2) ; reserves_controle, garanties et
+# contrats_prestataires depuis le format 4 (version 2.2, docs/FORMAT.md).
 # RENVOI CROISÉ : cette liste est recopiée de js/schema.js (Schema.tables).
 # Si vous ajoutez ou renommez une table, modifiez les DEUX fichiers
 # (un test vérifie qu'ils restent cohérents).
@@ -142,9 +143,12 @@ TABLES = (
     'journal',
     'wiki_pages',
     'wiki_journal',
+    'reserves_controle',
+    'garanties',
+    'contrats_prestataires',
 )
 
-# Colonnes de chaque table, dans l'ordre où Prévo les écrit (recopie de js/schema.js, version 3 ; cohérence
+# Colonnes de chaque table, dans l'ordre où Prévo les écrit (recopie de js/schema.js, version 4 ; cohérence
 # vérifiée par tests/test_audit_csv.py). Le serveur exige qu'un CSV reçu commence par ces colonnes (audit E2) ;
 # les colonnes ajoutées à la main dans Excel restent permises après elles (lecture tolérante, §3.3).
 COLONNES_PAR_TABLE = {
@@ -152,7 +156,7 @@ COLONNES_PAR_TABLE = {
     'equipements': (
         'id', 'repere', 'designation', 'localisation_id', 'parent_id', 'marque', 'modele', 'num_serie', 'date_mes',
         'criticite', 'statut', 'heures_fonct_jour', 'habilitation_requise', 'consignation', 'document', 'actif',
-        'valeur_remplacement',
+        'valeur_remplacement', 'cout_arret_h',
     ),
     'demandes': (
         'id', 'date_heure', 'demandeur', 'equipement_id', 'symptome', 'impact', 'description', 'photo', 'statut',
@@ -163,7 +167,7 @@ COLONNES_PAR_TABLE = {
         'titre', 'travail_a_faire', 'consignes', 'date_creation', 'date_prevue', 'technicien_id', 'temps_prevu_h',
         'date_debut', 'date_fin', 'arret_production', 'duree_arret_h', 'symptome_code', 'cause_code', 'remede_code',
         'compte_rendu', 'remise_service', 'cout_soustraitance', 'date_cloture_tech', 'date_cloture_admin',
-        'motif_annulation', 'ot_lie_id', 'anomalie_constatee', 'astuce',
+        'motif_annulation', 'ot_lie_id', 'anomalie_constatee', 'astuce', 'habilitation_requise',
     ),
     'ot_operations': ('id', 'ot_id', 'ordre', 'operation', 'valeur_attendue', 'fait', 'valeur_mesuree'),
     'ot_pieces': ('id', 'ot_id', 'article_id', 'quantite_prevue'),
@@ -182,12 +186,16 @@ COLONNES_PAR_TABLE = {
     'article_equipement': ('id', 'article_id', 'equipement_id', 'quantite'),
     'mouvements_stock': ('id', 'date', 'article_id', 'type', 'quantite', 'ot_id', 'utilisateur', 'commentaire'),
     'techniciens': ('id', 'nom', 'prenom', 'metier', 'taux_horaire', 'capacite_h_semaine', 'actif'),
-    'habilitations': ('id', 'technicien_id', 'intitule', 'date_obtention', 'date_echeance'),
+    'habilitations': (
+        'id', 'technicien_id', 'intitule', 'date_obtention', 'date_echeance', 'recyclage_mois', 'justificatif',
+        'catalogue_id', 'nature_source',
+    ),
     'compteurs': ('id', 'equipement_id', 'libelle', 'unite'),
     'releves': ('id', 'compteur_id', 'date', 'valeur', 'utilisateur'),
     'controles_reglementaires': (
         'id', 'equipement_id', 'nature', 'texte_reference', 'periodicite_mois', 'organisme', 'derniere_date',
-        'prochaine_date', 'rapport', 'observations', 'observations_levees',
+        'prochaine_date', 'rapport', 'observations', 'observations_levees', 'source_periodicite', 'nature_source',
+        'catalogue_id', 'catalogue_relu_le',
     ),
     'codes_defaillance': ('id', 'famille', 'code', 'libelle'),
     'fournisseurs': ('id', 'nom', 'contact', 'telephone', 'email'),
@@ -202,6 +210,15 @@ COLONNES_PAR_TABLE = {
     'wiki_journal': (
         'id', 'nature', 'ot_id', 'date_intervention', 'statut', 'anterieure', 'ordre', 'pages', 'changements',
         'contradictions', 'raisons', 'modele', 'essais', 'cree_le', 'traite_le', 'decide_par', 'decide_le', 'motif',
+    ),
+    'reserves_controle': (
+        'id', 'controle_id', 'date_controle', 'texte', 'gravite', 'echeance_levee', 'levee', 'date_levee',
+        'commentaire_levee', 'ot_id',
+    ),
+    'garanties': ('id', 'equipement_id', 'fournisseur_id', 'date_debut', 'date_fin', 'conditions', 'document', 'actif'),
+    'contrats_prestataires': (
+        'id', 'fournisseur_id', 'objet', 'equipement_ids', 'perimetre', 'date_debut', 'date_fin', 'preavis_mois',
+        'reconduction_tacite', 'reconduction_mois', 'montant_annuel', 'document', 'actif',
     ),
 }
 
@@ -226,7 +243,8 @@ MOTIF_NOM_SAUVEGARDE = re.compile(
 # Motifs acceptés par POST /api/sauvegarde {"motif": "…"} : liste FERMÉE (tout autre motif → 400).
 # Le motif devient la fin du nom de la sauvegarde (« _avant-format-v2 »). Règle générale :
 # « avant-format-v<N> » ; on n'ajoute ici que les versions que Prévo sait vraiment produire.
-MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-import', 'avant-import-zip', 'avant-mise-a-jour')
+MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-format-v4', 'avant-import', 'avant-import-zip',
+                     'avant-mise-a-jour')
 
 # Types MIME des documents acceptés (l'extension décide du type, jamais le contenu ; toute autre extension : 415).
 # Audit F4 (§22.12) : « .doc » et « .xls » (formats binaires à macros) ne sont plus acceptés.
@@ -2727,7 +2745,7 @@ DOSSIER_CONSEILLE_WINDOWS = 'C:\\Prevo'
 DOSSIERS_JAMAIS_COPIES = ('.git', '__pycache__')
 NOM_LANCEUR_WINDOWS, NOM_LANCEUR_AUTRE = 'Lancer_GMAO.bat', 'lancer.sh'
 NOM_SCRIPT_REINITIALISATION = 'Reinitialiser_mot_de_passe.bat'
-VERSION_SCHEMA_CSV = 3                  # « version » de js/schema.js (§14.1) : posée dans un parametres.csv créé ici
+VERSION_SCHEMA_CSV = 4                  # « version » de js/schema.js (§14.1) : posée dans un parametres.csv créé ici
 DELAI_RELANCE_S = 2                     # le serveur s'arrête 2 s après la réponse de « terminer » ou « deplacer »
 ATTENTE_AVANT_RELANCE_S = 3             # le lanceur repart 3 s plus tard, une fois le port rendu
 # « terminer » sur une base absente au départ (T171) : rien de plus (« vide » : parametres.csv seul, avec version_schema
@@ -3976,7 +3994,7 @@ def morceaux_resolus(chemin, dossier):
 
 
 def chemin_table(config, table):
-    """Chemin du CSV d'une table ; 404 si la table n'est pas une des 24 du schéma."""
+    """Chemin du CSV d'une table ; 404 si la table n'est pas une des 27 du schéma."""
     if table not in TABLES:
         raise ErreurHttp(404, traduisible('csv.table_inconnue', 'Table inconnue : {table}.', table=table))
     return chemin_sous(config.dossier_donnees, table + '.csv')
@@ -4156,11 +4174,15 @@ VERSION_SCHEMA_PAR_DEFAUT = 1           # version_schema absent ou illisible : f
 # Premier format des tables et des colonnes apparues après le format 1 (depuisVersion de js/schema.js), toujours en fin
 # de table pour les colonnes ; les autres existent depuis le format 1. RENVOI CROISÉ : cohérence avec js/schema.js et
 # avec COLONNES_DES_FORMATS_SUIVANTS vérifiée par tests/test_formats_serveur.py.
-PREMIER_FORMAT_DES_TABLES = {'wiki_pages': 3, 'wiki_journal': 3}
+PREMIER_FORMAT_DES_TABLES = {'wiki_pages': 3, 'wiki_journal': 3, 'reserves_controle': 4, 'garanties': 4,
+                             'contrats_prestataires': 4}
 PREMIER_FORMAT_DES_COLONNES = {
-    'equipements': {'valeur_remplacement': 2},
+    'equipements': {'valeur_remplacement': 2, 'cout_arret_h': 4},
     'demandes': {'symptome_code': 2, 'ot_origine_id': 2},
-    'ordres_travail': {'anomalie_constatee': 2, 'astuce': 3},
+    'ordres_travail': {'anomalie_constatee': 2, 'astuce': 3, 'habilitation_requise': 4},
+    'habilitations': {'recyclage_mois': 4, 'justificatif': 4, 'catalogue_id': 4, 'nature_source': 4},
+    'controles_reglementaires': {'source_periodicite': 4, 'nature_source': 4, 'catalogue_id': 4,
+                                 'catalogue_relu_le': 4},
 }
 # Valeur par défaut des champs qui en ont une (« defaut » de js/schema.js ; les autres : ''), mise par une étape dans
 # chaque ligne d'une colonne qu'elle ajoute. Aucun de ces champs n'est un texte : la cellule écrite est la valeur même,
@@ -4173,10 +4195,13 @@ DEFAUTS_DES_CHAMPS = {
     'gammes': {'declencheur': 'date', 'actif': '1'},
     'articles': {'critique': '0', 'actif': '1'},
     'techniciens': {'actif': '1'},
-    'controles_reglementaires': {'observations_levees': '0'},
+    'controles_reglementaires': {'observations_levees': '0', 'source_periodicite': 'saisie'},
     'achats': {'statut': 'demandée'},
     'wiki_pages': {'version': '0', 'statut': 'active'},
     'wiki_journal': {'anterieure': '0', 'essais': '0'},
+    'reserves_controle': {'levee': '0'},
+    'garanties': {'actif': '1'},
+    'contrats_prestataires': {'reconduction_tacite': '0', 'actif': '1'},
 }
 # Blancs de JavaScript (\s et trim : espaces Unicode, fins de ligne, BOM), pour lire les noms de colonne et les nombres
 # comme le navigateur ; codes en clair, jamais de caractère invisible dans ce fichier.
@@ -4220,7 +4245,8 @@ def cle_de_colonne(nom):
 
 
 def premier_format_de_table(table):
-    """Premier format où la table existe : 1 pour les tables du brief, 3 pour celles du wiki."""
+    """Premier format où la table existe : 1 pour les tables du brief, 3 pour celles du wiki, 4 pour
+    reserves_controle, garanties et contrats_prestataires (2.2)."""
     return PREMIER_FORMAT_DES_TABLES.get(table, PREMIER_FORMAT)
 
 
@@ -4415,6 +4441,14 @@ ETAPES_FORMAT = (
                         '(défaut 0), en fin de table.'),
     EtapeDeFormat(2, 3, 'Format 3 (versions 1.2 et 2.0, §20.2) : colonne ordres_travail.astuce en fin de table, '
                         'tables wiki_pages et wiki_journal (vides).'),
+    EtapeDeFormat(3, 4, 'Format 4 (version 2.2) : colonnes equipements.cout_arret_h, '
+                        'ordres_travail.habilitation_requise, habilitations.recyclage_mois, '
+                        'habilitations.justificatif, habilitations.catalogue_id, habilitations.nature_source, '
+                        'controles_reglementaires.source_periodicite (défaut saisie), '
+                        'controles_reglementaires.nature_source, controles_reglementaires.catalogue_id et '
+                        'controles_reglementaires.catalogue_relu_le en fin de table ; tables reserves_controle '
+                        '(observations reprises, une réserve par ligne, D183), garanties et contrats_prestataires '
+                        '(vides).'),
 )
 
 
@@ -4487,9 +4521,11 @@ VERSION_INCONNUE = 'inconnue'                   # « de » du manifeste quand de
 # sauvegarde faite avant ce format ne les a pas, sans être abîmée (« Tester une sauvegarde »). RENVOI CROISÉ : cohérence
 # avec js/schema.js vérifiée par tests/test_sauvegardes_lot7.py.
 COLONNES_DES_FORMATS_SUIVANTS = {
-    'equipements': ('valeur_remplacement',),
+    'equipements': ('valeur_remplacement', 'cout_arret_h'),
     'demandes': ('symptome_code', 'ot_origine_id'),
-    'ordres_travail': ('anomalie_constatee', 'astuce'),
+    'ordres_travail': ('anomalie_constatee', 'astuce', 'habilitation_requise'),
+    'habilitations': ('recyclage_mois', 'justificatif', 'catalogue_id', 'nature_source'),
+    'controles_reglementaires': ('source_periodicite', 'nature_source', 'catalogue_id', 'catalogue_relu_le'),
 }
 VERROU_COPIE_EXTERNE = threading.Lock()     # jamais deux copies externes à la fois
 
@@ -5766,7 +5802,7 @@ def preparer_donnees_au_demarrage(config):
 # ---------------------------------------------------------------------------
 
 def versions_des_tables(config):
-    """{"table": {"version", "modifie"} ou None} pour les 24 tables."""
+    """{"table": {"version", "modifie"} ou None} pour les 27 tables."""
     resultat = {}
     for table in TABLES:
         chemin = chemin_table(config, table)
@@ -6105,7 +6141,7 @@ def enregistrer_document(config, nom_demande, octets):
 # ---------------------------------------------------------------------------
 
 # (méthode, motif du chemin après /api/) → fonction du gestionnaire, appelée avec (segment, corps). « <table> » (une
-# des 24 tables), « <nom> » (nom de document), « <identifiant> » (identifiant d'un compte) et « <id> » (invitation ou
+# des 27 tables), « <nom> » (nom de document), « <identifiant> » (identifiant d'un compte) et « <id> » (invitation ou
 # appareil) valent un segment. Une
 # route ajoutée ici est aussitôt fermée sans session quand les comptes sont exigés (tests/test_acces_sessions.py
 # parcourt la table) ; elle doit aussi avoir sa ligne dans ROLES_PAR_ROUTE (tests/test_acces_roles.py le vérifie).
