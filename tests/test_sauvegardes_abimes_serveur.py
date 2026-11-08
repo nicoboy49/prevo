@@ -46,6 +46,7 @@ from unittest import mock
 
 from test_sauvegardes_socle import (SERVEUR, CasDossier, ServeurDansLeProcessus, csv_de, fichiers_attendus, fichiers_de,
                                     instant, lire_manifeste)
+from commun import FORMAT_COURANT
 
 UN_JOUR = datetime.timedelta(days=1)
 J0 = datetime.date(2026, 6, 1)
@@ -308,7 +309,7 @@ class TestRotationAnalyse(CasAbimes):
         dossier = donnees / "sauvegardes" / nom
         dossier.mkdir(parents=True)
         equipements = csv_de("equipements", "EQ-0001;'PO-01;Pompe " + nom)
-        (dossier / "parametres.csv").write_bytes(csv_de("parametres", "version_schema;'3", "entreprise_nom;" + nom))
+        (dossier / "parametres.csv").write_bytes(csv_de("parametres", "version_schema;'%d" % FORMAT_COURANT, "entreprise_nom;" + nom))
         (dossier / "equipements.csv").write_bytes(abimer(equipements) if abimee else equipements)
         if manifeste or marque:
             fichiers = [dict(decrit, abime=True) if marque and decrit["nom"] == "equipements.csv" else decrit

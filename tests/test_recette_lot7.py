@@ -74,7 +74,7 @@ from pathlib import Path
 
 import commun
 from atelier import ServeurAtelier, adresse_reseau, motif_refus_du_demandeur, requete
-from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret
+from commun import NB_TABLES, RACINE, CasNavigateur, ServeurPrevo, attendre_pret
 from mandataire_test import MandataireTest
 from test_demandes import dimensions_jpeg, fichier_png
 from test_installation_api import ATTENDU_SOLO_CE_PC, ATTENDU_SOLO_DEHORS, FAUX_TAILSCALE, NOM_TAILSCALE, serveur
@@ -673,12 +673,12 @@ class TestParcoursAtelier(CasRecetteLot7):
             pc.click('button[data-tester="%s"]' % nom)
             pc.wait_for_selector("#resultat-test-sauvegarde")
             self.assertEqual(pc.get_attribute("#resultat-test-sauvegarde", "data-ok"), "1")
-            self.assertIn("Sauvegarde lisible : 24 tables relues", " ".join(pc.inner_text("#resultat-test-sauvegarde").split()))
+            self.assertIn("Sauvegarde lisible : %d tables relues" % NB_TABLES, " ".join(pc.inner_text("#resultat-test-sauvegarde").split()))
             capturer(pc, "atelier-tester-sauvegarde")
             pc.click("dialog .fenetre-actions .btn-primaire")
             pc.wait_for_selector("dialog", state="detached")
             sauvegarde = donnees / "sauvegardes" / nom
-            self.assertEqual(len(list(sauvegarde.glob("*.csv"))), 24)
+            self.assertEqual(len(list(sauvegarde.glob("*.csv"))), NB_TABLES)
             for fichier in ("comptes.json", "appareils.json", "journal-acces.csv"):
                 self.assertTrue((sauvegarde / "acces" / fichier).is_file(), fichier)
             self.assertTrue((donnees / "acces" / "sessions.json").is_file())      # des sessions existent…

@@ -42,7 +42,7 @@ from pathlib import Path
 from unittest import mock
 
 import commun
-from commun import (CasNavigateur, RACINE, ServeurStatique, attendre_pret, installer_dossier_simule,
+from commun import (NB_TABLES, CasNavigateur, RACINE, ServeurStatique, attendre_pret, installer_dossier_simule,
                     preregler_profil, url_fichier)
 
 SCRIPT = RACINE / "serveur.py"
@@ -534,7 +534,7 @@ class TestServeurReel(unittest.TestCase):
             self.assertEqual(reponse.statut, 200, reponse.octets)
             resultat = reponse.json()
             attendu = {chemin.stem: compter_lignes(chemin) for chemin in sorted(sauvegarde.glob("*.csv"))}
-            self.assertEqual(len(attendu), 24)
+            self.assertEqual(len(attendu), NB_TABLES)
             self.assertEqual((resultat["nom"], resultat["ok"]), (nom, True))
             self.assertEqual([table["table"] for table in resultat["tables"]], list(serveur.TABLES))   # ordre du schéma
             self.assertEqual({table["table"]: table["lignes"] for table in resultat["tables"]}, attendu)
@@ -676,7 +676,7 @@ class TestEcrans(CasNavigateur):
             for table, lignes in attendu.items():
                 self.assertEqual(page.inner_text('#resultat-test-sauvegarde [data-lignes="%s"]' % table), str(lignes))
             texte = page.inner_text("#resultat-test-sauvegarde")
-            self.assertIn("Sauvegarde lisible : 24 tables relues, %d lignes en tout." % sum(attendu.values()),
+            self.assertIn("Sauvegarde lisible : %d tables relues, %d lignes en tout." % (NB_TABLES, sum(attendu.values())),
                           " ".join(texte.split()))
             self.assertEqual(page.get_attribute("#resultat-test-sauvegarde", "data-ok"), "1")
             self.fermer_la_fenetre()

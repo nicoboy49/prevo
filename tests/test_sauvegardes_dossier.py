@@ -35,7 +35,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, ServeurStatique, attendre_pret, installer_dossier_simule, preregler_profil
+from commun import FORMAT_COURANT, RACINE, CasNavigateur, ServeurStatique, attendre_pret, installer_dossier_simule, preregler_profil
 from jeux_formats import copier_jeu
 
 NOM_DOSSIER = "donnees-sauvegardes"
@@ -268,7 +268,7 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
         self.assertEqual(len([nom for nom in dossiers if MOTIF_MANUELLE.match(nom)]), 60)
 
     def test_manifeste_exact_dans_chaque_sauvegarde_et_ignore_par_la_restauration(self):
-        parametres = csv_prevo("cle;valeur\nversion_schema;'3\nnom_site;Atelier Été\n")
+        parametres = csv_prevo("cle;valeur\nversion_schema;'%d\nnom_site;Atelier Été\n" % FORMAT_COURANT)
         equipements = csv_prevo("id;nom\nEQ-0001;Presse à injecter\nEQ-0002;Tour numérique\n")
         journal = csv_prevo("id;texte\nJ-1;première ligne\n")
         racine = {"parametres.csv": parametres, "equipements.csv": equipements, "journal.csv": journal}
@@ -279,7 +279,7 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
         self.assertRegex(manuelle, MOTIF_MANUELLE)
         contenu = contenu_sauvegarde(self.instantane(), manuelle)
         self.assertEqual(set(contenu), set(racine) | {MANIFESTE})                  # aucun « .en-cours » laissé
-        self.verifier_manifeste(contenu[MANIFESTE], racine, "manuelle", 3, version="9.8.7")
+        self.verifier_manifeste(contenu[MANIFESTE], racine, "manuelle", FORMAT_COURANT, version="9.8.7")
 
         # Quotidienne (première écriture du jour) : l'état d'avant l'écriture.
         nouveaux_equipements = csv_prevo("id;nom\nEQ-0001;Presse modifiée\n")
@@ -288,12 +288,12 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
         apres = self.instantane()
         jour = [nom for nom in dossiers_de_sauvegarde(apres) if MOTIF_QUOTIDIENNE.match(nom)]
         self.assertEqual(len(jour), 1)
-        self.verifier_manifeste(contenu_sauvegarde(apres, jour[0])[MANIFESTE], racine, "quotidienne", 3, version="9.8.7")
+        self.verifier_manifeste(contenu_sauvegarde(apres, jour[0])[MANIFESTE], racine, "quotidienne", FORMAT_COURANT, version="9.8.7")
 
         # À motif : le motif est écrit tel quel.
         actuel = dict(racine, **{"equipements.csv": apres["equipements.csv"]})
         a_motif = self.reussir("sauvegarder", "avant-format-v3")
-        self.verifier_manifeste(contenu_sauvegarde(self.instantane(), a_motif)[MANIFESTE], actuel, "avant-format-v3", 3,
+        self.verifier_manifeste(contenu_sauvegarde(self.instantane(), a_motif)[MANIFESTE], actuel, "avant-format-v3", FORMAT_COURANT,
                                 version="9.8.7")
 
         # Restauration : manifeste.json n'est jamais copié dans les données ; la copie de sécurité a le sien.
@@ -303,12 +303,12 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
         self.assertNotIn(MANIFESTE, restaure)
         self.assertEqual(csv_de_la_racine(restaure), racine)
         securite = contenu_sauvegarde(restaure, resultat["copieSecurite"])
-        self.verifier_manifeste(securite[MANIFESTE], actuel, "avant-restauration", 3, version="9.8.7")
+        self.verifier_manifeste(securite[MANIFESTE], actuel, "avant-restauration", FORMAT_COURANT, version="9.8.7")
         liste = {s["nom"]: s["tables"] for s in self.reussir("listerSauvegardes")}
         self.assertEqual(sorted(liste[manuelle]), ["equipements", "journal", "parametres"])
 
     def test_avant_import_zip_copie_aussi_les_documents(self):
-        parametres = csv_prevo("cle;valeur\nversion_schema;'3\n")
+        parametres = csv_prevo("cle;valeur\nversion_schema;'%d\n" % FORMAT_COURANT)
         equipements = csv_prevo("id;nom;document\nEQ-0001;Presse;notice.pdf\n")
         racine = {"parametres.csv": parametres, "equipements.csv": equipements}
         documents = {"documents/photo-presse.png": bytes(range(256)) * 3,
@@ -322,7 +322,7 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
         self.assertEqual(set(contenu), set(racine) | set(documents) | {MANIFESTE})
         for chemin, octets in dict(racine, **documents).items():
             self.assertEqual(contenu[chemin], octets, chemin)                      # à l'octet
-        self.verifier_manifeste(contenu[MANIFESTE], dict(racine, **documents), "avant-import-zip", 3, version=None)
+        self.verifier_manifeste(contenu[MANIFESTE], dict(racine, **documents), "avant-import-zip", FORMAT_COURANT, version=None)
         self.assertIn(nom, [s["nom"] for s in self.reussir("listerSauvegardes")])
 
         # Une sauvegarde manuelle ne copie pas documents/ (les documents ne sont que dans « avant-import-zip »).
@@ -355,7 +355,7 @@ class TestAvantMiseAJour(CasSauvegardesDossier):
         self.verifier_note(apres)
 
         # Puis le passage au format 3 (T186) : sa sauvegarde « avant-format-v3 » vient après, avec les mêmes octets.
-        self.assertIn(b"version_schema;'3", apres["parametres.csv"])
+        self.assertIn(b"version_schema;'%d" % FORMAT_COURANT, apres["parametres.csv"])
         avant_format = [nom for nom in dossiers if MOTIF_AVANT_FORMAT.match(nom)]
         self.assertEqual(len(avant_format), 1, dossiers)
         self.assertLessEqual(maj[0][:17], avant_format[0][:17])
@@ -384,7 +384,7 @@ class TestAvantMiseAJour(CasSauvegardesDossier):
         contenu = contenu_sauvegarde(apres, dossiers[0])
         brut = contenu.pop(MANIFESTE)
         self.assertEqual(contenu, csv_origine)
-        self.verifier_manifeste(brut, csv_origine, "avant-mise-a-jour", 3,
+        self.verifier_manifeste(brut, csv_origine, "avant-mise-a-jour", FORMAT_COURANT,
                                 complements=[("de", "1.2.0"), ("vers", VERSION_APPLI)])
         self.verifier_note(apres)
         self.assertEqual(csv_de_la_racine(apres), csv_origine)

@@ -32,7 +32,7 @@ vérifient que le dossier donnees/ du dépôt n'a pas changé d'un octet pendant
                               à la sauvegarde du jour, « avant-… », manuelles et noms étrangers jamais touchés ;
                               « Sauvegarder maintenant » garde les 60 dernières manuelles.
     TestExportServeur         CS144 : responsable connecté, document joint par le formulaire, rapport figé ; export par
-                              Paramètres : ZIP complet (24 CSV, documents, manifeste exact), sans acces/, puis relu par
+                              Paramètres : ZIP complet (un CSV par table, documents, manifeste exact), sans acces/, puis relu par
                               ZipLecture.lire dans une page (ok).
 CS145 (import ZIP) : l'aller-retour export puis import est dans tests/test_zip_import.py (T191), pas ici. CS168 : la
 liste des changements du lot qui touchent la sécurité est dans le compte rendu de T193.
@@ -66,7 +66,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from commun import (COMPTES_DE_TEST, RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret,
+from commun import (COMPTES_DE_TEST, FORMAT_COURANT, format_du_jeu, RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret,
                     charger_scripts, comptes_json, installer_dossier_simule, preregler_profil)
 from jeux_formats import copier_jeu
 
@@ -84,7 +84,6 @@ PREFIXE_CONSOLE_FORMAT = "Format des données : "    # lignes du format sur la c
 
 VERSION_APPLI = re.search(r"const VERSION = '([^']+)';",
                           (RACINE / "js" / "app.js").read_text(encoding="utf-8")).group(1)
-FORMAT_COURANT = 3
 BOM = b"\xef\xbb\xbf"
 VERROU = "verrou.txt"
 DERNIERE_VERSION = "derniere-version.json"
@@ -99,7 +98,7 @@ MOTIF_DATE_JMA = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
 CLES_MANIFESTE_EXPORT = ["application", "version_appli", "format", "date", "motif", "mode", "fichiers"]
 # Valeur par défaut des colonnes que les formats 2 et 3 ajoutent (js/schema.js).
 DEFAUTS = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0", "astuce": ""}
-TABLES = list(SERVEUR.TABLES)                # les 24 tables du format 3, dans l'ordre du schéma
+TABLES = list(SERVEUR.TABLES)                # les tables du format courant, dans l'ordre du schéma
 VERSION_SCHEMA_ECRITE = {"parametres.csv": {("version_schema", "valeur")}}     # seule cellule que le passage change
 
 # Chromium note en console.error toute réponse HTTP >= 400 : seules celles-ci sont attendues.
@@ -583,7 +582,7 @@ class TestElevesServeurComptes(CasRecetteSocle):
             self.assertLessEqual(dates[0], dates[1])
 
             # Tables migrées sans perte, champ à champ ; ligne de journal du serveur ; acces/ intact.
-            self.assertEqual(version_schema(demarre["parametres.csv"]), "3")
+            self.assertEqual(version_schema(demarre["parametres.csv"]), str(FORMAT_COURANT))
             self.assertEqual(self.verifier_aucune_perte(origine, demarre, VERSION_SCHEMA_ECRITE),
                              ["journal.csv", "ordres_travail.csv", "parametres.csv"])
             self.assertEqual(lire_table(demarre["ordres_travail.csv"])[0][-1], "astuce")
@@ -654,7 +653,7 @@ class TestFormat1Dossier(CasRecetteSocle):
             self.assertEqual(sans_manifeste(contenu), origine, nom)
         self.verifier_manifeste(copies[avant_format], "avant-format-v3", 1, "dossier")
         # Passage 1 → 2 → 3 : deux lignes de journal ; aucune perte, colonnes ajoutées à leur valeur par défaut.
-        self.assertEqual(version_schema(apres["parametres.csv"]), "3")
+        self.assertEqual(version_schema(apres["parametres.csv"]), str(FORMAT_COURANT))
         self.assertEqual([l["action"] for l in actions_du_format(apres["journal.csv"])],
                          ["passage au format %d du fichier ; sauvegarde %s faite juste avant" % (n, avant_format)
                           for n in (2, 3)])
@@ -709,7 +708,7 @@ class ParcoursAbimes:
         journal « fichiers complétés »), version_schema inchangé ; la sauvegarde se voit dans Paramètres."""
         origine, apres, _ = self.parcours_du_responsable("melange")
         self.assertEqual(lire_table(apres["ordres_travail.csv"])[0][-1], "astuce")
-        self.assertEqual(version_schema(apres["parametres.csv"]), "3")
+        self.assertEqual(version_schema(apres["parametres.csv"]), str(FORMAT_COURANT))
         avant_format = une_seule(sauvegardes(apres), MOTIF_AVANT_FORMAT)
         self.assertEqual(sauvegardes(apres)[avant_format]["ordres_travail.csv"], origine["ordres_travail.csv"])
         deja = len(lignes_en_dictionnaires(origine["journal.csv"]))
@@ -849,7 +848,7 @@ class ParcoursPlusRecent:
         bandeau = self.page.locator("#alertes-app #bandeau-lecture-seule")
         self.assertTrue(bandeau.is_visible())
         self.assertIn("Lecture seule", bandeau.inner_text())
-        self.assertIn("format 4", bandeau.inner_text())
+        self.assertIn("format %d" % format_du_jeu("plus-recent"), bandeau.inner_text())
         self.assertEqual(self.page.evaluate("Donnees.lectureSeule()"), True)
         self.assertEqual(self.page.evaluate("Donnees.lignes('ordres_travail').length"),
                          len(lire_table(self.origine["ordres_travail.csv"])[1]))     # aucun OT préventif généré

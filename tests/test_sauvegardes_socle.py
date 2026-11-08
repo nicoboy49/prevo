@@ -45,7 +45,7 @@ from pathlib import Path
 from unittest import mock
 
 import commun
-from commun import RACINE
+from commun import FORMAT_COURANT, RACINE, format_du_jeu
 from jeux_formats import copier_jeu
 
 
@@ -171,7 +171,7 @@ class ServeurDansLeProcessus:
         chemin = Path(self.config.dossier_donnees) / "parametres.csv"
         attendue = hashlib.sha256(chemin.read_bytes()).hexdigest()[:16] if chemin.is_file() else "aucune"
         statut, reponse = self.requete("PUT", "/api/csv/parametres",
-                                       csv_de("parametres", "version_schema;'3", "entreprise_nom;" + nom_entreprise),
+                                       csv_de("parametres", "version_schema;'%d" % FORMAT_COURANT, "entreprise_nom;" + nom_entreprise),
                                        {"X-Version-Attendue": attendue})
         if statut != 200:
             raise AssertionError("écriture refusée : %d %r" % (statut, reponse))
@@ -201,7 +201,7 @@ class CasDossier(unittest.TestCase):
         donnees = self.racine / nom
         (donnees / "acces").mkdir(parents=True)
         (donnees / "documents" / "sous-dossier").mkdir(parents=True)
-        (donnees / "parametres.csv").write_bytes(csv_de("parametres", "version_schema;'3", "entreprise_nom;Atelier"))
+        (donnees / "parametres.csv").write_bytes(csv_de("parametres", "version_schema;'%d" % FORMAT_COURANT, "entreprise_nom;Atelier"))
         (donnees / "equipements.csv").write_bytes(csv_de("equipements", "EQ-0001;'PO-01;Pompe"))
         (donnees / "acces" / "comptes.json").write_bytes(COMPTES_JSON)
         (donnees / "acces" / "sessions.json").write_bytes(SESSIONS_JSON)
@@ -368,7 +368,7 @@ class TestAvantMiseAJour(CasDossier):
         quotidienne = fichiers_de(copie / "sauvegardes" / aujourd_hui)
         del quotidienne["manifeste.json"]
         self.assertEqual(quotidienne, csv_a_la_racine(apres))
-        self.verifier_manifeste(copie / "sauvegardes" / aujourd_hui, "quotidienne", 3)
+        self.verifier_manifeste(copie / "sauvegardes" / aujourd_hui, "quotidienne", FORMAT_COURANT)
         self.assertEqual(sorted(noms), sorted([aujourd_hui, mise_a_jour] + format_v3))
         return copie
 
@@ -388,7 +388,7 @@ class TestAvantMiseAJour(CasDossier):
         with commun.ServeurPrevo(source=source) as serveur:
             noms = noms_des_sauvegardes(serveur.dossier)
             mise_a_jour = une_seule(noms, "_avant-mise-a-jour")
-            self.verifier_manifeste(serveur.dossier / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", 3,
+            self.verifier_manifeste(serveur.dossier / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", FORMAT_COURANT,
                                     complement={"de": "1.2.0", "vers": SERVEUR.VERSION_APPLICATION})
             notee = json.loads((serveur.dossier / "derniere-version.json").read_text(encoding="utf-8"))
             self.assertEqual(notee["version"], SERVEUR.VERSION_APPLICATION)
@@ -418,7 +418,7 @@ class TestAvantMiseAJour(CasDossier):
             self.assertEqual(contenu, {chemin: octets for chemin, octets in origine.items()
                                        if chemin[:-len(".csv")] in SERVEUR.TABLES})
             self.assertIn("pieces_v4.csv", origine)
-            self.verifier_manifeste(serveur.dossier / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", 4,
+            self.verifier_manifeste(serveur.dossier / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", format_du_jeu("plus-recent"),
                                     complement={"de": None, "vers": SERVEUR.VERSION_APPLICATION})
             self.assertEqual(csv_a_la_racine(fichiers_de(serveur.dossier)), origine)     # aucune table écrite
             statut, reponse = requete(serveur.port, "PUT", "/api/csv/equipements", origine["equipements.csv"],
@@ -433,7 +433,7 @@ class TestAvantMiseAJour(CasDossier):
         SERVEUR.creer_dossiers(config)
         nom = SERVEUR.sauvegarder_avant_mise_a_jour(config)
         self.assertEqual(nom, "2026-06-15_073005_avant-mise-a-jour")
-        self.verifier_manifeste(donnees / "sauvegardes" / nom, "avant-mise-a-jour", 3, date="2026-06-15T07:30:05",
+        self.verifier_manifeste(donnees / "sauvegardes" / nom, "avant-mise-a-jour", FORMAT_COURANT, date="2026-06-15T07:30:05",
                                 complement={"de": None, "vers": SERVEUR.VERSION_APPLICATION})
         self.assertEqual(json.loads((donnees / "derniere-version.json").read_text(encoding="utf-8")),
                          {"version": SERVEUR.VERSION_APPLICATION, "depuis": "2026-06-15T07:30:05"})
@@ -478,19 +478,19 @@ class TestManifesteEtDocuments(CasDossier):
         s = self.serveur
         s.ecrire_parametres("Atelier modifié")                  # la quotidienne d'abord, à l'état d'avant
         quotidienne = self.donnees / "sauvegardes" / "2026-06-15"
-        self.verifier_manifeste(quotidienne, "quotidienne", 3, date="2026-06-15T10:00:00")
+        self.verifier_manifeste(quotidienne, "quotidienne", FORMAT_COURANT, date="2026-06-15T10:00:00")
         self.assertIn(b"entreprise_nom;Atelier\r\n", (quotidienne / "parametres.csv").read_bytes())
         s.instant += 1
         manuelle = self.sauvegarder()
         self.assertEqual(manuelle, "2026-06-15_100001")
-        manifeste = self.verifier_manifeste(self.donnees / "sauvegardes" / manuelle, "manuelle", 3,
+        manifeste = self.verifier_manifeste(self.donnees / "sauvegardes" / manuelle, "manuelle", FORMAT_COURANT,
                                             date="2026-06-15T10:00:01")
         self.assertEqual([f["nom"] for f in manifeste["fichiers"]],
                          ["acces/comptes.json", "equipements.csv", "parametres.csv"])     # ni sessions, ni clé
         for motif in ("avant-format-v3", "avant-import", "avant-mise-a-jour"):
             s.instant += 1
             nom = self.sauvegarder(motif)
-            self.verifier_manifeste(self.donnees / "sauvegardes" / nom, motif, 3)
+            self.verifier_manifeste(self.donnees / "sauvegardes" / nom, motif, FORMAT_COURANT)
             self.assertFalse((self.donnees / "sauvegardes" / nom / "documents").exists(), motif)
         self.assertFalse((quotidienne / "documents").exists())
         self.assertFalse((self.donnees / "sauvegardes" / manuelle / "documents").exists())
@@ -498,7 +498,7 @@ class TestManifesteEtDocuments(CasDossier):
         s.instant += 60
         statut, reponse = s.requete("POST", "/api/restauration", {"sauvegarde": manuelle})
         self.assertEqual(statut, 200, reponse)
-        self.verifier_manifeste(self.donnees / "sauvegardes" / reponse["copie_securite"], "avant-restauration", 3)
+        self.verifier_manifeste(self.donnees / "sauvegardes" / reponse["copie_securite"], "avant-restauration", FORMAT_COURANT)
         # Aucun dossier temporaire laissé.
         self.assertEqual([nom for nom in noms_des_sauvegardes(self.donnees) if nom.startswith(".")], [])
 
@@ -510,7 +510,7 @@ class TestManifesteEtDocuments(CasDossier):
                          ["20260601-080000-pompe.jpg", "rapport.pdf"])             # ni caché, ni sous-dossier
         self.assertEqual((sauvegarde / "documents" / "20260601-080000-pompe.jpg").read_bytes(), PHOTO)
         self.assertEqual((sauvegarde / "documents" / "rapport.pdf").read_bytes(), RAPPORT)
-        manifeste = self.verifier_manifeste(sauvegarde, "avant-import-zip", 3, date="2026-06-15T10:00:00")
+        manifeste = self.verifier_manifeste(sauvegarde, "avant-import-zip", FORMAT_COURANT, date="2026-06-15T10:00:00")
         self.assertEqual([f["nom"] for f in manifeste["fichiers"]],
                          ["acces/comptes.json", "documents/20260601-080000-pompe.jpg", "documents/rapport.pdf",
                           "equipements.csv", "parametres.csv"])
