@@ -10,7 +10,7 @@ copié dans un dossier temporaire (règle du chantier : jamais ailleurs, jamais 
      f1, f2-v1.1.0   passés au format 3 : en-têtes complétés en fin (colonnes du format, valeur par défaut), cellules
                      d'origine intactes champ à champ, autres fichiers à l'octet près, tables absentes non créées,
                      sauvegarde « *_avant-format-v3 » aux octets d'origine, une ligne de journal par étape,
-                     version_schema = 3 ; second démarrage : aucun octet changé, aucune sauvegarde de plus ;
+                     version_schema = format courant ; second démarrage : aucun octet changé, aucune sauvegarde de plus ;
      f3-v1.2.0, f3-v2.0.0   rien d'écrit, aucune sauvegarde de format, acces/ intact ;
      melange         ordres_travail complété, parametres inchangé, ligne « fichiers complétés au format 3 » ;
      entete-tronque, vide   rien d'écrit, fichier signalé (tables_abimees, tables_vides ; console) ; dans une base au
@@ -45,10 +45,10 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
-from commun import RACINE, SCRIPTS_TRADUCTION, CasNavigateur, ServeurPrevo
+from commun import (FORMAT_COURANT, FORMAT_PLUS_RECENT, RACINE, SCRIPTS_TRADUCTION, CasNavigateur, ServeurPrevo,
+                    format_du_jeu)
 from jeux_formats import copier_jeu
 
-FORMAT_COURANT = 3
 MOTIF_SAUVEGARDE_DE_FORMAT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v3$")
 MOTIF_ID_JOURNAL = re.compile(r"^J-\d{14}-[A-Z0-9]{4}$")
 COLONNES_JOURNAL = ["id", "date_heure", "poste", "profil", "table", "id_ligne", "action"]
@@ -208,7 +208,7 @@ class CasJeux(unittest.TestCase):
         for table, colonnes in ajouts.items():
             self.verifier_table_completee(table, origine[table + ".csv"], apres[table + ".csv"], colonnes)
         self.assertEqual(version_schema(origine["parametres.csv"]), version_avant)
-        self.assertEqual(version_schema(apres["parametres.csv"]), "'3")
+        self.assertEqual(version_schema(apres["parametres.csv"]), "'%d" % FORMAT_COURANT)
         if version_ecrite:
             avant_p, apres_p = lire_table(origine["parametres.csv"]), lire_table(apres["parametres.csv"])
             self.assertEqual(apres_p[0], avant_p[0])
@@ -297,7 +297,7 @@ class TestDemarrage(CasJeux):
             sauvegardes = sauvegardes_de_format(serveur.dossier)
         self.assertEqual((etat["migration"], etat["base"], etat["tables_abimees"]), ("faite", 3, ["ordres_travail"]))
         self.assertEqual(apres["ordres_travail.csv"], origine["ordres_travail.csv"])
-        self.assertEqual(version_schema(apres["parametres.csv"]), "'3")
+        self.assertEqual(version_schema(apres["parametres.csv"]), "'%d" % FORMAT_COURANT)
         self.assertEqual(len(sauvegardes), 1, sauvegardes)
         actions = [ligne["action"] for ligne in lignes_de_journal_du_format(apres["journal.csv"])]
         self.assertTrue(actions and actions[-1].startswith("passage au format 3 du fichier ; sauvegarde "), actions)
@@ -311,7 +311,8 @@ class TestDemarrage(CasJeux):
         with ServeurPrevo(source=source) as serveur:
             self.assertEqual(sans_le_demarrage(fichiers_de(serveur.dossier)), origine)
             etat = self.info_format(serveur)
-            self.assertEqual((etat["base"], etat["plus_recent"], etat["migration"]), (4, True, "rien"))
+            self.assertEqual((etat["base"], etat["plus_recent"], etat["migration"]),
+                             (format_du_jeu("plus-recent"), True, "rien"))
             self.assertIn("LECTURE SEULE", serveur.sortie_console())
             # Lecture permise.
             statut, octets = requete(serveur, "GET", "/api/csv/equipements")
@@ -331,9 +332,9 @@ class TestDemarrage(CasJeux):
                     statut, reponse = requete(serveur, methode, chemin, corps, entetes)
                     self.assertEqual(statut, 409, reponse)
                     self.assertEqual(reponse["code"], "format_plus_recent")
-                    self.assertEqual(reponse["format"], 4)
+                    self.assertEqual(reponse["format"], format_du_jeu("plus-recent"))
                     self.assertIn("version plus récente de Prévo", reponse["erreur"])
-                    self.assertIn("format 4", reponse["erreur"])
+                    self.assertIn("format %d" % format_du_jeu("plus-recent"), reponse["erreur"])
             self.assertEqual(sans_le_demarrage(fichiers_de(serveur.dossier)), origine)
             self.assertEqual(os.listdir(serveur.dossier / "documents"), [])
             # Sauvegarde manuelle permise ; les données restent intactes.
@@ -349,7 +350,7 @@ class TestDemarrage(CasJeux):
         with ServeurPrevo(source=source, comptes=True) as serveur:
             # Aucune connexion n'a eu lieu : le passage est déjà fait sur le disque.
             apres = fichiers_de(serveur.dossier)
-            self.assertEqual(version_schema(apres["parametres.csv"]), "'3")
+            self.assertEqual(version_schema(apres["parametres.csv"]), "'%d" % FORMAT_COURANT)
             self.assertEqual(len(sauvegardes_de_format(serveur.dossier)), 1)
             self.verifier_table_completee("ordres_travail", origine["ordres_travail.csv"],
                                           apres["ordres_travail.csv"], AJOUTS_DU_FORMAT_3["ordres_travail"])
@@ -414,7 +415,7 @@ class TestCasLimites(CasJeux):
                                       AJOUTS_DU_FORMAT_2["ordres_travail"] + AJOUTS_DU_FORMAT_3["ordres_travail"])
         for table in ("equipements", "demandes"):
             self.assertEqual(fin[table + ".csv"], apres[table + ".csv"])
-        self.assertEqual(version_schema(fin["parametres.csv"]), "'3")
+        self.assertEqual(version_schema(fin["parametres.csv"]), "'%d" % FORMAT_COURANT)
         sauvegardes = sauvegardes_de_format(dossier)
         self.assertEqual(len(sauvegardes), 2, sauvegardes)
         actions = [ligne["action"] for ligne in lignes_de_journal_du_format(fin["journal.csv"])]
@@ -482,7 +483,7 @@ class TestCasLimites(CasJeux):
         # Hors du démarrage normal (config.format_donnees None) ou base au format : rien n'est refusé.
         config = SERVEUR.Configuration(str(self.temporaire / "x"), [])
         SERVEUR.verifier_ecriture_permise(config)
-        config.format_donnees = {"base": 4, "plus_recent": True}
+        config.format_donnees = {"base": FORMAT_PLUS_RECENT, "plus_recent": True}
         with self.assertRaises(SERVEUR.ErreurHttp) as refus:
             SERVEUR.ecrire_table(config, "parametres", ["cle", "valeur"], [])
         self.assertEqual((refus.exception.statut, refus.exception.champs_supplementaires["code"]),
@@ -534,11 +535,11 @@ class TestAdaptateurServeur(CasNavigateur):
             with ServeurPrevo(source=source) as serveur:
                 self.ouvrir(serveur)
                 resultat = self.page.evaluate(ESSAYER_LES_ECRITURES_JS)
-        self.assertEqual(resultat["format"], {"base": 4, "courant": 3, "plusRecent": True, "migration": "rien",
+        self.assertEqual(resultat["format"], {"base": format_du_jeu("plus-recent"), "courant": FORMAT_COURANT, "plusRecent": True, "migration": "rien",
                                               "tablesAbimees": [], "tablesVides": [], "tableBloquee": None,
                                               "abimesDepuis": {}})
         for ecriture in ("enregistrer", "ajouter", "document", "restaurer"):
-            self.assertEqual(resultat[ecriture], "ErreurLectureSeule 4", ecriture)
+            self.assertEqual(resultat[ecriture], "ErreurLectureSeule %d" % format_du_jeu("plus-recent"), ecriture)
 
     def test_format_lu_apres_un_passage(self):
         with tempfile.TemporaryDirectory(prefix="prevo-t185-") as temporaire:

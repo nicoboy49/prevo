@@ -35,13 +35,14 @@ import re
 import shutil
 import unittest
 
+from commun import FORMAT_COURANT as FORMAT_COURANT_NUM
 from commun import (CasNavigateur, RACINE, ServeurPrevo, ServeurStatique, attendre_pret,
                     charger_scripts, installer_dossier_simule, preregler_profil, url_fichier)
 
 PARAMETRES_V1 = RACINE / "tests" / "fixtures" / "v1" / "parametres.csv"
 TABLES_V1 = ("demandes", "equipements", "ordres_travail", "parametres")   # fichiers de tests/fixtures/v1
 MOTIF_NOM_AVANT_FORMAT_2 = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v2$")
-FORMAT_COURANT = "3"                                   # Schema.version (js/schema.js), lot 6
+FORMAT_COURANT = str(FORMAT_COURANT_NUM)                # Schema.version (js/schema.js)
 MOTIF_NOM_AVANT_FORMAT_COURANT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v3$")
 MOTIF_NOM_MANUEL = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 DEBUT_ERREUR_SAUVEGARDE = "Sauvegarde avant le passage au format 3 impossible : "
@@ -154,7 +155,7 @@ class TestServeur(CasServeurV1):
             nom = reponse["sauvegarde"]
             self.assertRegex(nom, MOTIF_NOM_AVANT_FORMAT_COURANT)
             # Puis le passage (fait ailleurs) : version 3 sur le disque.
-            passe = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", b"version_schema;'3")
+            passe = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", ("version_schema;'" + FORMAT_COURANT).encode())
             (serveur.dossier / "parametres.csv").write_bytes(passe)
             page.evaluate("Donnees.rechargerTable('parametres')")
             self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), FORMAT_COURANT)
@@ -199,8 +200,8 @@ class TestFormat2ModeServeur(CasServeurV1):
         with ServeurPrevo() as serveur:
             parametres = serveur.dossier / "parametres.csv"
             octets_v3 = parametres.read_bytes()
-            self.assertIn(b"version_schema;'3", octets_v3)
-            parametres.write_bytes(octets_v3.replace(b"version_schema;'3", b"version_schema;'2"))
+            self.assertIn(("version_schema;'" + FORMAT_COURANT).encode(), octets_v3)
+            parametres.write_bytes(octets_v3.replace(("version_schema;'" + FORMAT_COURANT).encode(), b"version_schema;'2"))
             for nom in ("wiki_pages.csv", "wiki_journal.csv"):
                 (serveur.dossier / nom).unlink()
             retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "astuce")
@@ -487,7 +488,7 @@ class TestDossier(CasNavigateur):
             # Second appel : rien.
             sauvegardes_avant = self.lister("sauvegardes")
             fichiers_avant = {t: self.lire(t + ".csv") for t in TABLES_V1 + ("journal",)}
-            self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR), {"ok": True, "valeur": resultat_sans_effet(3)})
+            self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR), {"ok": True, "valeur": resultat_sans_effet(FORMAT_COURANT_NUM)})
             self.assertEqual(self.lister("sauvegardes"), sauvegardes_avant)
             self.assertEqual({t: self.lire(t + ".csv") for t in TABLES_V1 + ("journal",)}, fichiers_avant)
 
@@ -545,7 +546,7 @@ class TestDossier(CasNavigateur):
         with ServeurStatique(RACINE) as statique:
             self.ouvrir_dossier_v1(statique.url)
             # Un autre poste a fait le passage juste après notre lecture (notre cache dit encore 1).
-            ecrit_par_l_autre_poste = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", b"version_schema;'3")
+            ecrit_par_l_autre_poste = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", ("version_schema;'" + FORMAT_COURANT).encode())
             self.page.evaluate("""async (octets) => {
                 const racine = await (await navigator.storage.getDirectory()).getDirectoryHandle(%s);
                 const flux = await (await racine.getFileHandle('parametres.csv')).createWritable();
@@ -607,7 +608,7 @@ class TestDemo(CasNavigateur):
             App.adaptateur.sauvegarder = function () { window.appelsSauvegarde += 1; return original.apply(this, arguments); }; }""")
         # Le jeu de démo est déjà au format courant : rien à faire.
         self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), FORMAT_COURANT)
-        self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR), {"ok": True, "valeur": resultat_sans_effet(3)})
+        self.assertEqual(self.page.evaluate(APPELER_MISE_A_JOUR), {"ok": True, "valeur": resultat_sans_effet(FORMAT_COURANT_NUM)})
         self.assertEqual(self.page.evaluate("window.appelsSauvegarde"), 0)
 
     def test_demo_fichiers_au_format_1_passage_en_memoire_seulement(self):
@@ -632,10 +633,10 @@ class TestDemo(CasNavigateur):
         # Seul parametres.csv existe (format 3 de fichier : cle, valeur) : aucune table à compléter, deux étapes.
         self.assertEqual(resultat["premier"], {"misAJour": True, "sauvegarde": None, "depart": 1, "tables": [],
                                                "abimees": []})
-        self.assertEqual(resultat["second"], resultat_sans_effet(3))
+        self.assertEqual(resultat["second"], resultat_sans_effet(FORMAT_COURANT_NUM))
         self.assertEqual(resultat["appelsSauvegarde"], 0)
         self.assertEqual(resultat["version"], FORMAT_COURANT)
-        self.assertIn("version_schema;'3", resultat["fichier"])
+        self.assertIn("version_schema;'" + FORMAT_COURANT, resultat["fichier"])
         self.assertEqual(resultat["journal"], ["passage au format 2 du fichier ; sans sauvegarde (démo)",
                                                "passage au format 3 du fichier ; sans sauvegarde (démo)"])
 

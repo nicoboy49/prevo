@@ -3,11 +3,11 @@ point ; CS130 ; tâche T171) : serveur.py (étapes « deplacer » et « terminer
 installer_jeu_de_demo), installation-etapes.js et installation-ecrans.js, js/app.js (profils, T155).
 
 Ce qui est vérifié :
-    base 1.2      serveur du processus sans configuration sur une copie de la démo : l'état dit les CSV présents (24,
+    base 1.2      serveur du processus sans configuration sur une copie de la démo : l'état dit les CSV présents (NB_TABLES,
                   dernière modification) ; parcours Solo « ce PC » jusqu'à « terminer » : chaque CSV égal octet à octet
                   à l'original sauf parametres.csv (lignes d'origine toutes présentes, mode_solo ajouté, version_schema
                   inchangé) ; « demo » refusé (400) sur une base présente, rien d'écrit ;
-    base absente  « demo » en Solo « dehors » (faux Tailscale) : les 24 tables de js/demo-donnees.js écrites, dates
+    base absente  « demo » en Solo « dehors » (faux Tailscale) : les tables (NB_TABLES) de js/demo-donnees.js écrites, dates
                   décalées de semaines entières (attendu calculé ici d'après les colonnes date et date_heure de
                   js/schema.js, horloge du serveur fixée), technicien « moi » recréé (TEC-0005), compte responsable
                   relié, parametres.csv de la démo avec mode_solo ; « demo » pour l'informaticien : sans mode_solo ;
@@ -151,10 +151,10 @@ class TestBaseDeDepart(CasAssistant):
         client, instance = self.lancer(source=commun.DOSSIER_DEMO)       # la démo tient lieu de base 1.2
         donnees = Path(instance.config.dossier_donnees)
         originaux = {p.name: p.read_bytes() for p in donnees.glob("*.csv")}
-        self.assertEqual(len(originaux), 24)
+        self.assertEqual(len(originaux), commun.NB_TABLES)
         etat = self.ok(client.get("etat"))
         self.assertTrue(etat["csv_presents"])
-        self.assertEqual(etat["nombre_csv"], 24)
+        self.assertEqual(etat["nombre_csv"], commun.NB_TABLES)
         plus_recent = max(p.stat().st_mtime for p in donnees.glob("*.csv"))
         self.assertEqual(etat["derniere_modification"],
                          datetime.datetime.fromtimestamp(plus_recent).strftime("%Y-%m-%dT%H:%M:%S"))
@@ -188,7 +188,7 @@ class TestBaseDeDepart(CasAssistant):
         parametres = parametres_de(donnees)
         self.assertEqual((parametres["mode_solo"], parametres["cloture_une_etape"], parametres["solo_technicien_id"]),
                          ("1", "1", "TEC-0001"))
-        self.assertEqual(parametres["version_schema"], "'3")                  # présent : jamais réécrit (apostrophe gardée)
+        self.assertEqual(parametres["version_schema"], "'%d" % commun.FORMAT_COURANT)                  # présent : jamais réécrit (apostrophe gardée)
         self.assertEqual(parametres["entreprise_nom"], "Atelier des Trois Vallées (démo)")
         self.assertNotIn("langue_defaut", parametres)
         self.assertTrue(Path(instance.config.reglages["_fichier"]).is_file())
@@ -237,7 +237,7 @@ class TestBaseDeDepart(CasAssistant):
         self.assertEqual((parametres["mode_solo"], parametres["cloture_une_etape"], parametres["solo_technicien_id"]),
                          ("1", "1", "TEC-0005"))
         self.assertEqual(parametres["entreprise_nom"], "Atelier des Trois Vallées (démo)")
-        self.assertEqual(parametres["version_schema"], "'3")
+        self.assertEqual(parametres["version_schema"], "'%d" % commun.FORMAT_COURANT)
         self.assertTrue(Path(instance.config.reglages["_fichier"]).is_file())
         self.assertFalse((donnees / "installation.json").exists())
 
@@ -519,7 +519,7 @@ class TestEcran(CasInstallation):
         self.assertIn("Tant que l'installation n'est pas terminée", page.inner_text("#installation-premiere-ligne"))
         migration = page.inner_text("#inst-migration")
         self.assertIn("Vos données de Prévo 1.2 sont là", migration)
-        self.assertIn("24 fichiers", migration)
+        self.assertIn("%d fichiers" % commun.NB_TABLES, migration)
         self.assertIn("dernière modification le", migration)
         self.assertIn("gardées", migration)
         self.solo_jusqu_au_recapitulatif("Julien", "Moreau")

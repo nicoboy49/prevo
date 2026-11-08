@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from commun import CasNavigateur, ServeurPrevo, ServeurStatique, RACINE, COMPTES_DE_TEST  # noqa: E402
+from commun import CasNavigateur, ServeurPrevo, ServeurStatique, RACINE, COMPTES_DE_TEST, NB_TABLES  # noqa: E402
 
 CHEMIN_PAGE = "/tests/fixtures/page-stockage-serveur.html"
 BOM = b"\xef\xbb\xbf"
@@ -270,7 +270,7 @@ class TestCsv(CasStockageServeur):
             (serveur.dossier / "equipements.csv").write_bytes(CSV_EQUIPEMENTS)
             self.ouvrir(serveur)
             versions = self.executer_ok("return await stockage.listerVersions();")
-            self.assertEqual(len(versions), 24)
+            self.assertEqual(len(versions), NB_TABLES)
             noms_schema = self.page.evaluate("Schema.nomsTables()")
             self.assertEqual(sorted(versions), sorted(noms_schema))
             self.assertEqual(versions["equipements"], empreinte(CSV_EQUIPEMENTS))

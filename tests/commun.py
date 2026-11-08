@@ -26,6 +26,7 @@ import importlib.util
 import http.server
 import json
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -48,6 +49,24 @@ RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
 PAGE_VIDE = RACINE / "tests" / "fixtures" / "page-vide.html"
 FICHIER_SCENARIOS = RACINE / "tests" / "fixtures" / "demo-scenarios.json"
+
+
+def _lire_schema():
+    """(nombre de tables, format courant) lus dans js/schema.js comme du texte (sans navigateur)."""
+    source = (RACINE / "js" / "schema.js").read_text(encoding="utf-8")
+    tables = re.findall(r"^    ([a-z_]+): \{\n      fichier:", source, re.MULTILINE)
+    format_courant = re.search(r"^    version: (\d+),", source, re.MULTILINE)
+    return len(tables), int(format_courant.group(1))
+
+
+NB_TABLES, FORMAT_COURANT = _lire_schema()
+FORMAT_PLUS_RECENT = FORMAT_COURANT + 1
+
+
+def format_du_jeu(nom):
+    """Format (version_schema de son parametres.csv) d'un jeu de tests/fixtures/formats, en entier."""
+    octets = (RACINE / "tests" / "fixtures" / "formats" / nom / "parametres.csv").read_bytes()
+    return int(re.search(rb"version_schema;'?(\d+)", octets).group(1))
 
 # Valeur par défaut de ServeurPrevo(source=...) : « le jeu de démo s'il existe, sinon vide ».
 SOURCE_AUTO = "auto"

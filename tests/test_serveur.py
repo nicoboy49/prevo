@@ -27,6 +27,8 @@ import threading
 import time
 import unittest
 
+from commun import FORMAT_COURANT, NB_TABLES
+
 DOSSIER_PROJET = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT_SERVEUR = os.path.join(DOSSIER_PROJET, 'serveur.py')
 BOM = b'\xef\xbb\xbf'
@@ -352,7 +354,7 @@ class TestApiServeur(CasAvecServeur):
 
     def test_versions_24_tables(self):
         # 22 tables du brief, puis wiki_pages et wiki_journal (format 3, lot 6, ARCHITECTURE.md §20.2).
-        self.assertEqual(len(TABLES), 24)
+        self.assertEqual(len(TABLES), NB_TABLES)
         self.assertEqual(list(TABLES[-2:]), ['wiki_pages', 'wiki_journal'])
         self.mettre_csv('localisations', BOM + b'id;libelle;parent_id;type\r\n')
         tables = self.requete('GET', '/api/versions').json()['tables']
@@ -777,9 +779,9 @@ class TestApiServeur(CasAvecServeur):
 class TestSauvegardeQuotidienne(CasAvecServeur):
 
     ETAT_AVANT = BOM + entete('techniciens') + b'\r\nTEC-0001;Avant\r\n'
-    # T185 : base au format courant (version_schema 3), sinon le serveur la passerait au format courant à son
+    # T185 : base au format courant (version_schema = format courant), sinon le serveur la passerait au format courant à son
     # démarrage (parametres.csv et journal.csv créés, sauvegarde « avant-format-v3 »).
-    PARAMETRES = BOM + entete('parametres') + b"\r\nversion_schema;'3\r\n"
+    PARAMETRES = BOM + entete('parametres') + ("\r\nversion_schema;'%d\r\n" % FORMAT_COURANT).encode()
 
     def preparer_donnees(cls, dossier_donnees):
         os.makedirs(dossier_donnees)
@@ -1077,9 +1079,9 @@ class TestCodeSource(unittest.TestCase):
         if hasattr(sys, 'stdlib_module_names'):
             self.assertEqual(modules - set(sys.stdlib_module_names), set())
 
-    def test_24_tables_et_renvoi_vers_schema_js(self):
-        self.assertEqual(len(TABLES), 24)
-        self.assertEqual(len(set(TABLES)), 24)
+    def test_toutes_les_tables_et_renvoi_vers_schema_js(self):
+        self.assertEqual(len(TABLES), NB_TABLES)
+        self.assertEqual(len(set(TABLES)), NB_TABLES)
         self.assertIn('js/schema.js', self.source)
 
     def test_tables_coherentes_avec_schema_js(self):
