@@ -8,7 +8,7 @@ avec acces/comptes.json) dans un dossier temporaire ou dans l'OPFS du navigateur
                        octets d'origine (acces/ compris, FORMAT.md §8), aucune « avant-format-* » (format 3 des deux
                        côtés), version notée ; connexion du responsable, aucun bandeau, un équipement modifié par le
                        formulaire ; aucune perte ; second démarrage : aucune nouvelle « avant-mise-a-jour » ;
-                       passage suivant (appli simulée en 2.0.0) : nouvelle sauvegarde, version 2.0.0 notée ;
+                       passage suivant (appli simulée en 2.0.1) : nouvelle sauvegarde, version 2.0.1 notée ;
                        export ZIP (vrai bouton) puis import dans une base neuve : mêmes CSV, journal + 1 ligne.
     TestBeta2Dossier   mode dossier (OPFS simulé) : mêmes contrôles, puis rechargement : rien de neuf.
 
@@ -35,7 +35,7 @@ from test_recette_socle import (DERNIERE_VERSION, DONNEES_DU_DEPOT, ERREUR_CSV_A
                                 valeur_comparable)
 
 JEU = "f3-v2.0.0"
-VERSION_FINALE = "2.0.0"
+VERSION_SUIVANTE = "2.0.1"        # T340 : la version courante est la 2.0.0 ; le passage suivant simule la 2.0.1
 DESIGNATION = "Pompe de refroidissement (recette bêta 2)"
 CHANGEES = {"equipements.csv": {("EQ-0005", "designation")}}
 # Fichiers de données qu'une session du responsable peut réécrire (OT préventifs générés à l'ouverture, journal).
@@ -121,8 +121,8 @@ class TestBeta2Serveur(CasBeta2):
             maj = self.verifier_passage(origine, copies, VERSION_APPLI, None)
             self.assertIn("sauvegarde %s faite avant la mise à jour" % maj, console)
             self.assertNotIn(PREFIXE_CONSOLE_FORMAT, console)
-            self.assertEqual(VERSION_APPLI, "2.0.0-beta.2")
-            self.assertEqual(version_notee(demarre), "2.0.0-beta.2")
+            self.assertNotEqual(VERSION_APPLI, VERSION_SUIVANTE)
+            self.assertEqual(version_notee(demarre), VERSION_APPLI)
             self.assertEqual(csv_de_la_racine(demarre), csv_de_la_racine(origine))     # aucune migration
             self.assertEqual(demarre["acces/comptes.json"], origine["acces/comptes.json"])
 
@@ -147,7 +147,7 @@ class TestBeta2Serveur(CasBeta2):
                     self.assertEqual(apres[chemin], octets, chemin)
             self.verifier_rien_sans_sauvegarde(origine, apres)
             self.assertEqual(apres["acces/comptes.json"], origine["acces/comptes.json"])
-            self.assertEqual(version_notee(apres), "2.0.0-beta.2")
+            self.assertEqual(version_notee(apres), VERSION_APPLI)
             self.assertEqual(sorted(sauvegardes(apres)), sorted(copies))     # toujours une seule « avant-mise-a-jour »
             copie_du_dossier(serveur.dossier, suite)
             copie_du_dossier(serveur.dossier, self.temporaire / "pour-export")
@@ -158,10 +158,10 @@ class TestBeta2Serveur(CasBeta2):
             noms = sauvegardes(fichiers_de(second.dossier))
             self.assertEqual(sorted(noms), sorted(sauvegardes(avant_second)))
             self.assertEqual(sum(1 for n in noms if MOTIF_AVANT_MISE_A_JOUR.match(n)), 1)
-            self.assertEqual(version_notee(fichiers_de(second.dossier)), "2.0.0-beta.2")
+            self.assertEqual(version_notee(fichiers_de(second.dossier)), VERSION_APPLI)
 
-        # Passage suivant : l'appli est la 2.0.0 (finale) → nouvelle sauvegarde, version 2.0.0 notée, aucune perte.
-        with ServeurVersion(VERSION_FINALE, self.temporaire / "appli-finale", source=suite, comptes=True) as finale:
+        # Passage suivant : l'appli est la 2.0.1 (simulée) → nouvelle sauvegarde, version 2.0.1 notée, aucune perte.
+        with ServeurVersion(VERSION_SUIVANTE, self.temporaire / "appli-finale", source=suite, comptes=True) as finale:
             apres_finale = fichiers_de(finale.dossier)
             console = finale.sortie_console()
             copies = sauvegardes(apres_finale)
@@ -173,9 +173,9 @@ class TestBeta2Serveur(CasBeta2):
                 self.assertEqual(contenu[chemin], octets, chemin)
             self.assertEqual(contenu["acces/comptes.json"], origine["acces/comptes.json"])
             self.verifier_manifeste(copies[nouvelle], "avant-mise-a-jour", FORMAT_COURANT, "serveur",
-                                    {"de": "2.0.0-beta.2", "vers": VERSION_FINALE})
+                                    {"de": VERSION_APPLI, "vers": VERSION_SUIVANTE})
             self.assertIn("sauvegarde %s faite avant la mise à jour" % nouvelle, console)
-            self.assertEqual(version_notee(apres_finale), VERSION_FINALE)
+            self.assertEqual(version_notee(apres_finale), VERSION_SUIVANTE)
             for chemin, octets in csv_de_la_racine(avant_second).items():
                 self.assertEqual(apres_finale[chemin], octets, chemin)
             self.assertEqual(apres_finale["acces/comptes.json"], origine["acces/comptes.json"])
@@ -194,7 +194,7 @@ class TestBeta2Serveur(CasBeta2):
             base_a = fichiers_de(serveur.dossier)
             self.page.goto("about:blank")
         manifeste = self.verifier_zip_export(nom_zip, noms, entrees, {}, "serveur", FORMAT_COURANT)
-        self.assertEqual(manifeste["version_appli"], "2.0.0-beta.2")
+        self.assertEqual(manifeste["version_appli"], VERSION_APPLI)
         for table in TABLES:                       # l'export est la base A, table par table (cellules)
             self.assertEqual(lire_table(entrees[table + ".csv"]), lire_table(base_a.get(table + ".csv", b"")), table)
 
@@ -251,7 +251,7 @@ class TestBeta2Dossier(CasBeta2):
             self.assertEqual(sans_manifeste(contenu), sans_acces, nom)
         self.verifier_manifeste(copies[maj], "avant-mise-a-jour", FORMAT_COURANT, "dossier",
                                 {"de": None, "vers": VERSION_APPLI})
-        self.assertEqual(version_notee(demarre), "2.0.0-beta.2")
+        self.assertEqual(version_notee(demarre), VERSION_APPLI)
         self.verifier_aucune_perte(origine, demarre)       # l'ouverture crée les tables absentes, génère les OT
         self.aucun_bandeau()
         self.assertEqual(self.page.evaluate("Donnees.etatDuFormat().depart"), FORMAT_COURANT)

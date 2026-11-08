@@ -7,6 +7,12 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [2.0.0] - 2026-11-08
+
+Première version stable de la 2.0 : elle reprend aussi tout ce qu'apportent la 2.0.0 bêta 1 et la bêta 2
+(sections ci-dessous). Depuis la 1.2 : placez la 2.0 dans le même dossier ; Prévo fait une sauvegarde avant la mise à
+jour, puis met vos données au format courant.
+
 ### Ajouté
 
 - **Prévo en anglais** : toute l'interface, l'aide à l'écran, les messages du serveur et sa console existent en
@@ -307,7 +313,8 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.2...HEAD
+[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.2...v2.0.0
 [2.0.0-beta.2]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.1...v2.0.0-beta.2
 [2.0.0-beta.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v2.0.0-beta.1
 [1.2.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v1.2.1
