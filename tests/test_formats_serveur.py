@@ -1,7 +1,7 @@
 """Tests du registre des formats côté serveur (serveur.py, section « Formats des données (miroir de js/formats.js,
 T184) ») : cle_de_colonne, colonnes_du_format, tables_du_format, format_du_fichier, version_de_base, ETAPES_FORMAT,
-migrer_tables (chantier « socle de données », T184 ; format 4 de la 2.2, T385 ; décisions D167, D168 ; ARCHITECTURE.md
-§5.6, §14.1, §20.2 ; CS169).
+migrer_tables, reserves_reprises (chantier « socle de données », T184 ; format 4 de la 2.2, T385 ; reprise des
+observations en réserves, T390 ; décisions D167, D168, D183 ; ARCHITECTURE.md §5.6, §14.1, §20.2 ; CS169, CS170).
 
 Chaque jeu de tests/fixtures/formats (tests/jeux_formats.py) est copié dans un dossier temporaire (règle du chantier :
 jamais ailleurs). Côté serveur, une base est {table: {'entete', 'lignes': [{colonne: cellule}]}}, cellules lues par
@@ -13,13 +13,18 @@ lire_csv_tolerant (apostrophe de protection comprise) et réécrites par ecrire_
    en fin avec leur défaut (après les colonnes inconnues, qui restent à leur place), tables créées (wiki et format 4
    compris), journal (f1 3 lignes, f2 2, f3 1), idempotence, pureté (entrée inchangée), plus-recent (version 5)
    laissé intact par migrer_tables(base, 5, 4) ; détail de l'étape 3→4 sur les bases 2.1.0 ; cas fabriqués et
-   erreurs. La reprise des observations en réserves (D183) n'est pas encore côté serveur (T390) : reserves_controle
-   est créée vide.
+   erreurs. Reprise des observations en réserves (D183, CS170) : réserves du LISEZMOI des jeux (cellules écrites
+   comme Prévo les écrit), cas fabriqués (formes d'Excel, numérotation en texte au-delà de la limite de chiffres de
+   int(), réserve déjà là), étape 3→4 rejouée sans rien de plus.
 2. TestConcordanceNavigateur (Chromium, page-vide.html en file://) : mêmes listes que Schema et Formats (colonnes,
    tables, défauts, étapes) ; mêmes résultats que Formats.formatDuFichier, Formats.versionDeBase, Formats.ETAPES et
    Donnees.csv.relireValeur / ecrireValeur sur des cas fabriqués ; pour chaque jeu, lecture + migration + écriture
    côté navigateur (Donnees.csv.analyser, Formats.migrer, Donnees.csv.serialiser) et côté serveur
-   (lire_csv_tolerant, migrer_tables, ecrire_tableau_csv) → mêmes octets par table, mêmes formats, même journal.
+   (lire_csv_tolerant, migrer_tables, ecrire_tableau_csv) → mêmes octets par table (reserves_controle reprise
+   comprise), mêmes formats, même journal ; reserves_reprises donne les lignes de Formats.reservesReprises (écrites
+   par Donnees.csv.ecrireValeur) sur des fichiers fabriqués (oui, x, vrai, JJ/MM/AAAA, U+2028 et U+0085 qui ne
+   coupent pas une ligne, apostrophes, « ; », guillemets, réserve déjà là), et ses copies de lecture des dates et
+   des booléens les résultats de Donnees.normaliser.
 
 Écarts PRÉEXISTANTS entre les deux lecteurs/écrivains CSV (pas entre Formats.migrer et migrer_tables, qui rendent les
 mêmes en-têtes), documentés par des tests expectedFailure, et cernés chacun par un test qui passe (l'écart est
@@ -46,6 +51,7 @@ Lancer depuis la racine du projet :
 import base64
 import copy
 import importlib.util
+import re
 import shutil
 import sys
 import tempfile
@@ -127,6 +133,139 @@ ECARTS_DOCUMENTES = {
     "windows-1252": ("equipements", "valeurs"),           # C : dates normalisées par analyser
 }
 JEUX_ABIMES = {"vide": "equipements", "entete-tronque": "ordres_travail"}
+
+# Reprise des observations en réserves (D183, CS170) : texte fixe du commentaire de levée, colonnes de
+# reserves_controle (note de conception du format 4, §2.2) et réserves attendues des deux jeux de la 2.2, recopiées de
+# tests/fixtures/formats/LISEZMOI.md, en CELLULES du fichier (« - Raccord… » s'écrit « '- Raccord… ») :
+# (id, controle_id, date_controle, texte, levee).
+COMMENTAIRE_LEVEE_REPRISE = "levée avant la 2.2, date inconnue"
+COLONNES_RESERVES = ["id", "controle_id", "date_controle", "texte", "gravite", "echeance_levee", "levee", "date_levee",
+                     "commentaire_levee", "ot_id"]
+RESERVES_DU_LISEZMOI = {
+    "reserves-a-reprendre": [
+        ("RES-00001", "CTR-0001", "2026-02-10", "Garde-corps de la passerelle desserré", "0"),
+        ("RES-00002", "CTR-0001", "2026-02-10", "Fin de course haut à régler", "0"),
+        ("RES-00003", "CTR-0001", "2026-02-10", "Câble de levage : un toron cassé", "0"),
+        ("RES-00004", "CTR-0002", "2026-03-18", "Klaxon de recul inaudible", "1"),
+        ("RES-00005", "CTR-0002", "2026-03-18", "Ceinture du siège conducteur usée", "1"),
+        ("RES-00006", "CTR-0005", "2026-03-24", "'- Raccord de la vanne 3 suintant", "0"),
+        ("RES-00007", "CTR-0005", "2026-03-24", "'= Pression basse à surveiller", "0"),
+        ("RES-00008", "CTR-0005", "2026-03-24", "'- Étiquette du fluide illisible", "0"),
+        ("RES-00009", "CTR-0006", "2026-06-02", 'Gaine "B" percée ; débit insuffisant', "0"),
+        ("RES-00010", "CTR-0006", "2026-06-02", 'Filtre du caisson "F7" colmaté', "0"),
+        ("RES-00011", "CTR-0007", "2026-01-15", "Cellule de sécurité inopérante", "0"),
+        ("RES-00012", "CTR-0007", "2026-01-15", "Bord sensible fendu", "0"),
+        ("RES-00013", "CTR-0007", "2026-01-15", "Signalisation au sol effacée", "0"),
+        ("RES-00014", "CTR-0007", "2026-01-15", "Notice absente du local", "0"),
+        ("RES-00015", "CTR-0008", "", "Rapport du contrôle initial non retrouvé", "0"),
+    ],
+    "f3-v2.1.0": [
+        ("RES-00001", "CTR-0004", "2025-04-03", "Purgeur automatique du réservoir défectueux : à remplacer avant la "
+                                                "prochaine inspection.", "0"),
+    ],
+}
+
+
+def reserve_complete(id, controle_id, date_controle, texte, levee):
+    """Ligne entière de reserves_controle d'une réserve reprise, en cellules (D183 : gravité, échéance, date de levée
+    et OT vides ; commentaire fixe seulement si levée), dans l'ordre des colonnes du schéma."""
+    return {"id": id, "controle_id": controle_id, "date_controle": date_controle, "texte": texte, "gravite": "",
+            "echeance_levee": "", "levee": levee, "date_levee": "",
+            "commentaire_levee": COMMENTAIRE_LEVEE_REPRISE if levee == "1" else "", "ot_id": ""}
+
+
+def controle_fabrique(identifiant, observations, levees, date):
+    """Ligne de controles_reglementaires en cellules (None : colonne absente de la ligne)."""
+    ligne = {"id": identifiant, "equipement_id": "EQ-0001", "observations": observations,
+             "observations_levees": levees, "derniere_date": date}
+    return {colonne: cellule for colonne, cellule in ligne.items() if cellule is not None}
+
+
+# Cas fabriqués de la reprise, en CELLULES du fichier (formes d'Excel, apostrophes, bords blancs, U+2028 et U+0085 qui
+# ne coupent pas une ligne) ; les mêmes que tests/test_formats_js.py (test_reserves_reprises_cas_fabriques), plus les
+# apostrophes de protection. Réserves reçues : plus grand identifiant exact RES-12 (bords blancs retirés), donc
+# numérotation depuis RES-00013 ; CTR-0002 en a déjà une (controle_id aux bords blancs).
+CONTROLES_FABRIQUES = [
+    controle_fabrique("CTR-0001", "Un\r\nDeux\rTrois\nQuatre", "oui", "15/01/2024"),
+    controle_fabrique("CTR-0002", "Déjà repris", "0", "2024-02-01"),
+    controle_fabrique("", "Sans identifiant", "1", "2024-02-02"),
+    controle_fabrique("   ", "Identifiant blanc", "1", "2024-02-03"),
+    controle_fabrique(" CTR-0003 ", "  - puce gardée  \n" + IDEOGRAPHIQUE + "• autre \n1. numérotée\t", "X",
+                      " 5.3.2024 "),
+    controle_fabrique("CTR-0004", "ligne même ligne\u0085encore\u000bet\u000cfin toujours", "non", "31/02/2024"),
+    controle_fabrique("CTR-0005", "Premier doublon", "1", ""),
+    controle_fabrique("CTR-0005", "Second doublon", "faux", "demain"),
+    controle_fabrique("CTR-0006", "", "1", "2024-01-01"),
+    controle_fabrique("CTR-0007", " \t\r\n  ", "1", "2024-01-01"),
+    {"id": "CTR-0008"},
+    controle_fabrique("CTR-0009", "Levée par vrai", " Vrai ", "2024-1-5"),
+    controle_fabrique("CTR-0010", "\u0085bord NEL\u0085\n﻿bord BOM﻿\n bord LS ", "peut-être", None),
+    controle_fabrique("CTR-0011", "'- garde-corps\n=SOMME(A1)\n'abc\n12/03\nGaine \"B\" ; percée", "1", "'2024-01-15"),
+    controle_fabrique("CTR-0012", "'", "constructor", "29/02/0000"),
+    controle_fabrique("CTR-0013", "Bissextile de Date.UTC", "TRUE", "29/02/0004"),
+]
+RESERVES_FABRIQUEES = [
+    {"id": "RES-00007", "controle_id": " CTR-0002 ", "texte": "gardée"},
+    {"id": " RES-12 ", "controle_id": "CTR-0099"},
+    {"id": "RES-0003", "controle_id": ""},
+    {"id": "res-00099", "controle_id": "CTR-0098"},
+    {"id": "RES-00050x"}, {"id": "RES-"}, {"id": "RES-1e3"}, {"id": "RES-١٢٣"}, {"id": "RES--5"},
+    {"id": "RES-１００"},
+]
+RESERVES_FABRIQUEES_ATTENDUES = [
+    ("RES-00013", "CTR-0001", "2024-01-15", "Un", "1"),
+    ("RES-00014", "CTR-0001", "2024-01-15", "Deux", "1"),
+    ("RES-00015", "CTR-0001", "2024-01-15", "Trois", "1"),
+    ("RES-00016", "CTR-0001", "2024-01-15", "Quatre", "1"),
+    # CTR-0002 a déjà une réserve ; identifiants vide et blanc : rien
+    ("RES-00017", "CTR-0003", "2024-03-05", "'- puce gardée", "1"),
+    ("RES-00018", "CTR-0003", "2024-03-05", "• autre", "1"),
+    ("RES-00019", "CTR-0003", "2024-03-05", "1. numérotée", "1"),
+    ("RES-00020", "CTR-0004", "31/02/2024", "ligne même ligne\u0085encore\u000bet\u000cfin toujours", "0"),
+    ("RES-00021", "CTR-0005", "", "Premier doublon", "1"),
+    ("RES-00022", "CTR-0005", "demain", "Second doublon", "0"),
+    # CTR-0006 et CTR-0007 : vide ou blanc ; CTR-0008 : sans observations
+    ("RES-00023", "CTR-0009", "2024-01-05", "Levée par vrai", "1"),
+    ("RES-00024", "CTR-0010", "", "\u0085bord NEL\u0085", "0"),
+    ("RES-00025", "CTR-0010", "", "bord BOM", "0"),
+    ("RES-00026", "CTR-0010", "", "bord LS", "0"),
+    # Cellule protégée (« '- garde-corps… ») relue sans l'apostrophe, chaque ligne réécrite comme un champ texte
+    ("RES-00027", "CTR-0011", "'2024-01-15", "'- garde-corps", "1"),
+    ("RES-00028", "CTR-0011", "'2024-01-15", "'=SOMME(A1)", "1"),
+    ("RES-00029", "CTR-0011", "'2024-01-15", "''abc", "1"),
+    ("RES-00030", "CTR-0011", "'2024-01-15", "'12/03", "1"),
+    ("RES-00031", "CTR-0011", "'2024-01-15", 'Gaine "B" ; percée', "1"),
+    ("RES-00032", "CTR-0012", "29/02/0000", "''", "0"),
+    ("RES-00033", "CTR-0013", "0004-02-29", "Bissextile de Date.UTC", "1"),
+]
+
+
+def fichier_fabrique(entete, lignes):
+    """Octets d'un CSV écrit comme Prévo l'écrit, depuis des lignes {colonne: cellule} (cellule absente : '')."""
+    return serveur.ecrire_tableau_csv(entete, [[ligne.get(nom, "") for nom in entete] for ligne in lignes])
+
+
+def reserves_attendues(controles):
+    """Réserves que la reprise tire de lignes de contrôles CANONIQUES (cellules d'un jeu d'essai : dates AAAA-MM-JJ ou
+    vides, booléens 0/1), sans réserve existante : recopie de la règle de la note de conception du format 4 (§3.2),
+    indépendante de reserves_reprises (seules relire_valeur_texte et ecrire_valeur_texte, comparées au navigateur, sont
+    prises au serveur). Une valeur non canonique fait échouer le test (elle relève des cas fabriqués)."""
+    reserves = []
+    for controle in controles:
+        identifiant = controle.get("id", "").strip()
+        observations = serveur.relire_valeur_texte(controle.get("observations", ""))
+        if identifiant == "" or observations.strip() == "":
+            continue
+        date = controle.get("derniere_date", "").strip()
+        levee = controle.get("observations_levees", "").strip()
+        assert date == "" or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", date), date
+        assert levee in ("", "0", "1"), levee
+        for morceau in re.split(r"\r\n|\r|\n", observations):
+            if morceau.strip() != "":
+                reserves.append(reserve_complete("RES-%05d" % (len(reserves) + 1), identifiant, date,
+                                                 serveur.ecrire_valeur_texte(morceau.strip()),
+                                                 "1" if levee == "1" else "0"))
+    return reserves
 
 
 def tables_ajoutees_apres(format):
@@ -433,8 +572,11 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
                     with self.subTest(jeu=jeu, table=table):
                         self.assertEqual(serveur.format_du_fichier(table, contenu["entete"]), FORMAT_COURANT)
                         if table not in avant:
+                            # Table créée : vide, sauf reserves_controle, qui reçoit les observations reprises (D183)
+                            controles = avant.get("controles_reglementaires", {"lignes": []})["lignes"]
+                            lignes = reserves_attendues(controles) if table == "reserves_controle" else []
                             self.assertEqual(contenu, {"entete": list(serveur.COLONNES_PAR_TABLE[table]),
-                                                       "lignes": []})
+                                                       "lignes": lignes})
                             continue
                         entete_avant = avant[table]["entete"]
                         nouvelles = [c for c in serveur.COLONNES_PAR_TABLE[table] if c not in entete_avant]
@@ -446,10 +588,14 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
                                     for c in COLONNES_AJOUTEES[f].get(table, [])]
                         self.assertEqual(nouvelles[len(nouvelles) - len(ajoutees):], ajoutees)
                 self.assertEqual(sorted(apres), sorted(serveur.TABLES))
-                # Les tables des formats suivants sont créées (vides) ; celles du jeu sont gardées
+                # Chaque jeu tiré de la démo a un contrôle à observations (CTR-0004) : une réserve au moins ; f1 n'a
+                # pas de contrôles
+                self.assertEqual(len(apres["reserves_controle"]["lignes"]) > 0, "controles_reglementaires" in avant)
+                # Les tables des formats suivants sont créées (vides, sauf la reprise) ; celles du jeu sont gardées
                 for table in tables_ajoutees_apres(de):
                     self.assertNotIn(table, avant)
-                    self.assertEqual(apres[table]["lignes"], [], table)
+                    if table != "reserves_controle":
+                        self.assertEqual(apres[table]["lignes"], [], table)
                 # version_schema écrite comme Prévo l'écrit, relue 4
                 self.assertEqual([l["valeur"] for l in apres["parametres"]["lignes"] if l["cle"] == "version_schema"],
                                  ["'%d" % FORMAT_COURANT])
@@ -500,9 +646,10 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
     def test_migration_f3_au_format_4_detail(self):
         """Bases 2.1.0 (f3-v2.1.0 et sa variante reserves-a-reprendre) : une étape, 3→4 ; seules equipements,
         ordres_travail, habilitations et controles_reglementaires changent (colonnes en fin, source_periodicite =
-        saisie, les autres vides), parametres (version_schema « '4 ») ; les trois tables du format 4 sont créées vides
-        (reprise des réserves : T390) ; la colonne inconnue remarque_maison reste à sa place, AVANT les colonnes du
-        format 4 (règle de 2→3, la même que tests/test_formats_js.py)."""
+        saisie, les autres vides), parametres (version_schema « '4 ») ; les trois tables du format 4 sont créées,
+        garanties et contrats_prestataires vides, reserves_controle avec les réserves reprises du LISEZMOI des jeux
+        (D183, CS170) ; la colonne inconnue remarque_maison reste à sa place, AVANT les colonnes du format 4 (règle de
+        2→3, la même que tests/test_formats_js.py)."""
         for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
             with self.subTest(jeu=jeu):
                 avant = self.base(jeu)
@@ -511,7 +658,10 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
                 self.assertEqual(etapes, [{"de": 3, "vers": 4, "description": DESCRIPTION_FORMAT_4}])
                 self.assertEqual(sorted(set(apres) - set(avant)), sorted(TABLES_AJOUTEES[4]))
                 for table in TABLES_AJOUTEES[4]:
-                    self.assertEqual(apres[table], {"entete": list(serveur.COLONNES_PAR_TABLE[table]), "lignes": []})
+                    lignes = ([reserve_complete(*reserve) for reserve in RESERVES_DU_LISEZMOI[jeu]]
+                              if table == "reserves_controle" else [])
+                    self.assertEqual(apres[table], {"entete": list(serveur.COLONNES_PAR_TABLE[table]),
+                                                    "lignes": lignes})
                 for table in avant:
                     if table == "parametres" or table in COLONNES_AJOUTEES[4]:
                         continue
@@ -691,6 +841,166 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
         self.assertEqual(quatre["contrats_prestataires"]["lignes"], [])
         self.assertEqual(quatre["parametres"]["lignes"], [{"cle": "version_schema", "valeur": "'4"}])
         self.assertEqual(len(serveur.ETAPES_FORMAT[2].appliquer(None)), NB_TABLES)
+
+    # -- Reprise des observations en réserves (D183, CS170) -----------------------------------------------------
+
+    def test_reprise_cs170_sur_le_jeu_reserves_a_reprendre(self):
+        """CS170 : trois lignes non vides → trois réserves ; observations levées → réserves levées, date de levée vide,
+        commentaire fixe ; cellules écrites comme Prévo les écrit (apostrophe de protection, guillemets doublés) ;
+        contrôles inchangés ; étape rejouée : rien de plus."""
+        avant = self.base("reserves-a-reprendre")
+        quatre = serveur.migrer_tables(avant, 3, FORMAT_COURANT)[0]
+        reserves = quatre["reserves_controle"]
+        self.assertEqual(serveur.COMMENTAIRE_LEVEE_REPRISE, COMMENTAIRE_LEVEE_REPRISE)
+        self.assertEqual(reserves["entete"], COLONNES_RESERVES)
+        self.assertEqual(reserves["lignes"],
+                         [reserve_complete(*r) for r in RESERVES_DU_LISEZMOI["reserves-a-reprendre"]])
+        self.assertEqual(reserves["lignes"], reserves_attendues(avant["controles_reglementaires"]["lignes"]))
+        octets = octets_de_table(reserves).decode("utf-8-sig").split("\r\n")
+        self.assertEqual(octets[0], ";".join(COLONNES_RESERVES))
+        self.assertEqual(octets[4], "RES-00004;CTR-0002;2026-03-18;Klaxon de recul inaudible;;;1;;"
+                                    "levée avant la 2.2, date inconnue;")
+        self.assertEqual(octets[6], "RES-00006;CTR-0005;2026-03-24;'- Raccord de la vanne 3 suintant;;;0;;;")
+        self.assertEqual(octets[7], "RES-00007;CTR-0005;2026-03-24;'= Pression basse à surveiller;;;0;;;")
+        self.assertEqual(octets[9], 'RES-00009;CTR-0006;2026-06-02;"Gaine ""B"" percée ; débit insuffisant";;;0;;;')
+        self.assertEqual(octets[15], "RES-00015;CTR-0008;;Rapport du contrôle initial non retrouvé;;;0;;;")
+        self.assertEqual(octets[16:], [""])
+        # Contrôles sans observations (levés ou non) ou aux lignes blanches seulement : rien
+        self.assertFalse({"CTR-0003", "CTR-0004", "CTR-0009"} & {l["controle_id"] for l in reserves["lignes"]})
+        # Les contrôles gardent leurs cellules (CS169 ; colonnes du format 4 ajoutées en fin)
+        for ligne_avant, ligne in zip(avant["controles_reglementaires"]["lignes"],
+                                      quatre["controles_reglementaires"]["lignes"]):
+            self.assertEqual({c: ligne[c] for c in ligne_avant}, ligne_avant)
+        # Rejouée : rien de nouveau
+        self.assertEqual(serveur.reserves_reprises(quatre["controles_reglementaires"]["lignes"], reserves["lignes"]),
+                         [])
+        self.assertEqual(serveur.ETAPES_FORMAT[2].appliquer(quatre), quatre)
+
+    def test_reserves_reprises_cas_fabriques(self):
+        """reserves_reprises sur des cellules fabriquées : formes d'Excel (oui, x, Vrai, TRUE, JJ/MM/AAAA, J.M.AAAA,
+        date impossible gardée en texte, année 0004 et 0000 lues comme Date.UTC), contrôle déjà doté d'une réserve,
+        identifiant vide, blanc ou en double, coupes sur CRLF, CR et LF seulement, bords blancs retirés comme trim (BOM,
+        U+2028, U+2029, espace idéographique oui ; U+0085 non), apostrophes de protection relues puis réécrites,
+        numérotation en texte après le plus grand RES-<chiffres> exact (au-delà de la limite de chiffres de int()),
+        lignes et entrées étranges ignorées ; pure, déterministe, rejouée sans rien de plus."""
+        controles = CONTROLES_FABRIQUES + [None, 3, "CTR-0014", ["CTR-0015", "x"]]
+        reserves = RESERVES_FABRIQUEES + [None, "RES-00500"]
+        avant = copy.deepcopy([controles, reserves])
+        resultat = serveur.reserves_reprises(controles, reserves)
+        self.assertEqual([controles, reserves], avant, "reserves_reprises a modifié ses entrées")
+        self.assertEqual(resultat, [reserve_complete(*r) for r in RESERVES_FABRIQUEES_ATTENDUES])
+        self.assertEqual({tuple(l) for l in resultat}, {tuple(COLONNES_RESERVES)})       # colonnes dans l'ordre
+        self.assertEqual(serveur.reserves_reprises(controles, reserves), resultat)
+        self.assertEqual(serveur.reserves_reprises(controles, reserves + resultat), [])
+        for entree in ((None, None), ([{}], "x"), ("CTR", 3), ({}, {}), ([], [])):
+            self.assertEqual(serveur.reserves_reprises(*entree), [])
+        self.assertEqual([l["id"] for l in serveur.reserves_reprises([controle_fabrique("CTR-1", "a", "0", "")], None)],
+                         ["RES-00001"])
+
+        def un(identifiant):
+            existantes = [] if identifiant is None else [{"id": identifiant, "controle_id": "Z"}]
+            return serveur.reserves_reprises([controle_fabrique("A", "x", "0", "")], existantes)[0]["id"]
+
+        tres_long = "9" * 5000
+        limite = getattr(sys, "get_int_max_str_digits", lambda: 0)()     # Python 3.11 et plus : 4300 par défaut
+        if limite:
+            self.assertLess(limite, len(tres_long))
+            with self.assertRaises(ValueError):
+                int(tres_long)                      # d'où les numéros comparés et augmentés en texte
+        numeros = [None, "RES-00000", "RES-999999", "RES-99999", "RES-99999999999999999999",
+                   "RES-0000000000000000000000041", " RES-7\t", "RES-" + tres_long, "RES-" + "0" * 4999 + "7"]
+        self.assertEqual([un(n) for n in numeros],
+                         ["RES-00001", "RES-00001", "RES-1000000", "RES-100000", "RES-100000000000000000000",
+                          "RES-00042", "RES-00008", "RES-1" + "0" * 5000, "RES-00008"])
+        ordres = [[{"id": "RES-9"}, {"id": "RES-10"}], [{"id": "RES-10"}, {"id": "RES-9"}],
+                  [{"id": "RES-099"}, {"id": "RES-100"}, {"id": "RES-0101"}]]
+        self.assertEqual([serveur.reserves_reprises([controle_fabrique("A", "x", "0", "")], existantes)[0]["id"]
+                          for existantes in ordres], ["RES-00011", "RES-00011", "RES-00102"])
+        self.assertEqual([serveur.numero_suivant(n) for n in ("", "1", "9", "41", "99", "1099", "190")],
+                         ["1", "2", "10", "42", "100", "1100", "191"])
+        # Colonnes nommées comme dans le fichier (casse, espaces, accents) : reconnues comme Donnees.csv.analyser
+        a_la_main = serveur.reserves_reprises(
+            [{" ID ": "CTR-1", "Observations": "Fuite", "Observations levées": "oui", "Dernière date": "1/2/2024"}],
+            [{"Id": "RES-00004", " Contrôle_id": "CTR-2"}])
+        self.assertEqual(a_la_main, [reserve_complete("RES-00005", "CTR-1", "2024-02-01", "Fuite", "1")])
+
+    def test_dates_et_booleens_lus_comme_donnees(self):
+        """Copies de lireDate et normaliserBooleen (js/donnees.js) : quelques résultats connus ; la comparaison au
+        navigateur sur une batterie de valeurs est dans TestConcordanceNavigateur."""
+        dates = {"2024-01-15": "2024-01-15", " 2024-1-5 ": "2024-01-05", "15/01/2024": "2024-01-15",
+                 "5.3.2024": "2024-03-05", "15-01-2024": "2024-01-15", "15/01-2024": "15/01-2024",
+                 "31/02/2024": "31/02/2024", "29/02/2024": "2024-02-29", "29/02/2023": "29/02/2023",
+                 "29/02/1900": "29/02/1900", "29/02/2000": "2000-02-29", "29/02/0004": "0004-02-29",
+                 "29/02/0000": "29/02/0000", "29/02/0100": "29/02/0100", "0000-01-01": "0000-01-01", "": "",
+                 "  ": "", "'2024-01-15": "'2024-01-15", "2024-01-15\n": "2024-01-15", "2024-01-15\n1": "2024-01-15\n1",
+                 "１５/01/2024": "１５/01/2024", INSECABLE + "15/01/2024": "2024-01-15", None: ""}
+        self.assertEqual({d: serveur.date_lue_js(d) for d in dates}, dates)
+        booleens = {"1": "1", "0": "0", "oui": "1", " OUI ": "1", "non": "0", "Vrai": "1", "faux": "0", "TRUE": "1",
+                    "false": "0", "yes": "1", "No": "0", "x": "1", "X": "1", "": "", "2": "2",
+                    "constructor": "constructor", "Ｘ": "Ｘ", None: ""}
+        self.assertEqual({b: serveur.booleen_lu_js(b) for b in booleens}, booleens)
+
+    def test_etape_3_4_reprise_cas_fabriques(self):
+        """Étape 3→4 avec la reprise (miroir de tests/test_formats_js.py) : base 2.1 sans reserves_controle (table
+        créée avec les réserves reprises, migrer_tables = ETAPES_FORMAT[2].appliquer, rejouée : rien de plus) ; base
+        déjà au format 4 dont un contrôle a une réserve créée dans la 2.2 avant la reprise (§3.5) : réserve gardée en
+        tête, ce contrôle n'est pas repris, les autres le sont à la suite ; en-tête de reserves_controle écrit à la
+        main (colonnes nommées comme le fichier, colonne inconnue vide) ; base sans contrôles : aucune réserve ;
+        entrées jamais modifiées."""
+        colonnes3 = serveur.colonnes_du_format("controles_reglementaires", 3)
+
+        def controles():
+            return {"entete": list(colonnes3), "lignes": [
+                dict({c: "" for c in colonnes3}, **controle_fabrique("CTR-0001", "Garde-corps\nÉclairage", "1",
+                                                                     "2024-05-06")),
+                dict({c: "" for c in colonnes3}, **controle_fabrique("CTR-0002", "Fuite", "0", "")),
+                dict({c: "" for c in colonnes3}, **controle_fabrique("CTR-0003", "", "1", "2024-05-07"))]}
+
+        base21 = {"controles_reglementaires": controles(),
+                  "parametres": {"entete": ["cle", "valeur"], "lignes": [{"cle": "version_schema", "valeur": "'3"}]}}
+        saisie = {"id": "RES-00004", "controle_id": "CTR-0002", "date_controle": "2024-07-01",
+                  "texte": "saisie dans la 2.2", "gravite": "majeure", "echeance_levee": "", "levee": "0",
+                  "date_levee": "", "commentaire_levee": "", "ot_id": ""}
+        base4 = {"controles_reglementaires": controles(),
+                 "reserves_controle": {"entete": list(COLONNES_RESERVES), "lignes": [saisie]},
+                 "parametres": {"entete": ["cle", "valeur"], "lignes": [{"cle": "version_schema", "valeur": "'4"}]}}
+        avant = copy.deepcopy([base21, base4])
+        une = serveur.ETAPES_FORMAT[2].appliquer(base21)
+        reprise4 = serveur.ETAPES_FORMAT[2].appliquer(base4)
+        self.assertEqual([base21, base4], avant)
+        reprises21 = [reserve_complete("RES-00001", "CTR-0001", "2024-05-06", "Garde-corps", "1"),
+                      reserve_complete("RES-00002", "CTR-0001", "2024-05-06", "Éclairage", "1"),
+                      reserve_complete("RES-00003", "CTR-0002", "", "Fuite", "0")]
+        self.assertEqual(une["reserves_controle"], {"entete": COLONNES_RESERVES, "lignes": reprises21})
+        self.assertEqual(serveur.ETAPES_FORMAT[2].appliquer(une), une)
+        self.assertEqual(serveur.migrer_tables(base21, 3, 4)[0], une)
+        self.assertEqual(serveur.migrer_tables(base21, 1, 4)[0]["reserves_controle"], une["reserves_controle"])
+        self.assertEqual([(l["observations"], l["observations_levees"])
+                          for l in une["controles_reglementaires"]["lignes"]],
+                         [("Garde-corps\nÉclairage", "1"), ("Fuite", "0"), ("", "1")])
+        self.assertEqual(reprise4["reserves_controle"]["lignes"], [
+            saisie, reserve_complete("RES-00005", "CTR-0001", "2024-05-06", "Garde-corps", "1"),
+            reserve_complete("RES-00006", "CTR-0001", "2024-05-06", "Éclairage", "1")])
+        self.assertIsNot(reprise4["reserves_controle"]["lignes"][0], base4["reserves_controle"]["lignes"][0])
+        self.assertEqual(serveur.ETAPES_FORMAT[2].appliquer(reprise4), reprise4)
+        # En-tête écrit à la main : la réserve reprise prend les noms du fichier, la colonne inconnue reste vide
+        a_la_main = dict(base21, reserves_controle={"entete": [" Id ", "Contrôle_id", "Texte", "note_maison"],
+                                                    "lignes": []})
+        reserves = serveur.ETAPES_FORMAT[2].appliquer(a_la_main)["reserves_controle"]
+        self.assertEqual(reserves["entete"][:4], [" Id ", "Contrôle_id", "Texte", "note_maison"])
+        self.assertEqual(reserves["lignes"][0], {" Id ": "RES-00001", "Contrôle_id": "CTR-0001", "Texte": "Garde-corps",
+                                                 "note_maison": "", "date_controle": "2024-05-06", "gravite": "",
+                                                 "echeance_levee": "", "levee": "1", "date_levee": "",
+                                                 "commentaire_levee": COMMENTAIRE_LEVEE_REPRISE, "ot_id": ""})
+        self.assertEqual(octets_de_table(reserves).decode("utf-8-sig").split("\r\n")[1],
+                         "RES-00001;CTR-0001;Garde-corps;;2024-05-06;;;1;;%s;" % COMMENTAIRE_LEVEE_REPRISE)
+        # Base sans contrôles (appel par table, sonde du passage au démarrage) : aucune réserve
+        sans_controles = serveur.ETAPES_FORMAT[2].appliquer({"ordres_travail": {"entete": ["id"], "lignes": [{}]}})
+        self.assertEqual(sans_controles["reserves_controle"], {"entete": COLONNES_RESERVES, "lignes": []})
+        self.assertEqual(serveur.ETAPES_FORMAT[2].appliquer(None)["reserves_controle"],
+                         {"entete": COLONNES_RESERVES, "lignes": []})
+        sonde = serveur.migrer_tables({"controles_reglementaires": {"entete": list(colonnes3), "lignes": [{}]}}, 3, 4)
+        self.assertEqual(sonde[0]["reserves_controle"]["lignes"], [])
 
     def test_migrer_etapes_choisies_et_erreurs(self):
         base = {"ordres_travail": {"entete": serveur.colonnes_du_format("ordres_travail", 1), "lignes": []}}
@@ -934,6 +1244,12 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
              "habilitations": {"entete": ["id", "intitule"], "lignes": [{"id": "HAB-1", "intitule": "B1V"}]},
              "reserves_controle": {"entete": ["id", "texte"], "lignes": [{"id": "RES-00003", "texte": "t"}]},
              "garanties": {"entete": ["id", "note"], "lignes": [{"id": "GAR-0001", "note": "n"}]}},
+            # Reprise des observations (D183) : valeurs canoniques, qui s'écrivent sans apostrophe (cellule = valeur)
+            {"controles_reglementaires": {"entete": ["id", "observations", "observations_levees", "derniere_date"],
+                                          "lignes": [controle_fabrique("CTR-1", "Un\nDeux", "1", "2024-05-06"),
+                                                     controle_fabrique("CTR-2", "Trois", "0", "")]},
+             "reserves_controle": {"entete": list(COLONNES_RESERVES),
+                                   "lignes": [reserve_complete("RES-00009", "CTR-2", "", "saisie", "0")]}},
         ]
         js = self.evaluer("""(bases) => bases.map((tables) => Formats.ETAPES.map((etape) =>
           etape.appliquer({ tables: tables }).tables))""", bases)
@@ -945,6 +1261,102 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
                         if ligne["cle"] == "version_schema":
                             ligne["valeur"] = serveur.relire_valeur_texte(ligne["valeur"])
                     self.assertEqual(python, js[numero][rang])
+        self.assertEqual([l["id"] for l in js[-1][2]["reserves_controle"]["lignes"]],
+                         ["RES-00009", "RES-00010", "RES-00011"])
+
+    # -- Reprise des observations en réserves (D183) : mêmes réserves, mêmes octets ------------------------------
+
+    def test_reserves_controle_memes_octets_sur_chaque_jeu(self):
+        """Sur chaque jeu (abîmés compris : leurs contrôles sont lisibles), reserves_controle migrée aux mêmes octets
+        des deux côtés, avec les réserves reprises ; plus-recent (format 5, rien n'est migré) : la table n'existe
+        d'aucun côté."""
+        for jeu in JEUX:
+            with self.subTest(jeu=jeu):
+                navigateur, cote_serveur = self.chemins(jeu)
+                base = base_de_fichiers(self.fichiers[jeu])
+                if cote_serveur["de"] >= FORMAT_COURANT:
+                    self.assertNotIn("reserves_controle", navigateur["octets"])
+                    self.assertNotIn("reserves_controle", cote_serveur["octets"])
+                    continue
+                attendues = reserves_attendues(base.get("controles_reglementaires", {"lignes": []})["lignes"])
+                if jeu in RESERVES_DU_LISEZMOI:
+                    self.assertEqual(attendues, [reserve_complete(*r) for r in RESERVES_DU_LISEZMOI[jeu]])
+                self.assertEqual(len(attendues) > 0, jeu != "f1")
+                self.assertEqual(cote_serveur["octets"]["reserves_controle"],
+                                 octets_de_table({"entete": COLONNES_RESERVES, "lignes": attendues}))
+                self.assertEqual(navigateur["octets"]["reserves_controle"], cote_serveur["octets"]["reserves_controle"])
+
+    def test_reserves_reprises_cas_fabriques_comme_le_navigateur(self):
+        """Fichiers fabriqués (CONTROLES_FABRIQUES, RESERVES_FABRIQUEES ; colonnes « Observations » et « Dernière
+        date » nommées à la main) lus par Donnees.csv.analyser puis repris par Formats.reservesReprises, chaque valeur
+        écrite par Donnees.csv.ecrireValeur : les mêmes lignes, cellule pour cellule, que reserves_reprises sur les
+        cellules lues par lire_csv_tolerant. Puis la base entière (version 3, réserves existantes dont un numéro de
+        5000 chiffres) passée au format 4 des deux côtés : reserves_controle aux mêmes octets."""
+        a_la_main = {"observations": "Observations", "derniere_date": "Dernière date"}
+        entete = [a_la_main.get(c, c) for c in serveur.colonnes_du_format("controles_reglementaires", 3)]
+        lignes = [{a_la_main.get(c, c): v for c, v in ligne.items()} for ligne in CONTROLES_FABRIQUES]
+        controles = fichier_fabrique(entete, lignes)
+        reserves = fichier_fabrique(COLONNES_RESERVES, RESERVES_FABRIQUEES)
+        en_base64 = {nom: base64.b64encode(octets).decode("ascii")
+                     for nom, octets in (("controles", controles), ("reserves", reserves))}
+        js = self.evaluer("""(f) => {
+          const controles = Donnees.csv.analyser('controles_reglementaires', octetsDeBase64(f.controles)).lignes;
+          const reserves = Donnees.csv.analyser('reserves_controle', octetsDeBase64(f.reserves)).lignes;
+          return Formats.reservesReprises(controles, reserves).map((ligne) => Object.keys(ligne).map((colonne) =>
+            [colonne, Donnees.csv.ecrireValeur(Schema.champ('reserves_controle', colonne), ligne[colonne])]));
+        }""", en_base64)
+        python = serveur.reserves_reprises(table_de_base(controles)["lignes"], table_de_base(reserves)["lignes"])
+        self.assertEqual([[list(paire) for paire in ligne.items()] for ligne in python], js)
+        self.assertEqual(python, [reserve_complete(*r) for r in RESERVES_FABRIQUEES_ATTENDUES])
+        # Base entière : réserves existantes canoniques (relues et réécrites à l'identique des deux côtés)
+        existantes = [reserve_complete("RES-00007", "CTR-0002", "2024-07-01", "gardée", "0"),
+                      dict(reserve_complete("RES-" + "9" * 5000, "CTR-0099", "", "numéro très long", "1"),
+                           gravite="majeure", date_levee="2024-08-01", commentaire_levee="levée sur place")]
+        fichiers = {"parametres": fichier_fabrique(["cle", "valeur"], [{"cle": "version_schema", "valeur": "'3"}]),
+                    "controles_reglementaires": controles,
+                    "reserves_controle": fichier_fabrique(COLONNES_RESERVES, existantes)}
+        navigateur = self.evaluer("(jeu) => cheminNavigateur(jeu)",
+                                  {t: base64.b64encode(o).decode("ascii") for t, o in fichiers.items()})
+        cote_serveur = chemin_serveur(fichiers)
+        self.assertEqual((navigateur["de"], navigateur["journal"]), (cote_serveur["de"], cote_serveur["journal"]))
+        self.assertEqual(cote_serveur["journal"], ["passage au format 4 du fichier"])
+        octets = cote_serveur["octets"]["reserves_controle"]
+        self.assertEqual(base64.b64decode(navigateur["octets"]["reserves_controle"]), octets)
+        lues = table_de_base(octets)["lignes"]
+        self.assertEqual(lues[:2], existantes)
+        self.assertEqual(len(lues), 2 + len(RESERVES_FABRIQUEES_ATTENDUES))
+        self.assertEqual([l["id"] for l in lues[2:4]], ["RES-1" + "0" * 4999 + "0", "RES-1" + "0" * 4999 + "1"])
+
+    def test_dates_et_booleens_lus_comme_donnees_par_le_navigateur(self):
+        """date_lue_js et booleen_lu_js (copies de lireDate et normaliserBooleen) donnent les valeurs de
+        Donnees.normaliser.date et .booleen sur une batterie de cellules d'Excel et de saisie (années 0000 à 0099 lues
+        comme Date.UTC, chiffres non ASCII, blancs de JavaScript aux bords, U+0085 qui n'en est pas un, fin de ligne
+        finale). Booléens : même lecture « vrai » ; même valeur partout où Donnees rend un texte (« constructor » et
+        « __proto__ » rendent un objet du prototype, jamais « 1 »)."""
+        dates = ["2024-01-15", " 2024-01-15 ", "2024-1-5", "15/01/2024", "5/1/2024", "15-01-2024", "15.01.2024",
+                 "15/01-2024", "31/02/2024", "29/02/2024", "29/02/2023", "29/02/1900", "29/02/2000", "2024-13-01",
+                 "00/01/2024", "15/01/24", "2024-01-15 08:30", "2024-01-15T08:30", "", "   ", "﻿15/01/2024",
+                 "demain", "１５/01/2024", "١٥/01/2024", "0001-01-01", "9999-12-31", "2024-02-30",
+                 "1/13/2024", "2024/01/15", "15 01 2024", "45306", "29/02/0000", "29/02/0004", "29/02/0096",
+                 "29/02/0100", "0000-02-29", "0000-01-01", "1/1/0050", "2024-01-15\n", "2024-01-15\n1",
+                 INSECABLE + "15/01/2024" + INSECABLE_FINE, " 2024-01-15 ", "\u00852024-01-15",
+                 "'2024-01-15", "15/01/2024\t", "15/01/2024\r"]
+        booleens = ["1", "0", "oui", "OUI", " Oui ", "non", "Non", "vrai", "faux", "Vrai", "true", "FALSE", "yes", "No",
+                    "x", "X", " x ", "", " ", "2", "o", "n", "ouí", "oui.", "constructor", "Constructor", "__proto__",
+                    "toString", "﻿1", "Ｘ", "İ", "x\u0085", INSECABLE + "oui", "oui\r"]
+        js = self.evaluer("""(valeurs) => ({
+          dates: valeurs.dates.map((v) => Donnees.normaliser.date(v).valeur),
+          booleens: valeurs.booleens.map((v) => { const lu = Donnees.normaliser.booleen(v).valeur;
+            return [typeof lu === 'string' ? lu : null, lu === '1']; }) })""", {"dates": dates, "booleens": booleens})
+        self.assertEqual([serveur.date_lue_js(d) for d in dates], js["dates"])
+        self.assertIn("0004-02-29", js["dates"])
+        self.assertIn("29/02/0000", js["dates"])
+        python = [serveur.booleen_lu_js(b) for b in booleens]
+        self.assertEqual([lu == "1" for lu in python], [vrai for _, vrai in js["booleens"]])
+        self.assertEqual([lu for lu, (texte, _) in zip(python, js["booleens"]) if texte is not None],
+                         [texte for texte, _ in js["booleens"] if texte is not None])
+        self.assertEqual([b for b, (texte, _) in zip(booleens, js["booleens"]) if texte is None],
+                         ["constructor", "Constructor", "__proto__"])
 
     # -- Chaque jeu : lecture + migration + écriture → mêmes octets ---------------------------------------------
 

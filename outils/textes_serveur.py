@@ -88,6 +88,8 @@ CONSTANTES_HORS_CODES = {
     'CHEMINS_TAILSCALE': 'technique : chemins de l\'exécutable',
     'DEFAUTS_DES_CHAMPS': 'valeurs stockées des listes (D155)',
     'ETAPES_FORMAT': 'registre des formats (même texte que js/formats.js), jamais montré par le serveur',
+    'COMMENTAIRE_LEVEE_REPRISE': 'donnée (D156) : commentaire_levee de reserves_controle.csv écrit par la reprise des '
+                                 'observations (D183), même texte que js/formats.js',
     'POLITIQUE_CONTENU': 'technique : en-tête Content-Security-Policy',
     'POLITIQUE_PORTE': 'technique : en-tête Content-Security-Policy',
 }

@@ -4421,16 +4421,177 @@ def passer_au_format(base, format):
     return nouvelle
 
 
+# Reprise des observations des contrôles en réserves (D183, étape 3→4 ; note de conception du format 4, §3.2 et §3.6) :
+# miroir exact de reservesReprises (js/formats.js), mêmes réserves aux mêmes octets. Le serveur travaille sur les
+# cellules du fichier : observations relue par relire_valeur_texte, identifiants par sans_blancs_js_aux_bords (trim),
+# dates et booléens par les copies ci-dessous (comme Donnees.csv.analyser lit une cellule de date ou de booléen).
+# Copies de MOTIF_DATE_ISO, MOTIF_DATE_FRANCAISE, VALEURS_BOOLEENNES, dateIsoSiValide, lireDate, normaliserDate et
+# normaliserBooleen de js/donnees.js (recopiées aussi dans js/formats.js) : \d de JavaScript = [0-9], et une expression
+# ^…$ de JavaScript couvre tout le texte (fullmatch ; le $ de Python accepterait un \n final).
+MOTIF_DATE_ISO_JS = re.compile(r'([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})', re.ASCII)
+MOTIF_DATE_FRANCAISE_JS = re.compile(r'([0-9]{1,2})([/.-])([0-9]{1,2})\2([0-9]{4})', re.ASCII)
+VALEURS_BOOLEENNES_JS = {
+    '1': '1', '0': '0', 'vrai': '1', 'faux': '0', 'oui': '1', 'non': '0', 'true': '1', 'false': '0', 'yes': '1',
+    'no': '0', 'x': '1',
+}
+JOURS_DES_MOIS = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+# Constantes de la reprise, identiques à l'octet dans js/formats.js. Le commentaire est écrit en français dans les
+# données (comme « passage au format N du fichier ») ; l'écran l'affiche traduit quand il vaut exactement ce texte.
+COMMENTAIRE_LEVEE_REPRISE = 'levée avant la 2.2, date inconnue'
+PREFIXE_RESERVE = 'RES-'                # identifiant de reserves_controle dans js/schema.js (prefixe, chiffres)
+CHIFFRES_RESERVE = 5
+MOTIF_ID_RESERVE = re.compile(r'RES-([0-9]+)', re.ASCII)       # chiffres ASCII seulement, tout le texte (fullmatch)
+MOTIF_FIN_DE_LIGNE_JS = re.compile(r'\r\n|\r|\n')   # jamais splitlines() : ni U+2028, ni U+0085, ni \v, ni \f
+
+
+def jours_du_mois_js(annee, mois):
+    """Jours du mois (1 à 12) comme new Date(Date.UTC(annee, mois, 0)).getUTCDate() : Date.UTC lit une année de 0 à 99
+    comme 1900 à 1999 (« 29/02/0000 » n'existe donc pas, « 29/02/0004 » si) ; calendrier grégorien."""
+    vraie = annee + 1900 if 0 <= annee <= 99 else annee
+    bissextile = vraie % 4 == 0 and (vraie % 100 != 0 or vraie % 400 == 0)
+    return 29 if mois == 2 and bissextile else JOURS_DES_MOIS[mois - 1]
+
+
+def date_iso_si_valide_js(annee, mois, jour):
+    """dateIsoSiValide de js/donnees.js : 'AAAA-MM-JJ' si le jour existe vraiment (pas de 31/02), sinon None."""
+    a, m, j = int(annee), int(mois), int(jour)
+    if m < 1 or m > 12 or j < 1 or j > jours_du_mois_js(a, m):
+        return None
+    return '%04d-%02d-%02d' % (a, m, j)
+
+
+def lire_date_js(texte):
+    """lireDate de js/donnees.js : AAAA-MM-JJ, JJ/MM/AAAA, J/M/AAAA, JJ-MM-AAAA, JJ.MM.AAAA → 'AAAA-MM-JJ' ; sinon
+    None."""
+    morceaux = MOTIF_DATE_ISO_JS.fullmatch(texte)
+    if morceaux:
+        return date_iso_si_valide_js(morceaux.group(1), morceaux.group(2), morceaux.group(3))
+    morceaux = MOTIF_DATE_FRANCAISE_JS.fullmatch(texte)
+    if morceaux:
+        return date_iso_si_valide_js(morceaux.group(4), morceaux.group(3), morceaux.group(1))
+    return None
+
+
+def date_lue_js(cellule):
+    """Valeur de normaliserDate (js/donnees.js) : '' si vide ou blanche, 'AAAA-MM-JJ' si la date est reconnue, sinon
+    le texte sans ses blancs de bord (gardé tel quel)."""
+    texte = sans_blancs_js_aux_bords('' if cellule is None else str(cellule))
+    return (lire_date_js(texte) or texte) if texte != '' else ''
+
+
+def booleen_lu_js(cellule):
+    """Valeur de normaliserBooleen (js/donnees.js) : '1' ou '0' pour 1, 0, vrai, faux, oui, non, true, false, yes, no,
+    x (casse ignorée), sinon le texte sans ses blancs de bord ; '' si vide."""
+    texte = sans_blancs_js_aux_bords('' if cellule is None else str(cellule))
+    return VALEURS_BOOLEENNES_JS.get(texte.lower(), texte) if texte != '' else ''
+
+
+def cellule_de_champ(ligne, champ):
+    """Cellule du champ dans une ligne {colonne: cellule} (colonne nommée comme le fichier, reconnue par
+    cle_de_colonne comme Donnees.csv.analyser la reconnaît) ; '' si la ligne n'a pas cette colonne."""
+    colonne = colonne_de_champ(list(ligne), champ)
+    return '' if colonne is None or ligne[colonne] is None else str(ligne[colonne])
+
+
+def plus_grand_numero(a, b):
+    """Le plus grand de deux numéros écrits en chiffres décimaux sans zéro de tête ('' vaut 0), comparés comme des
+    textes : exacts à toute longueur (int() refuse plus de 4300 chiffres depuis Python 3.11)."""
+    if len(a) != len(b):
+        return a if len(a) > len(b) else b
+    return a if a >= b else b
+
+
+def numero_suivant(chiffres):
+    """Numéro suivant, en texte : '' → '1', '41' → '42', '999' → '1000' (numeroSuivant de js/formats.js)."""
+    tete = chiffres.rstrip('9')
+    zeros = '0' * (len(chiffres) - len(tete))
+    return '1' + zeros if tete == '' else tete[:-1] + str(int(tete[-1]) + 1) + zeros
+
+
+def reserves_reprises(lignes_controles, lignes_reserves):
+    """Réserves tirées des observations des contrôles (D183), comme Formats.reservesReprises : fonction PURE (rien de
+    ce qu'elle reçoit n'est modifié) et déterministe → NOUVELLES lignes de reserves_controle ({colonne du schéma:
+    cellule}, colonnes dans l'ordre du schéma), dans l'ordre, à ajouter après les lignes existantes. Entrées : lignes
+    de controles_reglementaires et de reserves_controle, cellules du fichier (apostrophe de protection comprise).
+      - Un contrôle n'est repris que s'il n'a AUCUNE réserve : l'ensemble des controle_id (bords blancs retirés) des
+        réserves reçues est pris une fois, avant la boucle (rejouée sur sa propre sortie, la reprise ne rend rien).
+      - Un contrôle sans identifiant, ou aux observations vides ou blanches, ne donne rien, levé ou non.
+      - Une réserve par ligne non vide des observations (relues sans l'apostrophe de protection) : coupe sur \\r\\n,
+        \\r ou \\n, bords blancs de chaque ligne retirés (trim de JavaScript), puces gardées.
+      - id : RES- et le numéro sur 5 chiffres au moins, à la suite du plus grand identifiant reçu qui s'écrit
+        exactement RES-<chiffres> (bords blancs retirés ; aucun : RES-00001) ; numéros comparés et augmentés en texte ;
+        controle_id : l'identifiant du contrôle ; date_controle : derniere_date lue comme Prévo la lit ; texte : la
+        ligne, écrite comme un champ texte (ecrire_valeur_texte : « - garde-corps » → « '- garde-corps ») ; levee : '1'
+        si observations_levees se lit « vrai », sinon '0' ; commentaire_levee : COMMENTAIRE_LEVEE_REPRISE pour une
+        réserve levée, sinon '' ; gravite, echeance_levee, date_levee, ot_id : '' (aucune date inventée).
+    Les contrôles ne sont pas modifiés : observations et observations_levees gardent leur cellule (CS169)."""
+    def dictionnaires(lignes):
+        return [ligne for ligne in (lignes if isinstance(lignes, (list, tuple)) else []) if isinstance(ligne, dict)]
+
+    reserves = dictionnaires(lignes_reserves)
+    avec_reserve = {sans_blancs_js_aux_bords(cellule_de_champ(reserve, 'controle_id')) for reserve in reserves}
+    numero = ''
+    for reserve in reserves:
+        trouve = MOTIF_ID_RESERVE.fullmatch(sans_blancs_js_aux_bords(cellule_de_champ(reserve, 'id')))
+        if trouve:
+            numero = plus_grand_numero(numero, trouve.group(1).lstrip('0'))
+    nouvelles = []
+    for controle in dictionnaires(lignes_controles):
+        identifiant = sans_blancs_js_aux_bords(cellule_de_champ(controle, 'id'))
+        if identifiant == '' or identifiant in avec_reserve:
+            continue
+        observations = relire_valeur_texte(cellule_de_champ(controle, 'observations'))
+        if sans_blancs_js_aux_bords(observations) == '':
+            continue
+        levee = booleen_lu_js(cellule_de_champ(controle, 'observations_levees')) == '1'
+        date = date_lue_js(cellule_de_champ(controle, 'derniere_date'))
+        for morceau in MOTIF_FIN_DE_LIGNE_JS.split(observations):
+            texte = sans_blancs_js_aux_bords(morceau)
+            if texte == '':
+                continue
+            numero = numero_suivant(numero)
+            nouvelles.append({
+                'id': PREFIXE_RESERVE + numero.rjust(CHIFFRES_RESERVE, '0'),
+                'controle_id': identifiant,
+                'date_controle': date,
+                'texte': ecrire_valeur_texte(texte),
+                'gravite': '',
+                'echeance_levee': '',
+                'levee': '1' if levee else '0',
+                'date_levee': '',
+                'commentaire_levee': ecrire_valeur_texte(COMMENTAIRE_LEVEE_REPRISE) if levee else '',
+                'ot_id': '',
+            })
+    return nouvelles
+
+
+def reprendre_observations(base):
+    """Complément de l'étape 3→4 (reprendreObservations de js/formats.js), appliqué à la base NOUVELLE que rend
+    passer_au_format(base, 4), où controles_reglementaires et reserves_controle existent toujours : les réserves
+    reprises sont ajoutées après les lignes existantes de reserves_controle, chacune avec toutes les colonnes de son
+    en-tête (nommées comme lui ; colonne inconnue : ''). Modifie la COPIE reçue."""
+    reserves = base['reserves_controle']
+    entete = reserves['entete']
+    for nouvelle in reserves_reprises(base['controles_reglementaires']['lignes'], reserves['lignes']):
+        ligne = {colonne: '' for colonne in entete}
+        for champ, cellule in nouvelle.items():
+            ligne[colonne_de_champ(entete, champ) or champ] = cellule
+        reserves['lignes'].append(ligne)
+    return base
+
+
 class EtapeDeFormat:
-    """Une étape du registre : de N à N+1, sa description, et appliquer(base) → nouvelle base (pure, idempotente)."""
+    """Une étape du registre : de N à N+1, sa description, et appliquer(base) → nouvelle base (pure, idempotente) :
+    passer_au_format, puis le complément propre à l'étape s'il y en a un, appliqué à la nouvelle base."""
 
-    __slots__ = ('de', 'vers', 'description')
+    __slots__ = ('de', 'vers', 'description', 'complement')
 
-    def __init__(self, de, vers, description):
-        self.de, self.vers, self.description = de, vers, description
+    def __init__(self, de, vers, description, complement=None):
+        self.de, self.vers, self.description, self.complement = de, vers, description, complement
 
     def appliquer(self, base):
-        return passer_au_format(base, self.vers)
+        nouvelle = passer_au_format(base, self.vers)
+        return self.complement(nouvelle) if self.complement else nouvelle
 
 
 # Le registre, dans l'ordre, mêmes étapes et mêmes descriptions que Formats.ETAPES. Un format futur ajoute son étape
@@ -4448,7 +4609,7 @@ ETAPES_FORMAT = (
                         'controles_reglementaires.nature_source, controles_reglementaires.catalogue_id et '
                         'controles_reglementaires.catalogue_relu_le en fin de table ; tables reserves_controle '
                         '(observations reprises, une réserve par ligne, D183), garanties et contrats_prestataires '
-                        '(vides).'),
+                        '(vides).', reprendre_observations),
 )
 
 

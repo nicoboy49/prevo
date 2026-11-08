@@ -281,7 +281,7 @@
         "js/formats.js"
       ],
       "classe": "D156",
-      "raison": "Commentaire de levée « levée avant la 2.2, date inconnue » écrit dans reserves_controle.csv par la reprise des observations (D183, étape 3→4), identique à l'octet dans serveur.py ; l'écran l'affiche traduit quand il vaut exactement ce texte (L2) (T386)."
+      "raison": "Commentaire de levée « levée avant la 2.2, date inconnue » écrit dans reserves_controle.csv par la reprise des observations (D183, étape 3→4), identique à l'octet dans serveur.py ; l'écran l'affiche traduit quand il vaut exactement ce texte (L2) (T386). La même constante de serveur.py est mise hors codes par outils/textes_serveur.py (CONSTANTES_HORS_CODES), qui contrôle ce fichier (T390)."
     },
     {
       "variable": "TONS_STATUT",
