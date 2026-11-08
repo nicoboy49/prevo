@@ -1,7 +1,8 @@
 'use strict';
 // Controles (2/3) — écritures des contrôles réglementaires (ARCHITECTURE.md §15.7 ; brief RG9, E10) :
 // création, modification, contrôle réalisé (dates recalculées, rapport joint, réserves relevées ajoutées par
-// Controles.ajouterReserves de controles-reserves.js, 2.2), levée des observations.
+// Controles.ajouterReserves de controles-reserves.js, 2.2), levée des observations ; source de la périodicité et
+// mise à jour du catalogue reprise sur un clic (2.2, CS171 ; règles de controles-catalogue.js, chargé avant).
 //
 // Règles communes à toutes les fonctions de ce fichier :
 // - toute écriture passe par Donnees.modifier('controles_reglementaires') ; les contrôles sont
@@ -22,8 +23,13 @@ Object.assign(Controles, (() => {
 
   // Champs du formulaire d'un contrôle (création et modification). Le rapport, les observations
   // et leur levée viennent des actions « contrôle réalisé » et « lever les observations ».
+  // 2.2 (CS171) : nature_source est saisie (ou copiée du catalogue) ; source_periodicite, catalogue_id et
+  // catalogue_relu_le (CHAMPS_PROVENANCE) sont tenus par l'écriture elle-même (sourceAvantEcriture).
   const CHAMPS_CONTROLE = ['equipement_id', 'nature', 'texte_reference', 'periodicite_mois', 'organisme',
-    'derniere_date', 'prochaine_date'];
+    'derniere_date', 'prochaine_date', 'nature_source', 'source_periodicite', 'catalogue_id', 'catalogue_relu_le'];
+  const CHAMPS_PROVENANCE = ['source_periodicite', 'catalogue_id', 'catalogue_relu_le'];
+  // Valeurs qui font la source (comparées comme dans Controles.sourceApresSaisie) ; la nature n'en est pas.
+  const CHAMPS_SOURCE = ['periodicite_mois', 'texte_reference', 'nature_source'];
   const PERIODICITE_MAX_MOIS = 240;                       // 20 ans : au-delà, c'est une faute de frappe
 
   // Rapport joint : PDF ou photo (une photo est réduite en JPEG lisible avant l'envoi).
@@ -47,7 +53,16 @@ Object.assign(Controles, (() => {
     return ligne;
   }
 
-  /** Valeurs d'un contrôle au format du fichier : seuls les champs du formulaire, sans espaces de bord. */
+  function naturesSource() {
+    const champ = Schema.champ('controles_reglementaires', 'nature_source');
+    return (champ && champ.valeurs) || [];
+  }
+
+  /**
+   * Valeurs d'un contrôle au format du fichier : seuls les champs du formulaire, sans espaces de bord.
+   * Nature de la source hors de la liste et ligne du catalogue inconnue (ou catalogue absent) ramenées à vide,
+   * sans message (2.2) ; « c14 » s'écrit « C14 ».
+   */
   function valeursControle(valeurs) {
     const propres = {};
     CHAMPS_CONTROLE.forEach((nom) => {
@@ -57,7 +72,51 @@ Object.assign(Controles, (() => {
     if (propres.periodicite_mois && /^\d+$/.test(propres.periodicite_mois)) {
       propres.periodicite_mois = String(Number(propres.periodicite_mois));     // « 012 » → « 12 »
     }
+    if (propres.nature_source !== undefined) {
+      const nature = propres.nature_source.toLowerCase();
+      propres.nature_source = naturesSource().includes(nature) ? nature : '';
+    }
+    if (propres.catalogue_id !== undefined) {
+      const ligne = Controles.ligneCatalogue(propres.catalogue_id);
+      propres.catalogue_id = ligne ? texte(ligne.id) : '';
+    }
     return propres;
+  }
+
+  /** Les valeurs sans les champs de provenance (jamais pris tels quels de l'appelant). */
+  function sansProvenance(valeurs) {
+    const copie = Object.assign({}, valeurs);
+    CHAMPS_PROVENANCE.forEach((nom) => { delete copie[nom]; });
+    return copie;
+  }
+
+  function memesValeursSource(a, b) {
+    const valeur = (ligne, champ) => {
+      const brute = texte(ligne[champ]);
+      return champ === 'periodicite_mois' && /^\d+$/.test(brute) ? String(Number(brute)) : brute;
+    };
+    return CHAMPS_SOURCE.every((champ) => valeur(a, champ) === valeur(b, champ));
+  }
+
+  /**
+   * Provenance d'un contrôle avant son écriture : { source_periodicite, catalogue_id, catalogue_relu_le }, par
+   * Controles.sourceApresSaisie (CS171 : une valeur de la source changée → « saisie », la ligne gardée).
+   * - création (avant absent) : ligne = catalogue_id choisi ; catalogue_relu_le = relecture de cette ligne ;
+   * - modification : ligne = celle du contrôle (catalogue_id et catalogue_relu_le ne changent pas ici) et le
+   *   contrôle d'avant en 3e argument : changer l'organisme d'un contrôle « catalogue » dont la ligne a été relue
+   *   depuis le laisse « catalogue » (sa mise à jour reste proposée, jamais appliquée par une autre écriture) ;
+   *   ligne absente du catalogue de la page (fichier retouché, ligne retirée par une version plus récente) :
+   *   provenance gardée telle quelle tant que périodicité, référence et nature de la source ne changent pas,
+   *   « saisie » sinon ; jamais effacée par l'absence du catalogue.
+   */
+  function sourceAvantEcriture(apres, choisie, avant) {
+    if (!avant) return Controles.sourceApresSaisie(sansProvenance(apres), choisie);
+    const catalogueId = texte(avant.catalogue_id);
+    if (catalogueId && !Controles.ligneCatalogue(catalogueId)) {
+      return { source_periodicite: memesValeursSource(apres, avant) ? texte(avant.source_periodicite) : 'saisie',
+        catalogue_id: catalogueId, catalogue_relu_le: texte(avant.catalogue_relu_le) };
+    }
+    return Controles.sourceApresSaisie(apres, catalogueId, avant);
   }
 
   // ===========================================================================================
@@ -97,27 +156,71 @@ Object.assign(Controles, (() => {
     return erreurs;
   }
 
-  /** Crée un contrôle ; renvoie son identifiant (CTR-…). */
+  /**
+   * Crée un contrôle ; renvoie son identifiant (CTR-…). catalogue_id : la ligne du catalogue choisie (facultatif) ;
+   * source_periodicite et catalogue_relu_le sont calculés (« catalogue » si périodicité, référence et nature de la
+   * source sont celles de la ligne, « saisie » sinon), jamais pris des valeurs reçues.
+   */
   async function creerControle(valeurs) {
     const propres = valeursControle(valeurs || {});
+    const choisie = propres.catalogue_id || '';
+    const nouveau = Object.assign({ nature_source: '' }, sansProvenance(propres));
+    Object.assign(nouveau, sourceAvantEcriture(nouveau, choisie, null));
     return Donnees.modifier('controles_reglementaires', (lignes, outils) => {
-      refuserSiErreurs(verifierControle(propres, outils.aujourdhui()));
+      refuserSiErreurs(verifierControle(nouveau, outils.aujourdhui()));
       const id = outils.nouvelId(lignes);
-      lignes.push(Object.assign({}, propres, { id, rapport: '', observations: '', observations_levees: '1' }));
+      lignes.push(Object.assign({}, nouveau, { id, rapport: '', observations: '', observations_levees: '1' }));
       return id;
     }, { action: 'création du contrôle réglementaire' });
   }
 
-  /** Modifie un contrôle (champs du formulaire) ; renvoie la liste des champs réellement changés. */
+  /**
+   * Modifie un contrôle (champs du formulaire) ; renvoie la liste des champs réellement changés. La source est
+   * recalculée sur la ligne fraîche (sourceAvantEcriture) : une périodicité, une référence ou une nature de la
+   * source changée rend « saisie » (catalogue_id gardé) ; catalogue_id, catalogue_relu_le et source_periodicite
+   * reçus sont ignorés (seule appliquerMiseAJourCatalogue reprend des valeurs du catalogue).
+   */
   async function modifierControle(controleId, valeurs) {
-    const propres = valeursControle(valeurs || {});
+    const propres = sansProvenance(valeursControle(valeurs || {}));
     return Donnees.modifier('controles_reglementaires', (lignes, outils) => {
       const ligne = ligneDuControle(lignes, controleId);
-      refuserSiErreurs(verifierControle(Object.assign({}, ligne, propres), outils.aujourdhui()));
-      const changes = Object.keys(propres).filter((nom) => texte(ligne[nom]) !== propres[nom]);
-      changes.forEach((nom) => { ligne[nom] = propres[nom]; });
+      const apres = Object.assign({}, ligne, propres);
+      refuserSiErreurs(verifierControle(apres, outils.aujourdhui()));
+      const nouvelles = Object.assign({}, propres, sourceAvantEcriture(apres, null, ligne));
+      const changes = Object.keys(nouvelles).filter((nom) => texte(ligne[nom]) !== nouvelles[nom]);
+      changes.forEach((nom) => { ligne[nom] = nouvelles[nom]; });
       return changes;
     }, { action: 'modification du contrôle réglementaire' });
+  }
+
+  /**
+   * Reprend sur un contrôle les valeurs que propose une relecture plus récente de sa ligne du catalogue
+   * (Controles.miseAJourProposee : périodicité, référence, nature de la source) ; catalogue_relu_le prend la date
+   * de cette relecture. Seule écriture qui reprend des valeurs du catalogue sur un contrôle existant, sur un clic
+   * (CS171 : une mise à jour du catalogue ne change aucun contrôle sans lui). La prochaine date enregistrée n'est
+   * pas recalculée (comme à la modification de la périodicité : le fichier fait foi). Rien de proposé (déjà
+   * repris, ici ou sur un autre poste ; contrôle « saisie ») : rien n'est écrit, renvoie []. Journal : « valeurs
+   * du catalogue C14 relu le 01/03/2027 reprises ». Renvoie la liste des champs changés.
+   */
+  async function appliquerMiseAJourCatalogue(controleId) {
+    const annoncee = Controles.miseAJourProposee(Donnees.trouver('controles_reglementaires', texte(controleId)));
+    const choisie = annoncee ? annoncee.ligne : null;
+    const reluLe = choisie ? dateIso(choisie.relu_le) : '';
+    const action = choisie ? 'valeurs du catalogue ' + texte(choisie.id) + (reluLe ? ' relu le ' + UI.dateFr(reluLe) : '')
+      + ' reprises' : '';
+    return Donnees.modifier('controles_reglementaires', (lignes) => {
+      const ligne = ligneDuControle(lignes, texte(controleId));
+      const proposee = Controles.miseAJourProposee(ligne);
+      // Sur la ligne fraîche : seulement la proposition annoncée au journal (même ligne, même relecture).
+      if (!proposee || !choisie || texte(proposee.ligne.id) !== texte(choisie.id)
+        || dateIso(proposee.ligne.relu_le) !== reluLe) return [];
+      const nouvelles = { source_periodicite: 'catalogue' };
+      proposee.ecarts.forEach((ecart) => { nouvelles[ecart.champ] = ecart.propose; });
+      if (reluLe) nouvelles.catalogue_relu_le = reluLe;
+      const changes = Object.keys(nouvelles).filter((nom) => texte(ligne[nom]) !== nouvelles[nom]);
+      changes.forEach((nom) => { ligne[nom] = nouvelles[nom]; });
+      return changes;
+    }, { action });
   }
 
   // ===========================================================================================
@@ -276,5 +379,7 @@ Object.assign(Controles, (() => {
   return {
     // écritures (ARCHITECTURE.md §15.7)
     verifierControle, creerControle, modifierControle, enregistrerRealisation, leverObservations, ecrireRapport,
+    // catalogue des contrôles (CONCEPTION-L2-L3 §4.2)
+    appliquerMiseAJourCatalogue,
   };
 })());

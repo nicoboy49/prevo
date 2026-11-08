@@ -16,9 +16,19 @@ C14, 2026-11-08 ; aucune périodicité pour C13 et C24), provenance, source apr�
 provisoire n° 1, CS175), listes vides sans CatalogueFR, et une page où CatalogueFR est remplacé par une version
 modifiée (tirée de docs/catalogue par outils/generer_catalogue.py) : l'écart est proposé, rien n'est changé.
 
+Écritures du catalogue (T415, CONCEPTION-L2-L3 §4.2, js/modules/controles-ecritures.js), par l'API (Controles.*) en
+mode serveur (serveur.py sur une COPIE du jeu de démo), CSV relus sur le disque : un contrôle créé depuis C14 enregistre
+catalogue, C14, 2026-11-08 et obligation ; passé à 36 mois, il devient « saisie » (C14 gardé) ; changer l'organisme
+ne change pas la source ; ligne et nature de la source inconnues ramenées à vide sans refus ; source et relecture
+reçues ignorées ; catalogue relu (C14 à 60 mois) : une autre modification garde 48 mois, seule
+appliquerMiseAJourCatalogue reprend les valeurs (journal « valeurs du catalogue C14 relu le 01/03/2027 reprises »),
+rejouable ; ligne retirée du catalogue de la page : provenance gardée.
+
 Bibliothèque standard + Playwright. Lancer depuis la racine du projet (au travers du verrou des navigateurs) :
     py -X utf8 -m unittest discover -s tests -p "test_catalogue_controles.py" -v
 """
+import csv as module_csv
+import io
 import json
 import re
 import shutil
@@ -439,6 +449,224 @@ class TestCatalogueModifie(CasReglesCatalogue):
         self.assertEqual(releve["periodicite"], dict(catalogue, source_periodicite="saisie"))
         self.assertEqual(releve["nouvelleValeurTapee"], catalogue)
         self.assertEqual(releve["sansAvant"], dict(catalogue, source_periodicite="saisie"))
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Écritures du catalogue (T415) : par l'API, mode serveur sur une copie du jeu de démo, CSV relus sur le disque
+# ---------------------------------------------------------------------------------------------------------------
+
+# Appel d'une fonction de Controles : « accepté:<JSON> », « refus:<message> » (ErreurValidation) ou « erreur:… ».
+APPEL_JS = """async ([fonction, arguments_]) => {
+  try { return 'accepté:' + JSON.stringify(await Controles[fonction](...arguments_)); }
+  catch (erreur) { return (erreur instanceof Donnees.ErreurValidation ? 'refus:' : 'erreur:') + erreur.message; }
+}"""
+PROPOSEE_JS = "(id) => Controles.miseAJourProposee(Donnees.trouver('controles_reglementaires', id))"
+PROVENANCE = ("source_periodicite", "catalogue_id", "catalogue_relu_le", "nature_source")
+SOURCE_C14 = {"source_periodicite": "catalogue", "catalogue_id": "C14", "catalogue_relu_le": "2026-11-08",
+              "nature_source": "obligation"}
+SANS_SOURCE = {"source_periodicite": "saisie", "catalogue_id": "", "catalogue_relu_le": "", "nature_source": ""}
+MODIFICATION = " — modification du contrôle réglementaire"
+
+
+def valeur_brute(valeur):
+    """Valeur d'un champ CSV sans l'apostrophe de protection contre Excel (« '=… », « '+… »)."""
+    valeur = valeur or ""
+    return valeur[1:] if valeur.startswith("'") else valeur
+
+
+def lire_table(dossier, nom):
+    """Lignes d'un CSV du dossier de données relu sur le disque (BOM, « ; », apostrophe de protection retirée)."""
+    texte = (Path(dossier) / nom).read_text(encoding="utf-8-sig")
+    return [{cle: valeur_brute(valeur) for cle, valeur in ligne.items()}
+            for ligne in module_csv.DictReader(io.StringIO(texte), delimiter=";")]
+
+
+class CasEcrituresCatalogue(CasNavigateur):
+
+    def ouvrir(self, serveur):
+        preregler_profil(self.contexte, "responsable", nom="Responsable")
+        self.page.goto(serveur.url + "/#/controles")
+        attendre_pret(self.page)
+        # Les écritures du démarrage (OT préventifs échus) sont finies avant le premier relevé.
+        self.page.wait_for_load_state("networkidle")
+        self.dossier = serveur.dossier
+
+    def appeler(self, fonction, *arguments):
+        return self.page.evaluate(APPEL_JS, [fonction, list(arguments)])
+
+    def accepte(self, fonction, *arguments):
+        resultat = self.appeler(fonction, *arguments)
+        self.assertTrue(resultat.startswith("accepté:"), resultat)
+        return json.loads(resultat[len("accepté:"):])
+
+    def controles(self):
+        return lire_table(self.dossier, "controles_reglementaires.csv")
+
+    def controle(self, identifiant):
+        return next(ligne for ligne in self.controles() if ligne["id"] == identifiant)
+
+    def provenance(self, identifiant):
+        ligne = self.controle(identifiant)
+        return {cle: ligne[cle] for cle in PROVENANCE}
+
+    def octets(self):
+        return (self.dossier / "controles_reglementaires.csv").read_bytes()
+
+    def journal(self, identifiant):
+        return [entree["action"] for entree in lire_table(self.dossier, "journal.csv")
+                if entree["table"] == "controles_reglementaires" and entree["id_ligne"] == identifiant]
+
+    def equipement(self):
+        return next(ligne["id"] for ligne in lire_table(self.dossier, "equipements.csv")
+                    if ligne["actif"] != "0" and ligne["statut"] != "rebut")
+
+    def controle_du_catalogue(self, catalogue_id):
+        """Un contrôle de la démo copié de cette ligne (« catalogue »), cherché dans le CSV (aucun identifiant en dur)."""
+        return next(ligne["id"] for ligne in self.controles()
+                    if ligne["catalogue_id"] == catalogue_id and ligne["source_periodicite"] == "catalogue")
+
+    def valeurs_c14(self, **champs):
+        """Valeurs du formulaire après le choix de C14 (Controles.valeursDepuisCatalogue), plus l'équipement."""
+        valeurs = self.page.evaluate("() => Controles.valeursDepuisCatalogue('C14')")
+        valeurs.update(equipement_id=self.equipement(), organisme="Organisme T415")
+        valeurs.update(champs)
+        return valeurs
+
+
+class TestEcrituresCatalogue(CasEcrituresCatalogue):
+
+    def test_cree_depuis_c14_puis_36_mois_devient_saisie_c14_garde(self):
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur)
+            identifiant = self.accepte("creerControle", self.valeurs_c14())
+            ligne = self.controle(identifiant)
+            self.assertEqual((ligne["nature"], ligne["texte_reference"], ligne["periodicite_mois"]),
+                             (C14["nature"], C14["reference"], "48"))
+            self.assertEqual(self.provenance(identifiant), SOURCE_C14)
+            # Renommer la nature ou changer l'organisme n'est pas changer la source : « catalogue » gardé.
+            self.assertEqual(self.accepte("modifierControle", identifiant, {
+                "nature": "Inspection du réservoir de l'atelier 2", "organisme": "Autre organisme"}),
+                ["nature", "organisme"])
+            self.assertEqual(self.provenance(identifiant), SOURCE_C14)
+            # 36 mois saisis : « saisie », la ligne C14 et sa relecture gardées (nature choisie au catalogue).
+            self.assertEqual(self.accepte("modifierControle", identifiant, {"periodicite_mois": "36"}),
+                             ["periodicite_mois", "source_periodicite"])
+            self.assertEqual(self.controle(identifiant)["periodicite_mois"], "36")
+            self.assertEqual(self.provenance(identifiant), dict(SOURCE_C14, source_periodicite="saisie"))
+            # Rien à reprendre (contrôle saisi, catalogue de cette version) : rien n'est écrit.
+            avant = self.octets()
+            self.assertEqual(self.accepte("appliquerMiseAJourCatalogue", identifiant), [])
+            self.assertEqual(self.octets(), avant)
+            # Revenu aux valeurs de la ligne (« 048 » = 48) : de nouveau « catalogue ».
+            self.assertEqual(self.accepte("modifierControle", identifiant, {"periodicite_mois": "048"}),
+                             ["periodicite_mois", "source_periodicite"])
+            self.assertEqual(self.provenance(identifiant), SOURCE_C14)
+            self.assertEqual(self.journal(identifiant), [
+                "création — création du contrôle réglementaire",
+                "modification : nature, organisme" + MODIFICATION,
+                "modification : periodicite_mois, source_periodicite" + MODIFICATION,
+                "modification : periodicite_mois, source_periodicite" + MODIFICATION])
+
+    def test_valeurs_inconnues_ramenees_a_vide_et_provenance_jamais_prise_de_l_appelant(self):
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur)
+            # Ligne et nature de la source inconnues : ramenées à vide, sans refus ni message ; « saisie ».
+            inconnues = self.accepte("creerControle", {
+                "equipement_id": self.equipement(), "nature": "Contrôle maison (T415)", "periodicite_mois": "12",
+                "catalogue_id": "C99", "nature_source": "loi", "source_periodicite": "catalogue",
+                "catalogue_relu_le": "2020-01-01"})
+            self.assertEqual(self.provenance(inconnues), SANS_SOURCE)
+            # Ligne en minuscules, nature de la source en capitales : reconnues ; source et relecture reçues
+            # ignorées (calculées par l'écriture).
+            reconnue = self.accepte("creerControle", self.valeurs_c14(
+                catalogue_id=" c14 ", nature_source="Obligation", source_periodicite="saisie",
+                catalogue_relu_le="2020-01-01"))
+            self.assertEqual(self.provenance(reconnue), SOURCE_C14)
+            # Nature choisie au catalogue, périodicité saisie dès la création : « saisie », C14 gardé.
+            saisie = self.accepte("creerControle", self.valeurs_c14(periodicite_mois="36"))
+            self.assertEqual(self.provenance(saisie), dict(SOURCE_C14, source_periodicite="saisie"))
+            # Saisie libre (aucune ligne) : comme avant la 2.2, la nature de la source saisie gardée.
+            libre = self.accepte("creerControle", {"equipement_id": self.equipement(), "nature": "Essai (T415)",
+                                                   "periodicite_mois": "12", "nature_source": "norme"})
+            self.assertEqual(self.provenance(libre), dict(SANS_SOURCE, nature_source="norme"))
+            # Modification : ligne, relecture et source reçues ignorées ; rien d'écrit.
+            avant = self.octets()
+            self.assertEqual(self.accepte("modifierControle", reconnue, {
+                "catalogue_id": "C01", "catalogue_relu_le": "2030-01-01", "source_periodicite": "saisie"}), [])
+            self.assertEqual(self.octets(), avant)
+            # Nature de la source inconnue à la modification : vide, donc « saisie » (C14 gardé).
+            self.assertEqual(self.accepte("modifierControle", reconnue, {"nature_source": "inconnue"}),
+                             ["nature_source", "source_periodicite"])
+            self.assertEqual(self.provenance(reconnue),
+                             dict(SOURCE_C14, source_periodicite="saisie", nature_source=""))
+
+    def test_catalogue_relu_seule_appliquer_mise_a_jour_reprend_ses_valeurs(self):
+        """CS171 : la page reçoit le catalogue d'une version plus récente (C14 relu le 2027-03-01 à 60 mois)."""
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur)
+            c14, c01 = self.controle_du_catalogue("C14"), self.controle_du_catalogue("C01")
+            initiaux = {ligne["id"]: ligne for ligne in self.controles()}
+            dossier = tempfile.mkdtemp(prefix="prevo-t415-")
+            self.addCleanup(shutil.rmtree, dossier, True)
+            self.page.add_script_tag(content=catalogue_modifie(dossier))
+            self.assertEqual(self.page.evaluate("() => Controles.ligneCatalogue('C14').periodicite_mois"), 60)
+            self.assertEqual(self.controles(), list(initiaux.values()), "le catalogue relu a changé un contrôle")
+            # Une autre modification (l'organisme) garde 48 mois, « catalogue » et la relecture du 08/11/2026 ;
+            # la mise à jour reste proposée.
+            self.assertEqual(self.accepte("modifierControle", c14, {"organisme": "Autre organisme (T415)"}),
+                             ["organisme"])
+            self.assertEqual(dict(self.controle(c14), organisme=initiaux[c14]["organisme"]), initiaux[c14])
+            self.assertEqual(self.controle(c14)["periodicite_mois"], "48")
+            self.assertEqual(self.page.evaluate(PROPOSEE_JS, c14)["ecarts"],
+                             [{"champ": "periodicite_mois", "actuel": "48", "propose": "60"}])
+            # Ligne relue sans changement (C01) : rien à reprendre, rien d'écrit.
+            octets = self.octets()
+            self.assertEqual(self.accepte("appliquerMiseAJourCatalogue", c01), [])
+            self.assertEqual(self.octets(), octets)
+            # Le clic : 60 mois et la relecture du 01/03/2027 ; la prochaine date et le reste tels quels.
+            self.assertEqual(self.accepte("appliquerMiseAJourCatalogue", c14),
+                             ["periodicite_mois", "catalogue_relu_le"])
+            ligne = self.controle(c14)
+            self.assertEqual({cle: ligne[cle] for cle in PROVENANCE + ("periodicite_mois",)},
+                             dict(SOURCE_C14, catalogue_relu_le="2027-03-01", periodicite_mois="60"))
+            self.assertEqual(dict(ligne, organisme=initiaux[c14]["organisme"], periodicite_mois="48",
+                                  catalogue_relu_le="2026-11-08"), initiaux[c14])
+            self.assertEqual(self.journal(c14)[-1], "modification : periodicite_mois, catalogue_relu_le"
+                             " — valeurs du catalogue C14 relu le 01/03/2027 reprises")
+            self.assertIsNone(self.page.evaluate(PROPOSEE_JS, c14))
+            # Rejouable (double clic, autre poste) : rien de plus.
+            octets = self.octets()
+            self.assertEqual(self.accepte("appliquerMiseAJourCatalogue", c14), [])
+            self.assertEqual(self.octets(), octets)
+            # Les autres contrôles n'ont pas bougé.
+            for autre in self.controles():
+                if autre["id"] != c14:
+                    with self.subTest(controle=autre["id"]):
+                        self.assertEqual(autre, initiaux[autre["id"]])
+            resultat = self.appeler("appliquerMiseAJourCatalogue", "CTR-9999")
+            self.assertTrue(resultat.startswith("refus:") and "CTR-9999" in resultat, resultat)
+            self.assertEqual(self.octets(), octets)
+
+    def test_ligne_retiree_du_catalogue_de_la_page_provenance_gardee(self):
+        """Une version qui n'aurait plus la ligne C14 (ou une page sans elle) n'efface pas la provenance."""
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur)
+            c14 = self.controle_du_catalogue("C14")
+            self.page.evaluate("""() => {
+              const catalogue = window.CatalogueFR;
+              window.CatalogueFR = Object.freeze({ habilitations: catalogue.habilitations,
+                controles: Object.freeze(catalogue.controles.filter((ligne) => ligne.id !== 'C14')) });
+            }""")
+            self.assertIsNone(self.page.evaluate("() => Controles.ligneCatalogue('C14')"))
+            self.assertEqual(self.accepte("modifierControle", c14, {"organisme": "Autre organisme (T415)"}),
+                             ["organisme"])
+            self.assertEqual(self.provenance(c14), SOURCE_C14)
+            self.assertEqual(self.accepte("modifierControle", c14, {"periodicite_mois": "36"}),
+                             ["periodicite_mois", "source_periodicite"])
+            self.assertEqual(self.provenance(c14), dict(SOURCE_C14, source_periodicite="saisie"))
+            octets = self.octets()
+            self.assertEqual(self.accepte("appliquerMiseAJourCatalogue", c14), [])
+            self.assertEqual(self.octets(), octets)
 
 
 if __name__ == "__main__":
