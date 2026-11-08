@@ -210,7 +210,7 @@ DEFINITION_SCHEMA = {
         'parent_id:ref>equipements marque:texte modele:texte num_serie:texte! date_mes:date '
         'criticite:choix[A|B|C] statut:choix[en service|arrêt|rebut] heures_fonct_jour:decimal '
         'habilitation_requise:texte consignation:texte_long document:document actif:booleen '
-        'valeur_remplacement:decimal'),
+        'valeur_remplacement:decimal cout_arret_h:decimal'),
     'demandes': (
         'id:id date_heure:date_heure demandeur:texte equipement_id:ref>equipements '
         'symptome:texte_long impact:choix[sécurité|arrêt|dégradé|gêne] description:texte_long '
@@ -231,7 +231,7 @@ DEFINITION_SCHEMA = {
         'cause_code:ref>codes_defaillance.code=cause remede_code:ref>codes_defaillance.code=remède '
         'compte_rendu:texte_long remise_service:booleen cout_soustraitance:decimal '
         'date_cloture_tech:date_heure date_cloture_admin:date_heure motif_annulation:texte_long '
-        'ot_lie_id:ref>ordres_travail anomalie_constatee:booleen astuce:texte_long'),
+        'ot_lie_id:ref>ordres_travail anomalie_constatee:booleen astuce:texte_long habilitation_requise:texte'),
     'ot_operations': (
         'id:id ot_id:ref>ordres_travail ordre:entier operation:texte valeur_attendue:texte '
         'fait:booleen valeur_mesuree:texte'),
@@ -258,13 +258,16 @@ DEFINITION_SCHEMA = {
         'id:id nom:texte prenom:texte metier:texte taux_horaire:decimal capacite_h_semaine:decimal '
         'actif:booleen'),
     'habilitations': (
-        'id:id technicien_id:ref>techniciens intitule:texte date_obtention:date date_echeance:date'),
+        'id:id technicien_id:ref>techniciens intitule:texte date_obtention:date date_echeance:date '
+        'recyclage_mois:entier justificatif:document catalogue_id:texte '
+        'nature_source:choix[obligation|norme|recommandation]'),
     'compteurs': 'id:id equipement_id:ref>equipements libelle:texte unite:texte',
     'releves': 'id:id compteur_id:ref>compteurs date:date valeur:decimal utilisateur:texte',
     'controles_reglementaires': (
         'id:id equipement_id:ref>equipements nature:texte texte_reference:texte periodicite_mois:entier '
         'organisme:texte derniere_date:date prochaine_date:date rapport:document observations:texte_long '
-        'observations_levees:booleen'),
+        'observations_levees:booleen source_periodicite:choix[catalogue|saisie] '
+        'nature_source:choix[obligation|norme|recommandation] catalogue_id:texte catalogue_relu_le:date'),
     'codes_defaillance': (
         'id:id famille:choix[symptôme|cause|remède] code:texte libelle:texte'),
     'fournisseurs': 'id:id nom:texte contact:texte telephone:texte! email:texte',
@@ -287,6 +290,18 @@ DEFINITION_SCHEMA = {
         'anterieure:booleen ordre:entier pages:texte changements:texte_long contradictions:texte_long '
         'raisons:texte_long modele:texte essais:entier cree_le:date_heure traite_le:date_heure '
         'decide_par:texte decide_le:date_heure motif:texte_long'),
+    # Format 4 (2.2, CONCEPTION-L1 §2.2) : réserves des contrôles, garanties et contrats de prestataires.
+    'reserves_controle': (
+        'id:id controle_id:ref>controles_reglementaires date_controle:date texte:texte_long '
+        'gravite:choix[mineure|majeure|critique] echeance_levee:date levee:booleen date_levee:date '
+        'commentaire_levee:texte_long ot_id:ref>ordres_travail'),
+    'garanties': (
+        'id:id equipement_id:ref>equipements fournisseur_id:ref>fournisseurs date_debut:date date_fin:date '
+        'conditions:texte_long document:document actif:booleen'),
+    'contrats_prestataires': (
+        'id:id fournisseur_id:ref>fournisseurs objet:texte equipement_ids:texte perimetre:texte_long '
+        'date_debut:date date_fin:date preavis_mois:entier reconduction_tacite:booleen reconduction_mois:entier '
+        'montant_annuel:decimal document:document actif:booleen'),
 }
 
 # Format des identifiants : (préfixe, nombre de chiffres, numérotation annuelle ?).
@@ -304,6 +319,8 @@ IDENTIFIANTS = {
     'fournisseurs': ('FOU-', 4, False), 'achats': ('ACH-', 4, False),
     'journal': ('J-', 4, False),     # J-AAAAMMJJHHMMSS-XXXX : 4 caractères aléatoires (écrit par l'application)
     'wiki_pages': ('WP-', 4, False), 'wiki_journal': ('WJ-', 5, False),
+    'reserves_controle': ('RES-', 5, False), 'garanties': ('GAR-', 4, False),
+    'contrats_prestataires': ('CTP-', 4, False),
 }
 
 
@@ -2104,20 +2121,47 @@ def generer_controles(ctx):
                     nature=nature, texte_reference=texte_reference, periodicite_mois=periodicite,
                     organisme=organisme, derniere_date=derniere,
                     prochaine_date=texte_date(ajouter_mois(derniere_date, periodicite)),
-                    observations=observations, observations_levees=levees)
+                    observations=observations, observations_levees=levees,
+                    source_periodicite='saisie')
         ctx.controles.append({'eq': equipement, 'nature': nature, 'organisme': organisme,
                               'derniere': derniere, 'observations': observations,
                               'recale_lot3': repere in CONTROLES_RECALES_LOT3})
 
 
+# Listes facultatives du format 4 : vides dans la démo (CONCEPTION-L1 §2.1, §2.2).
+CHOIX_FACULTATIFS = {('habilitations', 'nature_source'), ('controles_reglementaires', 'nature_source'),
+                     ('reserves_controle', 'gravite')}
+
+
+COMMENTAIRE_LEVEE_REPRISE = 'levée avant la 2.2, date inconnue'     # texte fixe de CONCEPTION-L1 §3.2
+
+
+def generer_reserves(ctx):
+    """Réserves des contrôles : règle de reprise des observations (CONCEPTION-L1 §3.2, D183), appliquée au
+    jeu de démo. Un contrôle sans réserve et avec des observations reçoit une réserve par ligne non vide ;
+    la date du contrôle est derniere_date, la gravité, l'échéance et la date de levée restent vides."""
+    avec_reserve = {r['controle_id'].strip() for r in ctx.base['reserves_controle']}
+    for controle in ctx.base['controles_reglementaires']:
+        identifiant = controle['id'].strip()
+        if not identifiant or identifiant in avec_reserve or not controle['observations'].strip():
+            continue
+        levee = controle['observations_levees'] == '1'
+        for morceau in re.split(r'\r\n|\r|\n', controle['observations']):
+            texte = morceau.strip()
+            if texte:
+                creer_ligne(ctx, 'reserves_controle', controle_id=identifiant,
+                            date_controle=controle['derniere_date'], texte=texte, levee='1' if levee else '0',
+                            commentaire_levee=COMMENTAIRE_LEVEE_REPRISE if levee else '')
+
+
 def generer_parametres(ctx):
-    # version_schema = Schema.version (js/schema.js : 3 depuis le lot 6, §20.2) ; priorite_preventif et
+    # version_schema = Schema.version (js/schema.js : 4 depuis la 2.2, 3 depuis le lot 6, §20.2) ; priorite_preventif et
     # horizon_calendrier_semaines sont les clés ajoutées par le lot 2 (ARCHITECTURE.md §14.1).
     for cle, valeur in [('entreprise_nom', NOM_ENTREPRISE), ('delai_p1_h', 0), ('delai_p2_h', 24),
                         ('delai_p3_h', 168), ('delai_p4', 'prochain arrêt'), ('heures_fonct_defaut', 8),
                         ('tolerance_preventif_pct', 10), ('rafraichissement_s', 20),
                         ('priorite_preventif', 'P3'), ('horizon_calendrier_semaines', 12),
-                        ('version_schema', 3)]:
+                        ('version_schema', 4)]:
         creer_ligne(ctx, 'parametres', cle=cle, valeur=valeur)
 
 
@@ -3730,7 +3774,8 @@ def verifier_jeu(ctx):
                     continue
                 if champ['type'] in MOTIFS_VALEUR and valeur != '' and not MOTIFS_VALEUR[champ['type']].fullmatch(valeur):
                     erreur('%s %s.%s : format invalide %r' % (ligne.get('id'), table, champ['nom'], valeur))
-                if champ['type'] == 'choix' and valeur not in champ['valeurs']:
+                if (champ['type'] == 'choix' and valeur not in champ['valeurs']
+                        and (valeur != '' or (table, champ['nom']) not in CHOIX_FACULTATIFS)):
                     erreur('%s %s.%s : valeur %r hors liste' % (ligne.get('id'), table, champ['nom'], valeur))
                 if champ['type'] == 'ref' and valeur != '':
                     if champ['champCible']:
@@ -4725,6 +4770,7 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None, dossier_wiki=None):
     generer_compteurs_et_releves(ctx)
     generer_gammes(ctx)
     generer_controles(ctx)
+    generer_reserves(ctx)
     generer_preventifs(ctx)
     generer_ot_reglementaires_et_ameliorations(ctx)
     if volume:

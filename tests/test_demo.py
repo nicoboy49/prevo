@@ -2,7 +2,7 @@
 tests/fixtures/demo-scenarios.json.
 
 Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brief §13) :
-  - 24 fichiers CSV : BOM, séparateur « ; », fins de ligne CRLF, en-têtes identiques à js/schema.js ;
+  - 27 fichiers CSV : BOM, séparateur « ; », fins de ligne CRLF, en-têtes identiques à js/schema.js ;
   - références (clés étrangères) valides, valeurs des listes valides ;
   - volumes du brief §13, historique de 13 mois et présence des objets des scénarios de recette ;
   - champs du format v2 renseignés (valeur de remplacement, code symptôme, anomalies de préventif) ;
@@ -18,7 +18,7 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
   - lot 6 (§20.10, D109, D110) : astuces sur des OT correctifs clôturés, tirées de leur scénario, sans vocabulaire
     de la sécurité ; deux OT de scénario contradictoires (CP-01, PO-02), clôturés administrativement, numérotés en dernier ;
   - champs protégés par une apostrophe (§3.2) ;
-  - js/demo-donnees.js chargé dans Chromium : 24 tables, texte identique aux CSV ; démo en file://
+  - js/demo-donnees.js chargé dans Chromium : 27 tables, texte identique aux CSV ; démo en file://
     chargée vite et sans erreur au « Contrôle de la base » ;
   - reproductibilité (deux exécutions = fichiers identiques, et fichiers livrés à jour) ;
   - wiki de démo (§20.12, D115, CS105) : le wiki figé n'est repris que pour la démo standard (--mois 6 : tables du wiki
@@ -81,7 +81,11 @@ TABLES = [
     'ot_temps', 'gammes', 'gamme_operations', 'articles', 'article_equipement', 'mouvements_stock',
     'techniciens', 'habilitations', 'compteurs', 'releves', 'controles_reglementaires',
     'codes_defaillance', 'fournisseurs', 'achats', 'parametres', 'journal',
-    'wiki_pages', 'wiki_journal']                           # format 3 (lot 6, ARCHITECTURE.md §20.2)
+    'wiki_pages', 'wiki_journal',                           # format 3 (lot 6, ARCHITECTURE.md §20.2)
+    'reserves_controle', 'garanties', 'contrats_prestataires']     # format 4 (2.2, CONCEPTION-L1 §2.2)
+
+FACULTATIFS_FORMAT_4 = {('habilitations', 'nature_source'), ('controles_reglementaires', 'nature_source'),
+                        ('reserves_controle', 'gravite')}
 
 
 # ---------------------------------------------------------------------------
@@ -416,9 +420,9 @@ def suggestions_ouvertes(t, aujourdhui=JOUR_REFERENCE, seuil=SEUIL_PANNES, jusqu
 # ---------------------------------------------------------------------------
 
 class TestFichiersCsv(unittest.TestCase):
-    """Format des 24 fichiers (§3.1)."""
+    """Format des 27 fichiers (§3.1, format 4)."""
 
-    def test_24_fichiers_presents(self):
+    def test_27_fichiers_presents(self):
         presents = sorted(p.name for p in DOSSIER_DEMO.glob('*.csv'))
         self.assertEqual(presents, sorted(t + '.csv' for t in TABLES))
 
@@ -593,7 +597,7 @@ class TestContenuDemo(unittest.TestCase):
         parametres = {p['cle']: p['valeur'] for p in self.t['parametres']}
         self.assertEqual(parametres['entreprise_nom'], 'Atelier des Trois Vallées (démo)')
         for cle, valeur in [('delai_p1_h', '0'), ('delai_p2_h', '24'), ('delai_p3_h', '168'),
-                            ('delai_p4', 'prochain arrêt'), ('rafraichissement_s', '20'), ('version_schema', '3'),
+                            ('delai_p4', 'prochain arrêt'), ('rafraichissement_s', '20'), ('version_schema', '4'),
                             # clés ajoutées par le lot 2 (ARCHITECTURE.md §14.1)
                             ('priorite_preventif', 'P3'), ('horizon_calendrier_semaines', '12')]:
             self.assertEqual(parametres[cle], valeur, cle)
@@ -1062,6 +1066,34 @@ class TestContenuDemo(unittest.TestCase):
                 ouverts[o['gamme_id']] = ouverts.get(o['gamme_id'], 0) + 1
         self.assertTrue(ouverts)
         self.assertTrue(all(n == 1 for n in ouverts.values()))
+
+    def test_format_4_reserves_garanties_contrats_et_colonnes_vides(self):
+        """T387 : 27 tables ; réserves tirées des observations (CONCEPTION-L1 §3.2) ; garanties et contrats en
+        en-tête seul ; colonnes nouvelles vides sauf source_periodicite = saisie."""
+        self.assertEqual(len(TABLES), 27)
+        self.assertEqual(TABLES[-3:], ['reserves_controle', 'garanties', 'contrats_prestataires'])
+        self.assertEqual(self.t['garanties'], [])
+        self.assertEqual(self.t['contrats_prestataires'], [])
+        controles = self.t['controles_reglementaires']
+        reserves = self.t['reserves_controle']
+        avec_observations = [c for c in controles if c['observations'].strip()]
+        self.assertEqual(len(reserves), 1)
+        reserve = reserves[0]
+        self.assertEqual(reserve['id'], 'RES-00001')
+        self.assertEqual(reserve['controle_id'], avec_observations[0]['id'])
+        self.assertEqual(reserve['texte'], avec_observations[0]['observations'].strip())
+        self.assertEqual(reserve['date_controle'], avec_observations[0]['derniere_date'])
+        self.assertEqual((reserve['levee'], reserve['date_levee'], reserve['commentaire_levee']), ('0', '', ''))
+        for champ in ('gravite', 'echeance_levee', 'ot_id'):
+            self.assertEqual(reserve[champ], '')
+        for c in controles:
+            self.assertEqual((c['source_periodicite'], c['nature_source'], c['catalogue_id'], c['catalogue_relu_le']),
+                             ('saisie', '', '', ''))
+        for table, champs in (('equipements', ['cout_arret_h']), ('ordres_travail', ['habilitation_requise']),
+                              ('habilitations', ['recyclage_mois', 'justificatif', 'catalogue_id', 'nature_source'])):
+            for ligne in self.t[table]:
+                for champ in champs:
+                    self.assertEqual(ligne[champ], '', '%s.%s' % (table, champ))
 
     def test_controles_reglementaires(self):
         controles = self.t['controles_reglementaires']
@@ -1908,7 +1940,9 @@ class TestAvecNavigateur(CasNavigateur):
             for champ in schema_js[table]['champs']:
                 for ligne in tables[table]:
                     valeur = ligne[champ['nom']]
-                    if champ['type'] == 'choix':
+                    if champ['type'] == 'choix' and valeur == '' and (table, champ['nom']) in FACULTATIFS_FORMAT_4:
+                        verifiees += 1      # liste facultative du format 4, vide dans la démo
+                    elif champ['type'] == 'choix':
                         self.assertIn(valeur, champ['valeurs'], '%s.%s = %r' % (table, champ['nom'], valeur))
                     elif champ['type'] == 'ref' and valeur != '':
                         valides = codes[champ['famille']] if champ['champCible'] else valeurs_cles[champ['table']]
@@ -1944,7 +1978,7 @@ class TestAvecNavigateur(CasNavigateur):
                     if ligne[champ['nom']] != '':
                         self.assertTrue(ligne[champ['nom']].startswith("'"), '%s.%s' % (table, champ['nom']))
 
-    def test_demo_donnees_js_contient_les_23_tables_identiques_aux_csv(self):
+    def test_demo_donnees_js_contient_les_27_tables_identiques_aux_csv(self):
         charger_scripts(self.page, ['js/demo-donnees.js'])
         self.assertEqual(self.page.evaluate('DEMO_DONNEES.dateReference'), DATE_REFERENCE)
         noms = self.page.evaluate('Object.keys(DEMO_DONNEES.tables)')
