@@ -6426,11 +6426,20 @@ ORDRE_DES_ROLES = ('demandeur', 'appareil', 'technicien', 'responsable')
 # (accueil, Signaler, demandes, parc, fiche d'équipement avec ses compteurs et relevés, wiki, Ce poste).
 TABLES_DU_DEMANDEUR = ('localisations', 'equipements', 'demandes', 'compteurs', 'releves', 'codes_defaillance',
                        'parametres', 'wiki_pages')
+# --- T445 : réponses PROVISOIRES aux questions 2 et 3 du L3 (nuit du 08 au 09/11/2026), à confirmer par Nicolas ----
+# SEUL endroit à changer pour les annuler : vider l'un ou l'autre de ces deux tuples (le reste du code les suit ;
+# ARCHITECTURE.md §22.5 et tests/test_droits_format4.py changent avec). Mode serveur avec comptes seulement.
+#   Q2 : habilitations ne s'écrit que par le responsable (PUT et ajout : 403 au technicien, comme parametres) ; le
+#        blocage RG8 reste tenu par l'application (aucune copie de la règle ici, limite écrite au §10 et au §22.5).
+#   Q3 : un document cité par l'une de ces colonnes n'est servi qu'au responsable (GET /api/documents/<nom> : 403 au
+#        technicien, au demandeur et à l'appareil), colonnes relues à chaque requête (documents_reserves).
+TABLES_DU_RESPONSABLE_PROVISOIRES = ('habilitations',)
+DOCUMENTS_DU_RESPONSABLE_PROVISOIRES = (('habilitations', 'justificatif'), ('contrats_prestataires', 'document'))
 # Écritures : le demandeur crée des demandes (PUT de demandes.csv en ajout seulement) et la ligne de journal qui va
-# avec ; le technicien écrit tout sauf ces trois tables, qu'il lit (techniciens sans taux horaire).
+# avec ; le technicien écrit tout sauf les tables du responsable, qu'il lit (techniciens sans taux horaire).
 TABLES_DU_DEMANDEUR_EN_ECRITURE = ('demandes',)
 TABLES_DU_DEMANDEUR_EN_AJOUT = ('demandes', 'journal')
-TABLES_DU_RESPONSABLE_EN_ECRITURE = ('parametres', 'techniciens', 'fournisseurs')
+TABLES_DU_RESPONSABLE_EN_ECRITURE = ('parametres', 'techniciens', 'fournisseurs') + TABLES_DU_RESPONSABLE_PROVISOIRES
 TABLES_DU_TECHNICIEN_EN_ECRITURE = tuple(table for table in TABLES if table not in TABLES_DU_RESPONSABLE_EN_ECRITURE)
 # Documents du demandeur : les photos de demandes (nom donné par nomPhoto de js/modules/demandes-ecritures.js) et les
 # documents des équipements (noms de la colonne « document » d'equipements.csv). Le serveur ne sait pas qui a pris
@@ -6440,6 +6449,8 @@ MOTIF_PHOTO_DE_DEMANDE = re.compile(PREFIXE_NOM_DOCUMENT + r'photo-[0-9]{8}-[0-9
                                     re.ASCII)
 PHOTOS_DE_DEMANDES = 'photos de demandes'
 DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
+# Documents du technicien : tous, sauf ceux que DOCUMENTS_DU_RESPONSABLE_PROVISOIRES réserve (T445) ; marqueur.
+DOCUMENTS_DU_TECHNICIEN = 'documents_sauf_reserves'
 TOUS = (OUI, OUI, OUI, OUI)
 RESPONSABLE = (NON, NON, NON, OUI)
 INTERVENANTS = (NON, NON, OUI, OUI)     # technicien et responsable (l'IA : arbitrage de Nicolas du 2026-10-28)
@@ -6473,7 +6484,7 @@ ROLES_PAR_ROUTE = {
                              TABLES_DU_TECHNICIEN_EN_ECRITURE, OUI),
     ('POST', 'csv/<table>/ajout'): (TABLES_DU_DEMANDEUR_EN_AJOUT, TABLES_DU_DEMANDEUR_EN_AJOUT,
                                     TABLES_DU_TECHNICIEN_EN_ECRITURE, OUI),
-    ('GET', 'documents/<nom>'): (DOCUMENTS_DU_DEMANDEUR, DOCUMENTS_DU_DEMANDEUR, OUI, OUI),
+    ('GET', 'documents/<nom>'): (DOCUMENTS_DU_DEMANDEUR, DOCUMENTS_DU_DEMANDEUR, DOCUMENTS_DU_TECHNICIEN, OUI),
     ('PUT', 'documents/<nom>'): (PHOTOS_DE_DEMANDES, PHOTOS_DE_DEMANDES, OUI, OUI),
     ('POST', 'sauvegarde'): RESPONSABLE,
     ('POST', 'sauvegarde/tester'): RESPONSABLE,
@@ -6526,24 +6537,42 @@ def tables_lisibles(identite):
     return set(regle) if isinstance(regle, tuple) else set()
 
 
-def documents_des_equipements(config):
-    """Noms de la colonne « document » d'equipements.csv (apostrophe de protection retirée, §3.2)."""
+def documents_cites(config, table, colonne):
+    """Noms d'une colonne de documents d'une table (apostrophe de protection retirée, §3.2), relus dans le fichier ;
+    vide pour une table absente (données d'avant son format)."""
     with VERROU_ECRITURE:
-        octets = lire_octets(chemin_table(config, 'equipements'))
+        octets = lire_octets(chemin_table(config, table))
     noms = set()
-    for ligne in dictionnaires_csv(octets):
-        nom = ligne.get('document', '').strip()
-        noms.add(nom[1:] if nom.startswith("'") else nom)
+    for ligne in dictionnaires_csv(octets, table):
+        nom = ligne.get(cle_entete(colonne), '').strip()
+        noms.add(nom[1:].strip() if nom.startswith("'") else nom)
     noms.discard('')
     return noms
 
 
+def documents_des_equipements(config):
+    """Noms de la colonne « document » d'equipements.csv (apostrophe de protection retirée, §3.2)."""
+    return documents_cites(config, 'equipements', 'document')
+
+
+def documents_reserves(config):
+    """T445 (réponse provisoire Q3) : noms des documents servis au seul responsable, en minuscules (le dossier des
+    documents ne distingue pas la casse sous Windows ni macOS : « JUSTIF.PDF » ouvrirait « justif.pdf »)."""
+    return {nom.lower() for table, colonne in DOCUMENTS_DU_RESPONSABLE_PROVISOIRES
+            for nom in documents_cites(config, table, colonne)}
+
+
 def segment_permis(config, regle, segment):
-    """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin."""
+    """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin. Un document
+    réservé au responsable (documents_reserves, T445) n'est permis par aucune règle de lecture des autres rôles."""
     if segment is None:
         return False
     if isinstance(regle, tuple):
         return segment in regle
+    if regle in (DOCUMENTS_DU_TECHNICIEN, DOCUMENTS_DU_DEMANDEUR) and segment.lower() in documents_reserves(config):
+        return False
+    if regle == DOCUMENTS_DU_TECHNICIEN:
+        return True
     if regle in (PHOTOS_DE_DEMANDES, DOCUMENTS_DU_DEMANDEUR) and MOTIF_PHOTO_DE_DEMANDE.fullmatch(segment):
         return True
     return regle == DOCUMENTS_DU_DEMANDEUR and segment in documents_des_equipements(config)

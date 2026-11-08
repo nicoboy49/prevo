@@ -789,6 +789,9 @@ avertissement au journal.
   d'intitulé identique (casse ignorée) avec `date_obtention` ≤ date prévue (ou aujourd'hui) ≤
   `date_echeance`. Sinon : **avertissement** (pas de blocage) affiché et inscrit au journal
   (« avertissement habilitation : TEC-0004 sans BR valide au 2026-10-21 »).
+  Limite côté serveur (T445, réponse provisoire, à confirmer) : RG8 est tenue par l'application seule ; en mode
+  serveur avec comptes, le serveur réserve l'écriture de `habilitations` au responsable mais ne contrôle pas RG8 dans
+  `ordres_travail` (§22.5).
 - « OT en retard » : statut ni clôturé ni annulé et `date_prevue` < aujourd'hui. « P1 ouvert » :
   priorité P1, statut ni clôturé ni annulé. « DI à traiter » : statut `Nouvelle`.
 
@@ -3689,9 +3692,9 @@ ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa ligne
 | `POST /api/acces/appareils/<id>/revoquer` | non | non | non | oui |
 | `POST /api/acces/appareils/revoquer-tous` | non | non | non | oui |
 | `GET /api/csv/<table>` | tables du demandeur | tables du demandeur | toutes (colonnes retirées) | toutes |
-| `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
-| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
-| `GET /api/documents/<nom>` | photos de demandes, documents des équipements | photos de demandes, documents des équipements | oui | oui |
+| `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `habilitations` | toutes |
+| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `habilitations` | toutes |
+| `GET /api/documents/<nom>` | photos de demandes, documents des équipements (sauf documents réservés) | photos de demandes, documents des équipements (sauf documents réservés) | oui (sauf documents réservés) | oui |
 | `PUT /api/documents/<nom>` | photos de demandes | photos de demandes | oui | oui |
 | `POST /api/sauvegarde` | non | non | non | oui |
 | `POST /api/sauvegarde/tester` | non | non | non | oui |
@@ -3745,6 +3748,20 @@ Précisions de T152 :
   d'`equipements.csv`, relue à chaque requête) ; envoi des seules photos de demandes. « Ses » demandes : le serveur ne sait
   pas relier une photo à la personne qui l'a prise (`demandeur` est un nom libre) ; le demandeur lit donc toutes les photos
   de demandes.
+- **Réponses provisoires de T445** (questions 2 et 3 du L3, nuit du 08 au 09/11/2026, **à confirmer par Nicolas**) :
+  - *Habilitations* : `habilitations` s'écrit par le responsable seul ; le `PUT` et l'ajout du technicien sont refusés
+    (403 `acces.table_du_responsable`, comme `parametres`) ; il la lit toujours. Aucun de ses écrans ne l'écrit (boutons
+    de l'Équipe au responsable, import réservé au responsable).
+  - *Documents réservés* : un document cité par `habilitations.justificatif` ou `contrats_prestataires.document`
+    (relus à chaque requête, apostrophe de protection retirée, casse ignorée car le dossier ne la distingue pas sous
+    Windows ni macOS) n'est servi qu'au responsable : `GET /api/documents/<nom>` répond 403 `acces.document_ferme` au
+    technicien, au demandeur et à l'appareil, même si le document est aussi cité ailleurs. Les autres documents ne
+    changent pas (documents de garantie lisibles du technicien) ; l'envoi (`PUT`) non plus.
+  - *Limite connue (RG8)* : le blocage RG8 reste tenu par l'application (§10) ; le serveur n'en a aucune copie. Un
+    compte technicien qui appelle l'API directement peut encore écrire `ordres_travail` et s'affecter un OT sans
+    l'habilitation requise ; à l'écran, il n'en a aucun moyen (CS178). Même limite que RG3 et RG4.
+  - *Annuler* : vider `TABLES_DU_RESPONSABLE_PROVISOIRES` ou `DOCUMENTS_DU_RESPONSABLE_PROVISOIRES` dans `serveur.py`
+    (seul endroit), puis remettre ce tableau et `tests/test_droits_format4.py`.
 - **Sans comptes** : rien ne change (aucune colonne ni ligne retirée, toutes les versions, aucune règle d'écriture).
 
 `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert qu'en portée « ce PC » et en modes dossier
