@@ -1,6 +1,7 @@
 'use strict';
 // Controles (2/3) — écritures des contrôles réglementaires (ARCHITECTURE.md §15.7 ; brief RG9, E10) :
-// création, modification, contrôle réalisé (dates recalculées, rapport joint), levée des observations.
+// création, modification, contrôle réalisé (dates recalculées, rapport joint, réserves relevées ajoutées par
+// Controles.ajouterReserves de controles-reserves.js, 2.2), levée des observations.
 //
 // Règles communes à toutes les fonctions de ce fichier :
 // - toute écriture passe par Donnees.modifier('controles_reglementaires') ; les contrôles sont
@@ -9,12 +10,14 @@
 // - un refus lève Donnees.ErreurValidation (message pour l'utilisateur) ; jamais de suppression ;
 // - ce module ne crée JAMAIS d'ordre de travail : « Créer un OT » ouvre le formulaire de l'OT
 //   pré-rempli, que le responsable valide lui-même (écran, controles-ecrans.js).
-// Complète l'objet Controles créé par controles-regles.js.
+// Complète l'objet Controles créé par controles-regles.js (et complété par controles-reserves.js, chargé avant).
 
 Object.assign(Controles, (() => {
 
   // Outils de controles-regles.js.
   const { texte, dateIso, dateDuJour, periodicite, observationsALever } = Controles.interne;
+  // Outils de controles-reserves.js (chargé avant ce fichier).
+  const { refuserSiErreurs, erreursDate, erreursEcheance } = Controles.interne;
   const { ajouterMois } = Controles;
 
   // Champs du formulaire d'un contrôle (création et modification). Le rapport, les observations
@@ -38,10 +41,6 @@ Object.assign(Controles, (() => {
     return new Donnees.ErreurValidation(message);
   }
 
-  function refuserSiErreurs(erreurs) {
-    if (erreurs.length) throw ErreurValidation(erreurs.map((erreur) => erreur.message).join(' '));
-  }
-
   function ligneDuControle(lignes, controleId) {
     const ligne = lignes.find((l) => l.id === controleId);
     if (!ligne) throw ErreurValidation(I18n.t('controles.ligne_du_controle.controle_introuvable', { controleId: (controleId || I18n.t('controles.ligne_du_controle.non_choisi')) }));
@@ -59,14 +58,6 @@ Object.assign(Controles, (() => {
       propres.periodicite_mois = String(Number(propres.periodicite_mois));     // « 012 » → « 12 »
     }
     return propres;
-  }
-
-  /** Erreur [{ nom, message }] d'un champ date : illisible, ou (si `pasFuture`) après aujourd'hui. */
-  function erreursDate(nom, valeur, jour, pasFuture, libelle) {
-    if (!texte(valeur)) return [];
-    if (!dateIso(valeur) || texte(valeur).length !== 10) return [{ nom, message: I18n.t('controles.erreurs_date.date_illisible_format_aaaa', { libelle }) }];
-    if (pasFuture && texte(valeur) > jour) return [{ nom, message: I18n.t('controles.erreurs_date.peut_pas_etre_futur', { libelle }) }];
-    return [];
   }
 
   // ===========================================================================================
@@ -135,7 +126,8 @@ Object.assign(Controles, (() => {
 
   /**
    * Contrôle d'un « contrôle réalisé » : [{ nom, message }]. Date obligatoire, ni future ni
-   * antérieure au dernier contrôle enregistré ; périodicité connue (pour calculer la suivante).
+   * antérieure au dernier contrôle enregistré ; périodicité connue (pour calculer la suivante) ;
+   * échéance de levée des réserves (facultative) lisible et pas avant la date du contrôle.
    */
   function verifierRealisation(controle, valeurs, aujourdhui) {
     const jour = dateDuJour(aujourdhui);
@@ -149,25 +141,35 @@ Object.assign(Controles, (() => {
     if (periodicite(controle) === null) {
       erreurs.push({ nom: 'date', message: I18n.t('controles.verifier_realisation.periodicite_controle_pas_renseignee') });
     }
-    return erreurs;
+    return erreurs.concat(erreursEcheance(valeurs.echeance_levee, erreurs.length ? '' : date));
   }
 
   /**
-   * Enregistre un contrôle réalisé : derniere_date = date, prochaine_date = date + périodicité
-   * (même jour, ramené à la fin du mois), organisme (s'il est donné), rapport (nom d'un document
-   * déjà écrit par ecrireRapport ; vide si aucun), observations ; observations_levees = '0' s'il y
-   * a des observations, sinon '1'. Renvoie { derniere_date, prochaine_date }.
+   * Enregistre un contrôle réalisé ({ date, organisme, rapport, reserves, echeance_levee }) en deux
+   * écritures, dans un ordre sûr (D18) :
+   * 1. le contrôle : derniere_date = date, prochaine_date = date + périodicité (même jour, ramené à
+   *    la fin du mois), organisme (s'il est donné), rapport (nom d'un document déjà écrit par
+   *    ecrireRapport ; vide si aucun) ; transition jusqu'à T418 : observations = texte des réserves,
+   *    observations_levees = '0' s'il y en a, sinon '1' (le statut d'avant T412 reste juste) ;
+   * 2. les réserves relevées (une par ligne du texte), AJOUTÉES par Controles.ajouterReserves avec
+   *    cette date et l'échéance donnée : aucune réserve existante n'est effacée ni modifiée (CS170 ;
+   *    celles des contrôles précédents restent ouvertes). Rejouable : renvoyer la même saisie après
+   *    un échec de la 2e écriture ne recrée pas les réserves déjà écrites.
+   * `observations` est lu comme synonyme de `reserves` (ancienne fenêtre, jusqu'à T418). Renvoie
+   * { derniere_date, prochaine_date, reserves: identifiants créés }.
    */
   async function enregistrerRealisation(controleId, valeurs) {
+    const v = valeurs || {};
     const saisie = {
-      date: texte(valeurs && valeurs.date), organisme: texte(valeurs && valeurs.organisme),
-      rapport: texte(valeurs && valeurs.rapport), observations: texte(valeurs && valeurs.observations),
+      date: texte(v.date), organisme: texte(v.organisme), rapport: texte(v.rapport),
+      observations: texte(v.reserves !== undefined && v.reserves !== null ? v.reserves : v.observations),
+      echeance_levee: texte(v.echeance_levee),
     };
     const action = 'contrôle réalisé le ' + UI.dateFr(saisie.date)
       + (saisie.organisme ? ' par ' + saisie.organisme : '')
       + (saisie.rapport ? ' ; rapport : ' + saisie.rapport : ' ; sans rapport joint')
       + (saisie.observations ? ' ; observations : ' + saisie.observations : ' ; sans observation');
-    return Donnees.modifier('controles_reglementaires', (lignes, outils) => {
+    const dates = await Donnees.modifier('controles_reglementaires', (lignes, outils) => {
       const ligne = ligneDuControle(lignes, controleId);
       refuserSiErreurs(verifierRealisation(ligne, saisie, outils.aujourdhui()));
       ligne.derniere_date = saisie.date;
@@ -178,6 +180,11 @@ Object.assign(Controles, (() => {
       ligne.observations_levees = saisie.observations ? '0' : '1';
       return { derniere_date: ligne.derniere_date, prochaine_date: ligne.prochaine_date };
     }, { action });
+    const reserves = Controles.lignesDeReserves(saisie.observations).length
+      ? await Controles.ajouterReserves(controleId, { date_controle: saisie.date, texte: saisie.observations,
+        echeance_levee: saisie.echeance_levee })
+      : [];
+    return Object.assign(dates, { reserves });
   }
 
   /** Contrôle d'une levée d'observations : [{ nom, message }]. */
@@ -230,9 +237,13 @@ Object.assign(Controles, (() => {
     return '';
   }
 
-  // Le stockage refuse d'écraser un document : « … existe déjà » (dossier, démo) ou « … porte déjà ce nom » (serveur).
-  function documentExisteDeja(erreur) {
-    return erreur instanceof Donnees.ErreurStockage && /existe déjà|porte déjà ce nom/.test(erreur.message || '');
+  // Le stockage refuse d'écraser un document : « Le document … existe déjà. » (dossier, démo) ou « Un document
+  // porte déjà ce nom. » (serveur, 409). Il n'a pas de code d'erreur pour ce cas : ses messages sont comparés
+  // dans la langue de l'écran, celle où il les écrit (comme Equipe.ecrireJustificatif) ; avant T413, seul le
+  // français était reconnu et un 2e rapport du même jour échouait dans une autre langue au lieu de prendre « -2 ».
+  function documentExisteDeja(erreur, nom) {
+    return erreur instanceof Donnees.ErreurStockage
+      && [I18n.t('socle.creer.document_existe_deja', { nom }), I18n.t('socle.creer.document_porte_deja_nom')].includes(erreur.message);
   }
 
   /**
@@ -253,7 +264,7 @@ Object.assign(Controles, (() => {
       try {
         return await App.adaptateur.ecrireDocument(nom, contenu);
       } catch (erreur) {
-        if (!documentExisteDeja(erreur)) throw erreur;
+        if (!documentExisteDeja(erreur, nom)) throw erreur;
       }
     }
     return App.adaptateur.ecrireDocument(UI.nomFichierUnique(base, extension), contenu);
