@@ -11,7 +11,8 @@
 //   - format 3 : + ordres_travail.astuce et les tables wiki_pages, wiki_journal (§20.2) ;
 //   - format 4 (2.2) : + equipements.cout_arret_h, ordres_travail.habilitation_requise, quatre colonnes
 //                d'habilitations et quatre de controles_reglementaires, et les tables reserves_controle, garanties,
-//                contrats_prestataires (27 tables).
+//                contrats_prestataires (27 tables) ; l'étape 3→4 reprend aussi les observations des contrôles en
+//                réserves (D183, reservesReprises ci-dessous).
 // Place des colonnes (toutes les étapes) : les colonnes du fichier, connues ou inconnues du schéma, restent dans leur
 // ordre ; les colonnes que l'étape ajoute vont en fin d'en-tête, après elles, dans l'ordre du schéma (serveur.py fait
 // de même).
@@ -213,13 +214,186 @@ const Formats = (function () {
     return Object.assign({}, source, { tables: nouvellesTables });
   }
 
-  // Une étape du registre : de N à N+1, une description, et sa fonction pure appliquer(base) → nouvelle base.
-  function etape(de, vers, description) {
+  // ---------------------------------------------------------------------------
+  // Reprise des observations des contrôles en réserves (D183, étape 3→4 ; note de conception du format 4, §3.2)
+  // ---------------------------------------------------------------------------
+
+  // Copies exactes de MOTIF_DATE_ISO, MOTIF_DATE_FRANCAISE, VALEURS_BOOLEENNES, enTexte, deuxChiffres,
+  // dateIsoSiValide, lireDate, normaliserDate et normaliserBooleen de js/donnees.js : Formats est chargé avant
+  // Donnees, et la reprise doit lire une date ou un booléen écrit par Excel (« 15/01/2024 », « oui ») comme Prévo le
+  // lit. tests/test_formats_js.py compare le texte de chaque copie à l'original, et leurs résultats à
+  // Donnees.normaliser.
+  const MOTIF_DATE_ISO = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+  const MOTIF_DATE_FRANCAISE = /^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})$/;   // JJ/MM/AAAA, J/M/AAAA, JJ-MM-AAAA, JJ.MM.AAAA
+
+  const VALEURS_BOOLEENNES = {
+    '1': '1', '0': '0',
+    'vrai': '1', 'faux': '0',
+    'oui': '1', 'non': '0',
+    'true': '1', 'false': '0',
+    'yes': '1', 'no': '0',                 // anglais aussi : même lecture quelle que soit la langue (T287)
+    'x': '1',
+  };
+
+  function enTexte(valeur) {
+    return valeur === null || valeur === undefined ? '' : String(valeur);
+  }
+
+  function deuxChiffres(nombreEntier) {
+    return String(nombreEntier).padStart(2, '0');
+  }
+
+  // Vérifie qu'un jour existe vraiment (pas de 31/02) et renvoie 'AAAA-MM-JJ', sinon null.
+  function dateIsoSiValide(annee, mois, jour) {
+    const a = Number(annee);
+    const m = Number(mois);
+    const j = Number(jour);
+    if (m < 1 || m > 12 || j < 1) { return null; }
+    const joursDuMois = new Date(Date.UTC(a, m, 0)).getUTCDate();   // jour 0 du mois suivant
+    if (j > joursDuMois) { return null; }
+    return String(a).padStart(4, '0') + '-' + deuxChiffres(m) + '-' + deuxChiffres(j);
+  }
+
+  // Partie « date » seule : renvoie 'AAAA-MM-JJ' ou null.
+  function lireDate(texte) {
+    let morceaux = MOTIF_DATE_ISO.exec(texte);
+    if (morceaux) { return dateIsoSiValide(morceaux[1], morceaux[2], morceaux[3]); }
+    morceaux = MOTIF_DATE_FRANCAISE.exec(texte);
+    if (morceaux) { return dateIsoSiValide(morceaux[4], morceaux[3], morceaux[1]); }
+    return null;
+  }
+
+  // Date : AAAA-MM-JJ, JJ/MM/AAAA, J/M/AAAA, JJ-MM-AAAA, JJ.MM.AAAA → 'AAAA-MM-JJ'.
+  function normaliserDate(brut) {
+    const texte = enTexte(brut).trim();
+    if (texte === '') { return { valeur: '', ok: true }; }
+    const iso = lireDate(texte);
+    return iso ? { valeur: iso, ok: true } : { valeur: texte, ok: false };
+  }
+
+  // Booléen : 1, 0, vrai, faux, oui, non, true, false, x (casse ignorée) → '1' / '0'.
+  function normaliserBooleen(brut) {
+    const texte = enTexte(brut).trim();
+    if (texte === '') { return { valeur: '', ok: true }; }
+    const canonique = VALEURS_BOOLEENNES[texte.toLowerCase()];
+    return canonique ? { valeur: canonique, ok: true } : { valeur: texte, ok: false };
+  }
+
+  // Constantes de la reprise, identiques à l'octet dans serveur.py (T390). Le commentaire est écrit en français dans
+  // les données (comme « passage au format N du fichier ») ; l'écran l'affiche traduit quand il vaut exactement ce
+  // texte.
+  const COMMENTAIRE_LEVEE_REPRISE = 'levée avant la 2.2, date inconnue';
+  const PREFIXE_RESERVE = 'RES-';                 // = Schema.table('reserves_controle').identifiant.prefixe
+  const CHIFFRES_RESERVE = 5;                     // = …identifiant.chiffres (au moins 5 chiffres)
+  const MOTIF_ID_RESERVE = /^RES-([0-9]+)$/;      // chiffres ASCII seulement (serveur : re.ASCII)
+  const MOTIF_FIN_DE_LIGNE = /\r\n|\r|\n/;        // ni U+2028, ni U+0085, ni \v, ni \f (serveur : re.split, pas splitlines)
+  const MOTIF_ZEROS_DE_TETE = /^0+/;
+
+  // Lignes reçues : un tableau, sinon aucune ; un élément qui n'est pas un objet est ignoré.
+  function lignesObjets(lignes) {
+    return (Array.isArray(lignes) ? lignes : []).filter(function (ligne) {
+      return ligne !== null && typeof ligne === 'object';
+    });
+  }
+
+  // Numéros des réserves en chiffres décimaux sans zéro de tête ('' vaut 0), comparés et incrémentés comme des
+  // textes : exacts quelle que soit leur longueur (un Number perdrait des chiffres au-delà de 2^53 ; Python : int).
+  function plusGrandNumero(a, b) {
+    if (a.length !== b.length) { return a.length > b.length ? a : b; }
+    return a >= b ? a : b;
+  }
+
+  function numeroSuivant(chiffres) {
+    let resultat = '';
+    let retenue = 1;
+    for (let rang = chiffres.length - 1; rang >= 0; rang -= 1) {
+      const somme = Number(chiffres[rang]) + retenue;
+      resultat = String(somme % 10) + resultat;
+      retenue = somme >= 10 ? 1 : 0;
+    }
+    return retenue === 1 ? '1' + resultat : resultat;
+  }
+
+  // Réserves tirées des observations des contrôles (D183) : fonction PURE (ne modifie rien de ce qu'elle reçoit) et
+  // déterministe (ni date du jour ni hasard) → NOUVELLES lignes de reserves_controle, dans l'ordre, à ajouter après
+  // les lignes existantes. Entrées : lignes de controles_reglementaires et de reserves_controle telles qu'en mémoire
+  // dans Prévo (valeurs texte relues, sans l'apostrophe de protection ; colonnes nommées comme le schéma).
+  //   - Un contrôle n'est repris que s'il n'a AUCUNE réserve : l'ensemble des controle_id (bords blancs retirés) des
+  //     réserves reçues est pris une fois, avant la boucle. Rejouée sur sa propre sortie, la reprise ne rend donc
+  //     rien (idempotence) ; deux contrôles au même identifiant reçoivent chacun leurs réserves, une seule fois.
+  //   - Un contrôle sans identifiant (bords blancs retirés) ou aux observations vides ou blanches ne donne rien,
+  //     levé ou non.
+  //   - Une réserve par ligne non vide des observations : coupe sur \r\n, \r ou \n, bords blancs de chaque ligne
+  //     retirés (String.prototype.trim), puces (« - », « • », « 1. ») gardées.
+  //   - id : RES- suivi du numéro sur 5 chiffres au moins, numérotés à la suite du plus grand identifiant reçu qui
+  //     s'écrit exactement RES-<chiffres> (bords blancs retirés ; aucun : depuis RES-00001) ;
+  //     controle_id : l'identifiant du contrôle, bords blancs retirés ;
+  //     date_controle : derniere_date lue comme Prévo la lit (AAAA-MM-JJ si la date est reconnue, sinon le texte
+  //     sans ses bords blancs, sinon vide) : les observations sont celles de la dernière réalisation ;
+  //     texte : la ligne ;
+  //     levee : '1' si observations_levees se lit « vrai » comme Prévo le lit (1, oui, x, vrai, true, yes), sinon '0' ;
+  //     commentaire_levee : COMMENTAIRE_LEVEE_REPRISE pour une réserve levée, sinon vide ;
+  //     gravite, echeance_levee, date_levee, ot_id : vides (aucune date inventée, D183).
+  // Les contrôles ne sont pas modifiés : observations et observations_levees gardent leur valeur (CS169).
+  function reservesReprises(lignesControles, lignesReserves) {
+    const reserves = lignesObjets(lignesReserves);
+    const avecReserve = new Set(reserves.map(function (reserve) { return enTexte(reserve.controle_id).trim(); }));
+    let numero = '';
+    for (const reserve of reserves) {
+      const morceaux = MOTIF_ID_RESERVE.exec(enTexte(reserve.id).trim());
+      if (morceaux) { numero = plusGrandNumero(numero, morceaux[1].replace(MOTIF_ZEROS_DE_TETE, '')); }
+    }
+    const nouvelles = [];
+    for (const controle of lignesObjets(lignesControles)) {
+      const id = enTexte(controle.id).trim();
+      if (id === '' || avecReserve.has(id)) { continue; }
+      const observations = enTexte(controle.observations);
+      if (observations.trim() === '') { continue; }
+      const levee = normaliserBooleen(controle.observations_levees).valeur === '1';
+      const date = normaliserDate(controle.derniere_date).valeur;
+      for (const morceau of observations.split(MOTIF_FIN_DE_LIGNE)) {
+        const texte = morceau.trim();
+        if (texte === '') { continue; }
+        numero = numeroSuivant(numero);
+        nouvelles.push({
+          id: PREFIXE_RESERVE + numero.padStart(CHIFFRES_RESERVE, '0'),
+          controle_id: id,
+          date_controle: date,
+          texte: texte,
+          gravite: '',
+          echeance_levee: '',
+          levee: levee ? '1' : '0',
+          date_levee: '',
+          commentaire_levee: levee ? COMMENTAIRE_LEVEE_REPRISE : '',
+          ot_id: '',
+        });
+      }
+    }
+    return nouvelles;
+  }
+
+  // Complément de l'étape 3→4, appliqué à la base NOUVELLE que rend passerAuFormat(base, 4) (où
+  // controles_reglementaires et reserves_controle existent toujours : copies de celles de la base reçue, ou créées
+  // vides si absentes) : les réserves reprises sont ajoutées après les lignes existantes de reserves_controle.
+  // Modifie la COPIE reçue.
+  function reprendreObservations(base) {
+    const reserves = base.tables.reserves_controle;
+    const nouvelles = reservesReprises(base.tables.controles_reglementaires.lignes, reserves.lignes);
+    Array.prototype.push.apply(reserves.lignes, nouvelles);
+    return base;
+  }
+
+  // Une étape du registre : de N à N+1, une description, et sa fonction pure appliquer(base) → nouvelle base
+  // (passerAuFormat, puis le complément propre à l'étape s'il y en a un, appliqué à la nouvelle base).
+  function etape(de, vers, description, complement) {
     return Object.freeze({
       de: de,
       vers: vers,
       description: description,
-      appliquer: function (base) { return passerAuFormat(base, vers); },
+      appliquer: function (base) {
+        const nouvelle = passerAuFormat(base, vers);
+        return complement ? complement(nouvelle) : nouvelle;
+      },
     });
   }
 
@@ -236,7 +410,7 @@ const Formats = (function () {
       + 'habilitations.nature_source, controles_reglementaires.source_periodicite (défaut saisie), '
       + 'controles_reglementaires.nature_source, controles_reglementaires.catalogue_id et '
       + 'controles_reglementaires.catalogue_relu_le en fin de table ; tables reserves_controle (observations '
-      + 'reprises, une réserve par ligne, D183), garanties et contrats_prestataires (vides).'),
+      + 'reprises, une réserve par ligne, D183), garanties et contrats_prestataires (vides).', reprendreObservations),
   ]);
 
   // Ligne de journal d'une étape : texte exact relu par la suggestion S4.
@@ -390,6 +564,8 @@ const Formats = (function () {
     versionDeBase: versionDeBase,
     ETAPES: ETAPES,
     migrer: migrer,
+    reservesReprises: reservesReprises,                    // reprise des observations en réserves (D183, étape 3→4)
+    COMMENTAIRE_LEVEE_REPRISE: COMMENTAIRE_LEVEE_REPRISE,  // commentaire de levée des réserves reprises levées
     manifeste: manifeste,
   };
 })();

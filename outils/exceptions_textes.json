@@ -276,6 +276,14 @@
       "raison": "Ligne du journal « passage au format 2 du fichier » écrite par Formats.migrer et relue par la suggestion S4 (test_formats_js lit la constante) (T241)."
     },
     {
+      "variable": "COMMENTAIRE_LEVEE_REPRISE",
+      "fichiers": [
+        "js/formats.js"
+      ],
+      "classe": "D156",
+      "raison": "Commentaire de levée « levée avant la 2.2, date inconnue » écrit dans reserves_controle.csv par la reprise des observations (D183, étape 3→4), identique à l'octet dans serveur.py ; l'écran l'affiche traduit quand il vaut exactement ce texte (L2) (T386)."
+    },
+    {
       "variable": "TONS_STATUT",
       "fichiers": [
         "js/interface.js"

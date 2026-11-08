@@ -23,8 +23,13 @@ protection retirée). Couvre :
       inconnues, ligne qui a déjà la colonne, parametres absent, noms avec BOM et espaces, table du format 4 déjà
       là) ; texte du journal = marque relue par la suggestion S4 ;
     - colonnes et tables de chaque format, formatDuFichier sur des en-têtes fabriqués (jamais d'exception) ;
-    - manifeste : empreintes SHA-256 égales à hashlib.sha256, noms triés, contexte (champs absents omis).
-La reprise des observations en réserves (D183) n'est pas encore là (T386) : reserves_controle est créée vide.
+    - manifeste : empreintes SHA-256 égales à hashlib.sha256, noms triés, contexte (champs absents omis) ;
+    - reprise des observations en réserves (D183, T386 ; CS170 ; note de conception du format 4, §3.2) :
+      reservesReprises sur reserves-a-reprendre (les 15 réserves du LISEZMOI des jeux) et f3-v2.1.0 (1 réserve),
+      chaque jeu comparé à une recopie Python indépendante de la règle ; cas fabriqués (oui, x, JJ/MM/AAAA, contrôle
+      déjà doté d'une réserve, identifiant vide ou en double, numérotation après le plus grand RES-, coupes sur CRLF,
+      CR et LF seulement) ; pureté, déterminisme, idempotence (étape rejouée : rien de plus) ; copies de lireDate et
+      normaliserBooleen égales à js/donnees.js (texte et résultats).
 
 Lancer depuis la racine du projet :
     py -X utf8 -m unittest discover -s tests -p "test_formats_js.py" -v
@@ -93,6 +98,67 @@ LIGNES_DE_JOURNAL = {
 def tables_ajoutees_apres(format):
     """Tables que les formats suivants (jusqu'au format courant) ajoutent."""
     return [table for f in range(format + 1, FORMAT_COURANT + 1) for table in TABLES_AJOUTEES[f]]
+
+
+# Reprise des observations en réserves (D183 ; CS170) : texte fixe du commentaire de levée, colonnes de
+# reserves_controle (note de conception du format 4, §2.2) et réserves attendues des deux jeux de la 2.2, recopiées
+# de tests/fixtures/formats/LISEZMOI.md : (id, controle_id, date_controle, texte, levee).
+COMMENTAIRE_LEVEE_REPRISE = "levée avant la 2.2, date inconnue"
+COLONNES_RESERVES = ["id", "controle_id", "date_controle", "texte", "gravite", "echeance_levee", "levee", "date_levee",
+                     "commentaire_levee", "ot_id"]
+RESERVES_DU_LISEZMOI = {
+    "reserves-a-reprendre": [
+        ("RES-00001", "CTR-0001", "2026-02-10", "Garde-corps de la passerelle desserré", "0"),
+        ("RES-00002", "CTR-0001", "2026-02-10", "Fin de course haut à régler", "0"),
+        ("RES-00003", "CTR-0001", "2026-02-10", "Câble de levage : un toron cassé", "0"),
+        ("RES-00004", "CTR-0002", "2026-03-18", "Klaxon de recul inaudible", "1"),
+        ("RES-00005", "CTR-0002", "2026-03-18", "Ceinture du siège conducteur usée", "1"),
+        ("RES-00006", "CTR-0005", "2026-03-24", "- Raccord de la vanne 3 suintant", "0"),
+        ("RES-00007", "CTR-0005", "2026-03-24", "= Pression basse à surveiller", "0"),
+        ("RES-00008", "CTR-0005", "2026-03-24", "- Étiquette du fluide illisible", "0"),
+        ("RES-00009", "CTR-0006", "2026-06-02", 'Gaine "B" percée ; débit insuffisant', "0"),
+        ("RES-00010", "CTR-0006", "2026-06-02", 'Filtre du caisson "F7" colmaté', "0"),
+        ("RES-00011", "CTR-0007", "2026-01-15", "Cellule de sécurité inopérante", "0"),
+        ("RES-00012", "CTR-0007", "2026-01-15", "Bord sensible fendu", "0"),
+        ("RES-00013", "CTR-0007", "2026-01-15", "Signalisation au sol effacée", "0"),
+        ("RES-00014", "CTR-0007", "2026-01-15", "Notice absente du local", "0"),
+        ("RES-00015", "CTR-0008", "", "Rapport du contrôle initial non retrouvé", "0"),
+    ],
+    "f3-v2.1.0": [
+        ("RES-00001", "CTR-0004", "2025-04-03", "Purgeur automatique du réservoir défectueux : à remplacer avant la "
+                                                "prochaine inspection.", "0"),
+    ],
+}
+
+
+def reserve_complete(id, controle_id, date_controle, texte, levee):
+    """Ligne entière de reserves_controle d'une réserve reprise (D183 : gravité, échéance, date de levée et OT vides ;
+    commentaire fixe seulement si levée), dans l'ordre des colonnes du schéma."""
+    return {"id": id, "controle_id": controle_id, "date_controle": date_controle, "texte": texte, "gravite": "",
+            "echeance_levee": "", "levee": levee, "date_levee": "",
+            "commentaire_levee": COMMENTAIRE_LEVEE_REPRISE if levee == "1" else "", "ot_id": ""}
+
+
+def reserves_attendues(controles):
+    """Réserves que la reprise tire de lignes de contrôles CANONIQUES (dates AAAA-MM-JJ ou vides, booléens 0/1, comme
+    dans les jeux d'essai), sans réserve existante : recopie Python de la règle de la note de conception du format 4
+    (§3.2), indépendante de js/formats.js. Une valeur non canonique fait échouer le test (elle relève des cas
+    fabriqués, comparés à Donnees)."""
+    reserves = []
+    for controle in controles:
+        identifiant = controle.get("id", "").strip()
+        observations = controle.get("observations", "")
+        if identifiant == "" or observations.strip() == "":
+            continue
+        date = controle.get("derniere_date", "").strip()
+        levee = controle.get("observations_levees", "").strip()
+        assert date == "" or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", date), date
+        assert levee in ("", "0", "1"), levee
+        for morceau in re.split(r"\r\n|\r|\n", observations):
+            if morceau.strip() != "":
+                reserves.append(reserve_complete("RES-%05d" % (len(reserves) + 1), identifiant, date, morceau.strip(),
+                                                 "1" if levee == "1" else "0"))
+    return reserves
 
 # Base en mémoire formée dans la page à partir des cellules lues en Python : { table: { entete, cellules } } →
 # { tables: { table: { entete, lignes: [{ colonne: valeur }] } } }, valeurs relues comme Donnees.csv.analyser
@@ -447,7 +513,10 @@ class TestFormats(CasNavigateur):
                 for table, contenu in apres["tables"].items():
                     with self.subTest(jeu=jeu, table=table):
                         if table not in avant["tables"]:
-                            self.assertEqual(contenu, {"entete": schema[table]["colonnes"], "lignes": []})
+                            # Table créée : vide, sauf reserves_controle, qui reçoit les observations reprises (D183)
+                            controles = avant["tables"].get("controles_reglementaires", {"lignes": []})["lignes"]
+                            lignes = reserves_attendues(controles) if table == "reserves_controle" else []
+                            self.assertEqual(contenu, {"entete": schema[table]["colonnes"], "lignes": lignes})
                             continue
                         entete_avant = avant["tables"][table]["entete"]
                         nouvelles = [c for c in schema[table]["colonnes"] if c not in entete_avant]
@@ -457,7 +526,11 @@ class TestFormats(CasNavigateur):
                                              {c: schema[table]["defauts"][c] for c in nouvelles})
                         self.assertEqual(r["formats"][table], FORMAT_COURANT)
                 self.assertEqual(sorted(apres["tables"]), sorted(schema))
-                # Les tables des formats suivants sont créées (vides) ; celles du jeu sont gardées
+                # Chaque jeu tiré de la démo a un contrôle à observations (CTR-0004) : une réserve au moins ; f1 n'a
+                # pas de contrôles
+                self.assertEqual(len(apres["tables"]["reserves_controle"]["lignes"]) > 0,
+                                 "controles_reglementaires" in avant["tables"])
+                # Les tables des formats suivants sont créées (vides, sauf la reprise) ; celles du jeu sont gardées
                 for table in tables_ajoutees_apres(de):
                     self.assertNotIn(table, avant["tables"])
                     self.assertIn(table, apres["tables"])
@@ -497,8 +570,9 @@ class TestFormats(CasNavigateur):
     def test_migration_f3_au_format_4_detail(self):
         """Bases 2.1.0 (f3-v2.1.0 et sa variante reserves-a-reprendre) : une étape, 3→4 ; seules equipements,
         ordres_travail, habilitations et controles_reglementaires changent (colonnes en fin, source_periodicite =
-        saisie, les autres vides) ; les trois tables du format 4 sont créées vides (reprise des réserves : T386) ;
-        la colonne inconnue remarque_maison reste à sa place, AVANT les colonnes du format 4 (règle de 2→3)."""
+        saisie, les autres vides) ; les trois tables du format 4 sont créées, garanties et contrats_prestataires vides,
+        reserves_controle avec les réserves reprises du LISEZMOI des jeux (D183, CS170) ; la colonne inconnue
+        remarque_maison reste à sa place, AVANT les colonnes du format 4 (règle de 2→3)."""
         for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
             with self.subTest(jeu=jeu):
                 r = self.migrer_jeu(jeu)
@@ -506,8 +580,11 @@ class TestFormats(CasNavigateur):
                 self.assertEqual(r["premier"]["journal"], ["passage au format 4 du fichier"])
                 self.assertEqual(r["premier"]["etapes"], [{"de": 3, "vers": 4, "description": DESCRIPTION_FORMAT_4}])
                 self.assertEqual(sorted(set(apres) - set(avant)), sorted(TABLES_AJOUTEES[4]))
-                for table in TABLES_AJOUTEES[4]:
-                    self.assertEqual(apres[table]["lignes"], [], table)
+                self.assertEqual(apres["garanties"]["lignes"], [])
+                self.assertEqual(apres["contrats_prestataires"]["lignes"], [])
+                self.assertEqual(apres["reserves_controle"]["entete"], COLONNES_RESERVES)
+                self.assertEqual(apres["reserves_controle"]["lignes"],
+                                 [reserve_complete(*reserve) for reserve in RESERVES_DU_LISEZMOI[jeu]])
                 for table in avant:
                     ajoutees = COLONNES_AJOUTEES[4].get(table, [])
                     if table == "parametres" or ajoutees:
@@ -710,6 +787,255 @@ class TestFormats(CasNavigateur):
         self.assertEqual(quatre["contrats_prestataires"]["lignes"], [])
         self.assertEqual(quatre["parametres"]["lignes"], [{"cle": "version_schema", "valeur": "4"}])
         self.assertEqual(len(r["rien"]["tables"]), NB_TABLES)
+
+    # -----------------------------------------------------------------------------------------------------------
+    # Reprise des observations en réserves (D183, T386 ; CS170)
+    # -----------------------------------------------------------------------------------------------------------
+
+    def test_reprise_cs170_sur_le_jeu_reserves_a_reprendre(self):
+        """CS170 : trois lignes non vides → trois réserves ; observations levées → réserves levées, date de levée
+        vide, commentaire « levée avant la 2.2, date inconnue » ; contrôles inchangés ; étape rejouée : rien de plus."""
+        r = self.evaluer("""(fichiers) => {
+          const base = baseDesFichiers(fichiers);
+          const quatre = Formats.migrer(base, 3, 4).base;
+          const rejouee = Formats.ETAPES[2].appliquer(quatre);
+          return { base, quatre, rejouee, commentaire: Formats.COMMENTAIRE_LEVEE_REPRISE,
+            repriseDeLaSortie: Formats.reservesReprises(quatre.tables.controles_reglementaires.lignes,
+              quatre.tables.reserves_controle.lignes) };
+        }""", self.fichiers["reserves-a-reprendre"])
+        self.assertEqual(r["commentaire"], COMMENTAIRE_LEVEE_REPRISE)
+        reserves = r["quatre"]["tables"]["reserves_controle"]["lignes"]
+        self.assertEqual(len(reserves), 15)
+        # CTR-0001 : trois lignes non vides entre des lignes blanches → trois réserves ouvertes, sans commentaire
+        trois = [l for l in reserves if l["controle_id"] == "CTR-0001"]
+        self.assertEqual([l["texte"] for l in trois], ["Garde-corps de la passerelle desserré",
+                                                       "Fin de course haut à régler", "Câble de levage : un toron cassé"])
+        self.assertEqual({(l["levee"], l["commentaire_levee"], l["date_levee"]) for l in trois}, {("0", "", "")})
+        # CTR-0002 : observations levées → réserves levées, sans date de levée, avec le commentaire fixe
+        levees = [l for l in reserves if l["controle_id"] == "CTR-0002"]
+        self.assertEqual(len(levees), 2)
+        for ligne in levees:
+            self.assertEqual((ligne["levee"], ligne["date_levee"], ligne["commentaire_levee"], ligne["date_controle"]),
+                             ("1", "", COMMENTAIRE_LEVEE_REPRISE, "2026-03-18"))
+        self.assertEqual([l for l in reserves if l["levee"] == "1"], levees)
+        # Aucune date inventée : échéance, date de levée, gravité, OT vides partout
+        self.assertEqual({(l["echeance_levee"], l["date_levee"], l["gravite"], l["ot_id"]) for l in reserves},
+                         {("", "", "", "")})
+        # Contrôles sans observations (levés ou non) ou aux lignes blanches seulement : rien
+        self.assertFalse({"CTR-0003", "CTR-0004", "CTR-0009"} & {l["controle_id"] for l in reserves})
+        # Les contrôles gardent observations, observations_levees et remarque_maison (CS169)
+        colonnes = ("id", "observations", "observations_levees", "remarque_maison")
+        self.assertEqual([{c: l[c] for c in colonnes} for l in r["quatre"]["tables"]["controles_reglementaires"]["lignes"]],
+                         [{c: l[c] for c in colonnes} for l in r["base"]["tables"]["controles_reglementaires"]["lignes"]])
+        # Rejouée : rien de nouveau
+        self.assertEqual(r["repriseDeLaSortie"], [])
+        self.assertEqual(r["rejouee"]["tables"]["reserves_controle"], r["quatre"]["tables"]["reserves_controle"])
+        self.assertEqual(r["rejouee"], r["quatre"])
+
+    def test_reserves_reprises_cas_fabriques(self):
+        """Fonction pure Formats.reservesReprises : formes d'Excel (oui, x, Vrai, JJ/MM/AAAA, J.M.AAAA, date
+        impossible gardée en texte), contrôle déjà doté d'une réserve (controle_id aux bords blancs), identifiant
+        vide, blanc ou en double, coupes sur CRLF, CR et LF seulement (U+2028, U+0085, \\v, \\f gardés), bords blancs
+        retirés comme String.prototype.trim (BOM et espace idéographique oui, U+0085 non), puces gardées,
+        numérotation après le plus grand RES-<chiffres> exact, lignes et entrées étranges ignorées."""
+        r = self.evaluer(r"""() => {
+          const C = (id, observations, levees, date) => ({ id: id, equipement_id: 'EQ-0001', observations: observations,
+            observations_levees: levees, derniere_date: date });
+          const controles = [
+            C('CTR-0001', 'Un\r\nDeux\rTrois\nQuatre', 'oui', '15/01/2024'),
+            C('CTR-0002', 'Déjà repris', '0', '2024-02-01'),
+            C('', 'Sans identifiant', '1', '2024-02-02'),
+            C('   ', 'Identifiant blanc', '1', '2024-02-03'),
+            C(' CTR-0003 ', '  - puce gardée  \n　• autre \n1. numérotée\t', 'X', ' 5.3.2024 '),
+            C('CTR-0004', 'ligne même ligne\u0085encore\u000bet\u000cfin', 'non', '31/02/2024'),
+            C('CTR-0005', 'Premier doublon', '1', ''),
+            C('CTR-0005', 'Second doublon', 'faux', 'demain'),
+            C('CTR-0006', '', '1', '2024-01-01'),
+            C('CTR-0007', ' \t\r\n  ', '1', '2024-01-01'),
+            { id: 'CTR-0008' },
+            C('CTR-0009', 'Levée par vrai', ' Vrai ', '2024-1-5'),
+            C('CTR-0010', '\u0085bord NEL\u0085\n﻿bord BOM﻿', 'peut-être', undefined),
+            null, 3, 'CTR-0011',
+          ];
+          const reserves = [
+            { id: 'RES-00007', controle_id: ' CTR-0002 ', texte: 'gardée' },
+            { id: ' RES-12 ', controle_id: 'CTR-0099' },
+            { id: 'RES-0003', controle_id: '' },
+            { id: 'res-00099', controle_id: 'CTR-0098' },
+            { id: 'RES-00050x' }, { id: 'RES-' }, { id: 'RES-1e3' }, { id: 'RES-١٢٣' }, { id: 'RES--5' },
+            { id: 'RES-１００' }, null, 'RES-00500',
+          ];
+          const avant = JSON.stringify([controles, reserves]);
+          const resultat = Formats.reservesReprises(controles, reserves);
+          const encore = Formats.reservesReprises(controles, reserves);
+          const un = (id) => Formats.reservesReprises([C('A', 'x', '0', '')],
+            id === null ? [] : [{ id: id, controle_id: 'Z' }])[0].id;
+          return {
+            resultat, intacte: JSON.stringify([controles, reserves]) === avant,
+            deterministe: JSON.stringify(encore) === JSON.stringify(resultat),
+            nouveauxObjets: resultat.every((l) => controles.indexOf(l) < 0 && reserves.indexOf(l) < 0)
+              && resultat[0] !== encore[0],
+            ordreDesCles: resultat.map((l) => Object.keys(l).join(',')),
+            colonnes: Formats.colonnes('reserves_controle'),
+            rejouee: Formats.reservesReprises(controles, reserves.concat(resultat)),
+            entreesEtranges: [[null, null], [undefined, undefined], [{}, 'x'], ['CTR', 3]]
+              .map((e) => Formats.reservesReprises(e[0], e[1])),
+            sansReserves: Formats.reservesReprises([C('CTR-1', 'a', '0', '')]).map((l) => l.id),
+            numeros: [null, 'RES-00000', 'RES-999999', 'RES-99999', 'RES-99999999999999999999',
+              'RES-0000000000000000000000041', ' RES-7\t'].map(un),
+            ordreDesNumeros: [[{ id: 'RES-9' }, { id: 'RES-10' }], [{ id: 'RES-10' }, { id: 'RES-9' }],
+              [{ id: 'RES-099' }, { id: 'RES-100' }, { id: 'RES-0101' }]]
+              .map((existantes) => Formats.reservesReprises([C('A', 'x', '0', '')], existantes)[0].id),
+            identifiant: Schema.table('reserves_controle').identifiant,
+          };
+        }""")
+        self.assertTrue(r["intacte"], "reservesReprises a modifié ses entrées")
+        self.assertTrue(r["deterministe"])
+        self.assertTrue(r["nouveauxObjets"])
+        L = reserve_complete
+        self.assertEqual(r["resultat"], [
+            # Plus grand identifiant exact : RES-12 (bords blancs retirés) → suite à RES-00013
+            L("RES-00013", "CTR-0001", "2024-01-15", "Un", "1"),
+            L("RES-00014", "CTR-0001", "2024-01-15", "Deux", "1"),
+            L("RES-00015", "CTR-0001", "2024-01-15", "Trois", "1"),
+            L("RES-00016", "CTR-0001", "2024-01-15", "Quatre", "1"),
+            # CTR-0002 a déjà une réserve ; identifiants vide et blanc : rien
+            L("RES-00017", "CTR-0003", "2024-03-05", "- puce gardée", "1"),
+            L("RES-00018", "CTR-0003", "2024-03-05", "• autre", "1"),
+            L("RES-00019", "CTR-0003", "2024-03-05", "1. numérotée", "1"),
+            L("RES-00020", "CTR-0004", "31/02/2024", "ligne même ligne\u0085encore\u000bet\u000cfin", "0"),
+            L("RES-00021", "CTR-0005", "", "Premier doublon", "1"),
+            L("RES-00022", "CTR-0005", "demain", "Second doublon", "0"),
+            # CTR-0006 et CTR-0007 : vide ou blanc ; CTR-0008 : sans observations
+            L("RES-00023", "CTR-0009", "2024-01-05", "Levée par vrai", "1"),
+            L("RES-00024", "CTR-0010", "", "\u0085bord NEL\u0085", "0"),
+            L("RES-00025", "CTR-0010", "", "bord BOM", "0"),
+        ])
+        self.assertEqual(set(r["ordreDesCles"]), {",".join(COLONNES_RESERVES)})
+        self.assertEqual(r["colonnes"], COLONNES_RESERVES)
+        self.assertEqual(r["rejouee"], [])
+        self.assertEqual(r["entreesEtranges"], [[], [], [], []])
+        self.assertEqual(r["sansReserves"], ["RES-00001"])
+        self.assertEqual(r["numeros"], ["RES-00001", "RES-00001", "RES-1000000", "RES-100000",
+                                        "RES-100000000000000000000", "RES-00042", "RES-00008"])
+        self.assertEqual(r["ordreDesNumeros"], ["RES-00011", "RES-00011", "RES-00102"])
+        # Préfixe et nombre de chiffres de la reprise = identifiant de la table dans le schéma
+        self.assertEqual(r["identifiant"], {"prefixe": "RES-", "chiffres": 5, "annuel": False})
+
+    def test_reserves_reprises_lit_dates_et_booleens_comme_donnees(self):
+        """Les copies de lireDate et normaliserBooleen (js/formats.js est chargé avant js/donnees.js) donnent les
+        résultats de Donnees.normaliser.date et .booleen sur une batterie de valeurs d'Excel et de saisie."""
+        r = self.evaluer(r"""() => {
+          const dates = ['2024-01-15', ' 2024-01-15 ', '2024-1-5', '15/01/2024', '5/1/2024', '15-01-2024', '15.01.2024',
+            '15/01-2024', '31/02/2024', '29/02/2024', '29/02/2023', '29/02/1900', '29/02/2000', '2024-13-01',
+            '00/01/2024', '15/01/24', '2024-01-15 08:30', '2024-01-15T08:30', '', '   ', ' 2024-01-15 ',
+            '﻿15/01/2024', 'demain', '１５/01/2024', '0001-01-01', '9999-12-31', '2024-02-30',
+            '1/13/2024', '2024/01/15', '15 01 2024', null, undefined, 45306, '45306'];
+          const booleens = ['1', '0', 'oui', 'OUI', ' Oui ', 'non', 'Non', 'vrai', 'faux', 'Vrai', 'true', 'FALSE',
+            'yes', 'No', 'x', 'X', ' x ', '', ' ', '2', 'o', 'n', 'ouí', 'oui.', 'constructor', '__proto__', 'toString',
+            null, undefined, 1, 0, true, false, ' oui ', '﻿1'];
+          const ecarts = [];
+          for (const date of dates) {
+            const reprise = Formats.reservesReprises([{ id: 'C', observations: 'o', derniere_date: date }], [])[0];
+            const attendu = Donnees.normaliser.date(date).valeur;
+            if (reprise.date_controle !== attendu) { ecarts.push(['date', String(date), reprise.date_controle, attendu]); }
+          }
+          for (const booleen of booleens) {
+            const reprise = Formats.reservesReprises([{ id: 'C', observations: 'o', observations_levees: booleen }],
+              [])[0];
+            const leve = Donnees.normaliser.booleen(booleen).valeur === '1';
+            const attendu = [leve ? '1' : '0', leve ? Formats.COMMENTAIRE_LEVEE_REPRISE : ''];
+            if (reprise.levee !== attendu[0] || reprise.commentaire_levee !== attendu[1]) {
+              ecarts.push(['booleen', String(booleen), reprise.levee, attendu[0]]);
+            }
+          }
+          const lu = (champ, valeurs) => valeurs.map((v) => {
+            const reprise = Formats.reservesReprises([{ id: 'C', observations: 'o', [champ]: v }], [])[0];
+            return champ === 'derniere_date' ? reprise.date_controle : reprise.levee;
+          });
+          return { ecarts, nombreDeDates: dates.length, nombreDeBooleens: booleens.length,
+            exemplesDates: lu('derniere_date', ['15/01/2024', '5.3.2024', '31/02/2024', ' 2024-1-5 ', '']),
+            exemplesBooleens: lu('observations_levees', ['oui', 'x', 'Vrai', 'non', 'peut-être', '']) };
+        }""")
+        self.assertEqual(r["ecarts"], [])
+        self.assertGreater(r["nombreDeDates"], 30)
+        self.assertGreater(r["nombreDeBooleens"], 30)
+        self.assertEqual(r["exemplesDates"], ["2024-01-15", "2024-03-05", "31/02/2024", "2024-01-05", ""])
+        self.assertEqual(r["exemplesBooleens"], ["1", "1", "1", "0", "0", "0"])
+
+    def test_copies_de_donnees_au_caractere_pres(self):
+        """Copies exactes (comme nombre) : chaque motif, la table des booléens et chaque fonction recopiés de
+        js/donnees.js dans js/formats.js sont identiques au caractère près."""
+        donnees = (RACINE / "js" / "donnees.js").read_text(encoding="utf-8")
+        formats = (RACINE / "js" / "formats.js").read_text(encoding="utf-8")
+        motifs = [r"^  const MOTIF_DATE_ISO = [^\n]*?;", r"^  const MOTIF_DATE_FRANCAISE = [^\n]*?;",
+                  r"^  const VALEURS_BOOLEENNES = \{\n.*?^  \};$"]
+        motifs += [r"^  function %s\(.*?^  \}$" % nom for nom in ("enTexte", "deuxChiffres", "dateIsoSiValide",
+                                                                  "lireDate", "normaliserDate", "normaliserBooleen")]
+        for motif in motifs:
+            with self.subTest(motif=motif):
+                originaux = re.findall(motif, donnees, re.M | re.S)
+                copies = re.findall(motif, formats, re.M | re.S)
+                self.assertEqual((len(originaux), len(copies)), (1, 1))
+                self.assertEqual(copies[0], originaux[0])
+
+    def test_etape_3_4_reprise_cas_fabriques(self):
+        """Étape 3→4 avec la reprise : base 2.1 sans reserves_controle (table créée avec les réserves reprises,
+        migrer = ETAPES[2].appliquer, rejouée : rien de plus) ; base déjà au format 4 dont un contrôle a une réserve
+        créée dans la 2.2 avant la reprise et dont controles_reglementaires est revenu au format 3 (§3.5) : réserve
+        gardée en tête, ce contrôle n'est pas repris, les autres le sont à la suite (RES-00005) ; base sans contrôles
+        (appel par table) : aucune réserve ; entrées jamais modifiées."""
+        r = self.evaluer("""(commentaire) => {
+          const colonnes3 = Formats.colonnes('controles_reglementaires', 3);
+          const controle = (id, observations, levees, date) => Object.assign(
+            Object.fromEntries(colonnes3.map((c) => [c, ''])),
+            { id: id, observations: observations, observations_levees: levees, derniere_date: date });
+          const controles = () => ({ entete: colonnes3.slice(), lignes: [
+            controle('CTR-0001', 'Garde-corps\\nÉclairage', '1', '2024-05-06'), controle('CTR-0002', 'Fuite', '0', ''),
+            controle('CTR-0003', '', '1', '2024-05-07')] });
+          const base21 = { tables: { controles_reglementaires: controles(),
+            parametres: { entete: ['cle', 'valeur'], lignes: [{ cle: 'version_schema', valeur: '3' }] } } };
+          const saisie = { id: 'RES-00004', controle_id: 'CTR-0002', date_controle: '2024-07-01',
+            texte: 'saisie dans la 2.2', gravite: 'majeure', echeance_levee: '', levee: '0', date_levee: '',
+            commentaire_levee: '', ot_id: '' };
+          const base4 = { tables: { controles_reglementaires: controles(),
+            reserves_controle: { entete: Formats.colonnes('reserves_controle'), lignes: [saisie] },
+            parametres: { entete: ['cle', 'valeur'], lignes: [{ cle: 'version_schema', valeur: '4' }] } } };
+          const avant = JSON.stringify([base21, base4]);
+          const une = Formats.ETAPES[2].appliquer(base21);
+          const reprise4 = Formats.ETAPES[2].appliquer(base4);
+          return { une, deux: Formats.ETAPES[2].appliquer(une), migree: Formats.migrer(base21, 3, 4).base,
+            depuisLeDebut: Formats.migrer(base21, 1, 4).base.tables.reserves_controle,
+            reprise4, reprise4bis: Formats.ETAPES[2].appliquer(reprise4),
+            sansControles: Formats.ETAPES[2].appliquer({ tables: { ordres_travail: { entete: ['id'], lignes: [] } } })
+              .tables.reserves_controle,
+            vide: Formats.ETAPES[2].appliquer(null).tables.reserves_controle,
+            intacte: JSON.stringify([base21, base4]) === avant,
+            saisieCopiee: reprise4.tables.reserves_controle.lignes[0] !== saisie };
+        }""", COMMENTAIRE_LEVEE_REPRISE)
+        self.assertTrue(r["intacte"])
+        L = reserve_complete
+        reprises21 = [L("RES-00001", "CTR-0001", "2024-05-06", "Garde-corps", "1"),
+                      L("RES-00002", "CTR-0001", "2024-05-06", "Éclairage", "1"),
+                      L("RES-00003", "CTR-0002", "", "Fuite", "0")]
+        reserves = r["une"]["tables"]["reserves_controle"]
+        self.assertEqual(reserves, {"entete": COLONNES_RESERVES, "lignes": reprises21})
+        self.assertEqual(r["deux"], r["une"])
+        self.assertEqual(r["migree"], r["une"])
+        self.assertEqual(r["depuisLeDebut"], reserves)
+        self.assertEqual([(l["observations"], l["observations_levees"])
+                          for l in r["une"]["tables"]["controles_reglementaires"]["lignes"]],
+                         [("Garde-corps\nÉclairage", "1"), ("Fuite", "0"), ("", "1")])
+        saisie = {"id": "RES-00004", "controle_id": "CTR-0002", "date_controle": "2024-07-01",
+                  "texte": "saisie dans la 2.2", "gravite": "majeure", "echeance_levee": "", "levee": "0",
+                  "date_levee": "", "commentaire_levee": "", "ot_id": ""}
+        self.assertEqual(r["reprise4"]["tables"]["reserves_controle"]["lignes"], [
+            saisie, L("RES-00005", "CTR-0001", "2024-05-06", "Garde-corps", "1"),
+            L("RES-00006", "CTR-0001", "2024-05-06", "Éclairage", "1")])
+        self.assertTrue(r["saisieCopiee"])
+        self.assertEqual(r["reprise4bis"], r["reprise4"])
+        self.assertEqual(r["sansControles"], {"entete": COLONNES_RESERVES, "lignes": []})
+        self.assertEqual(r["vide"], {"entete": COLONNES_RESERVES, "lignes": []})
 
     def test_migrer_etapes_choisies_et_erreurs(self):
         r = self.evaluer("""() => {
