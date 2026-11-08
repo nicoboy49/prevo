@@ -43,9 +43,11 @@ PARAMETRES_V1 = RACINE / "tests" / "fixtures" / "v1" / "parametres.csv"
 TABLES_V1 = ("demandes", "equipements", "ordres_travail", "parametres")   # fichiers de tests/fixtures/v1
 MOTIF_NOM_AVANT_FORMAT_2 = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v2$")
 FORMAT_COURANT = str(FORMAT_COURANT_NUM)                # Schema.version (js/schema.js)
-MOTIF_NOM_AVANT_FORMAT_COURANT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v3$")
+MOTIF_NOM_AVANT_FORMAT_COURANT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v%d$" % FORMAT_COURANT_NUM)
+MOTIF_AVANT_FORMAT_COURANT = "avant-format-v%d" % FORMAT_COURANT_NUM
+MOTIF_AVANT_FORMAT_TROP_RECENT = "avant-format-v%d" % (FORMAT_COURANT_NUM + 1)   # hors de la liste fermée
 MOTIF_NOM_MANUEL = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
-DEBUT_ERREUR_SAUVEGARDE = "Sauvegarde avant le passage au format 3 impossible : "
+DEBUT_ERREUR_SAUVEGARDE = "Sauvegarde avant le passage au format %d impossible : " % FORMAT_COURANT_NUM
 FIN_ERREUR_SAUVEGARDE = " ; la mise à jour sera retentée à la prochaine ouverture."
 
 # Appel de Donnees.mettreAJourVersionSchema() dans la page : { ok, valeur } ou { ok: false, nom, message }.
@@ -150,7 +152,7 @@ class TestServeur(CasServeurV1):
         with ServeurPrevo() as serveur:
             page = self.ouvrir_application_v1(serveur)
             # La sauvegarde « avant-format-v3 » est celle que le serveur fait avant son passage (ici demandée à l'API).
-            statut, reponse = demander_sauvegarde(serveur, {"motif": "avant-format-v3"})
+            statut, reponse = demander_sauvegarde(serveur, {"motif": MOTIF_AVANT_FORMAT_COURANT})
             self.assertEqual(statut, 200, reponse)
             nom = reponse["sauvegarde"]
             self.assertRegex(nom, MOTIF_NOM_AVANT_FORMAT_COURANT)
@@ -163,16 +165,16 @@ class TestServeur(CasServeurV1):
             page.evaluate("location.hash = '#/parametres'")
             page.wait_for_selector('#carte-sauvegardes button[data-restaurer="%s"]' % nom)
             ligne = page.locator('#carte-sauvegardes tr:has(button[data-restaurer="%s"])' % nom)
-            self.assertEqual(ligne.locator(".badge").inner_text().strip(), "Avant format 3")
+            self.assertEqual(ligne.locator(".badge").inner_text().strip(), "Avant format %d" % FORMAT_COURANT_NUM)
             self.assertIn("info", ligne.locator(".badge").get_attribute("class").split())
             heure = "%s:%s:%s" % (nom[11:13], nom[13:15], nom[15:17])
             self.assertIn(" à " + heure, ligne.inner_text())
-            self.assertEqual(page.evaluate("n => Parametres.decrireSauvegarde(n).type", nom), "Avant format 3")
+            self.assertEqual(page.evaluate("n => Parametres.decrireSauvegarde(n).type", nom), "Avant format %d" % FORMAT_COURANT_NUM)
 
             # « Restaurer… » → toutes les tables (choix par défaut).
             page.click('button[data-restaurer="%s"]' % nom)
             page.wait_for_selector("#fenetre-restauration")
-            self.assertIn("avant format 3", page.inner_text("#fenetre-restauration"))
+            self.assertIn("avant format %d" % FORMAT_COURANT_NUM, page.inner_text("#fenetre-restauration"))
             page.click("dialog .fenetre-actions .btn-danger")
             page.wait_for_selector("#nom-copie-securite")
             self.assertIn("parametres", page.inner_text("#message-action"))
@@ -204,6 +206,7 @@ class TestFormat2ModeServeur(CasServeurV1):
             parametres.write_bytes(octets_v3.replace(("version_schema;'" + FORMAT_COURANT).encode(), b"version_schema;'2"))
             for nom in ("wiki_pages.csv", "wiki_journal.csv"):
                 (serveur.dossier / nom).unlink()
+            retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "habilitation_requise")   # format 4
             retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "astuce")
             avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
             sauvegardes_avant = self.sauvegardes(serveur)   # T187 : celles du démarrage (du jour, avant-mise-a-jour)
@@ -223,7 +226,7 @@ class TestFormat2ModeServeur(CasServeurV1):
             self.assertEqual(apres, avant)
             self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "2")
             alertes = self.page.inner_text("#alertes-app")
-            self.assertIn("pas encore au format 3", alertes)
+            self.assertIn("pas encore au format %d" % FORMAT_COURANT_NUM, alertes)
             self.assertIn("relancez Prévo", alertes)
             # Les tables du wiki absentes sont lues vides ; la colonne astuce absente : lue vide, simple information.
             self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_pages').length"), 0)
@@ -305,7 +308,7 @@ class TestApiMotif(unittest.TestCase):
         with ServeurPrevo() as serveur:
             dossier = serveur.dossier / "sauvegardes"
             avant = sorted(p.name for p in dossier.iterdir())
-            for corps in ({"motif": "inconnu"}, {"motif": "../x"}, {"motif": "avant-format-v4"},
+            for corps in ({"motif": "inconnu"}, {"motif": "../x"}, {"motif": MOTIF_AVANT_FORMAT_TROP_RECENT},
                           {"motif": "avant-format-v2/../.."}, {"motif": 2}, {"motif": ["avant-format-v2"]},
                           ["avant-format-v2"], b"pas du json", b"\xff\xfe"):
                 with self.subTest(corps=corps):
@@ -335,7 +338,7 @@ class TestApiMotif(unittest.TestCase):
 
             # Motifs de la liste fermée : « …_avant-format-v2 » (lot 2) et « …_avant-format-v3 » (lot 6),
             # listés et restaurables.
-            statut, reponse = demander_sauvegarde(serveur, {"motif": "avant-format-v3"})
+            statut, reponse = demander_sauvegarde(serveur, {"motif": MOTIF_AVANT_FORMAT_COURANT})
             self.assertEqual(statut, 200, reponse)
             self.assertRegex(reponse["sauvegarde"], MOTIF_NOM_AVANT_FORMAT_COURANT)
             statut, reponse = demander_sauvegarde(serveur, {"motif": "avant-format-v2"})
@@ -479,11 +482,11 @@ class TestDossier(CasNavigateur):
                                  (PARAMETRES_V1.parent / (table + ".csv")).read_bytes(), table)
             self.assertEqual(version_schema(self.lire("parametres.csv")), FORMAT_COURANT)
             entete_ordres = self.lire("ordres_travail.csv").decode("utf-8-sig").split("\r\n", 1)[0].split(";")
-            self.assertEqual(entete_ordres[-2:], ["anomalie_constatee", "astuce"])
+            self.assertEqual(entete_ordres[-3:], ["anomalie_constatee", "astuce", "habilitation_requise"])   # formats 2, 3 puis 4
             # Une ligne de journal par étape (1 → 2, puis 2 → 3).
             actions = actions_journal_version(self.lire("journal.csv"))
             self.assertEqual(actions, ["passage au format %d du fichier ; sauvegarde %s faite juste avant" % (n, nom)
-                                       for n in (2, 3)])
+                                       for n in range(2, FORMAT_COURANT_NUM + 1)])
 
             # Second appel : rien.
             sauvegardes_avant = self.lister("sauvegardes")
@@ -568,7 +571,7 @@ class TestDossier(CasNavigateur):
         with ServeurStatique(RACINE) as statique:
             self.ouvrir_dossier_v1(statique.url)
             avant = self.lister("sauvegardes")
-            for motif in ("inconnu", "../x", "avant-format-v4", "avant-format-v2/../..", 2):
+            for motif in ("inconnu", "../x", MOTIF_AVANT_FORMAT_TROP_RECENT, "avant-format-v2/../..", 2):
                 with self.subTest(motif=motif):
                     resultat = self.appeler("sauvegarder", motif)
                     self.assertEqual((resultat["ok"], resultat["nom"]), (False, "ErreurStockage"), resultat)
@@ -580,7 +583,7 @@ class TestDossier(CasNavigateur):
             self.assertRegex(manuelle["valeur"], MOTIF_NOM_MANUEL)
             avec_motif = self.appeler("sauvegarder", "avant-format-v2")
             self.assertRegex(avec_motif["valeur"], MOTIF_NOM_AVANT_FORMAT_2)
-            avec_motif = self.appeler("sauvegarder", "avant-format-v3")
+            avec_motif = self.appeler("sauvegarder", MOTIF_AVANT_FORMAT_COURANT)
             self.assertRegex(avec_motif["valeur"], MOTIF_NOM_AVANT_FORMAT_COURANT)
 
             # Mêmes règles de noms que le serveur (TestApiMotif.test_regles_de_noms_pour_la_restauration).
@@ -637,8 +640,8 @@ class TestDemo(CasNavigateur):
         self.assertEqual(resultat["appelsSauvegarde"], 0)
         self.assertEqual(resultat["version"], FORMAT_COURANT)
         self.assertIn("version_schema;'" + FORMAT_COURANT, resultat["fichier"])
-        self.assertEqual(resultat["journal"], ["passage au format 2 du fichier ; sans sauvegarde (démo)",
-                                               "passage au format 3 du fichier ; sans sauvegarde (démo)"])
+        self.assertEqual(resultat["journal"], ["passage au format %d du fichier ; sans sauvegarde (démo)" % n
+                                               for n in range(2, FORMAT_COURANT_NUM + 1)])
 
 
 if __name__ == "__main__":
