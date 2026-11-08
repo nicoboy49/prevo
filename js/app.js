@@ -333,6 +333,9 @@ const App = (() => {
     UI.$('#titre-donnees').hidden = VERSION_WEB;
     UI.$('#titre-donnees-demo').hidden = !VERSION_WEB;
     UI.$('#note-donnees-demo').hidden = !VERSION_WEB;
+    // T377 : hors français, une phrase dit que les données de la démo décrivent un atelier français (elles ne se
+    // traduisent pas : ce sont des données) ; proposition 1 de T339.
+    UI.$('#note-demo-atelier-francais').hidden = !(VERSION_WEB && I18n.langue !== 'fr');
     const demo = UI.$('#btn-demo');
     demo.classList.toggle('btn-primaire', VERSION_WEB);
     demo.classList.toggle('btn-secondaire', !VERSION_WEB);

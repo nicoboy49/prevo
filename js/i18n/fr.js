@@ -593,6 +593,7 @@ I18n.ajouter('fr', {
   'socle.migrer_au_format_courant.sans_sauvegarde_demo': 'sans sauvegarde (démo)',
   'socle.migrer_au_format_courant.sauvegarde_avant_passage_format': 'Sauvegarde avant le passage au format {courant} impossible : {messageSansPointFinal} ; la mise à jour sera retentée à la prochaine ouverture.',
   'socle.migrer_au_format_courant.sauvegarde_faite_juste_avant': 'sauvegarde {sauvegarde} faite juste avant',
+  'socle.note_donnees_demo.atelier_francais_interface_traduite': 'Les données de la démo décrivent un atelier français : seule l\'interface est traduite.',
   'socle.note_donnees_demo.nulle_part_elles_vivent': 'Nulle part : elles vivent dans cette page et disparaissent quand vous la fermez. Sur votre installation, ce sont des fichiers CSV sur votre PC, lisibles dans Excel.',
   'socle.nouvel_id.donnees_nouvel_id_table_pas': 'Donnees.nouvelId : la table « {nomTable} » n\'a pas d\'identifiant calculé.',
   'socle.ouvrir_fichiers_deposes.aucun_fichier_reconnu_fichiers': 'Aucun fichier reconnu : les fichiers doivent s\'appeler equipements.csv, demandes.csv, ordres_travail.csv…',

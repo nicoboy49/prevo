@@ -286,6 +286,17 @@ class TestNavigateurDemoWeb(OutilsConstruction, CasNavigateur):
         self.assertFalse(page.is_visible("#titre-donnees"))
         self.assertEqual(page.text_content("#titre-donnees-demo").strip(), TITRE_DONNEES_DEMO)
         self.assertEqual(" ".join(page.inner_text("#note-donnees-demo").split()), NOTE_DONNEES_DEMO)
+        # T377 : en français, rien de plus ; dans une autre langue, une phrase dit que les données de la démo
+        # décrivent un atelier français (seule l'interface est traduite).
+        self.assertFalse(page.is_visible("#note-demo-atelier-francais"))
+        page.evaluate("localStorage.setItem('prevo.langue', 'en')")
+        page.reload()
+        page.wait_for_function("document.documentElement.dataset.etat === 'demarrage'")
+        self.assertEqual(page.evaluate("I18n.langue"), "en")
+        self.assertTrue(page.is_visible("#note-demo-atelier-francais"))
+        self.assertEqual(" ".join(page.inner_text("#note-demo-atelier-francais").split()),
+                         "The demo data describes a French workshop: only the interface is translated.")
+        page.evaluate("localStorage.removeItem('prevo.langue')")
         page.wait_for_timeout(300)
         self.verifier_aucune_requete_hors_du_dossier()
 
@@ -387,6 +398,7 @@ class TestDepotInchange(CasNavigateur):
         self.assertEqual(page.text_content("#titre-donnees").strip(), "Où sont vos données ?")
         self.assertFalse(page.is_visible("#titre-donnees-demo"))
         self.assertFalse(page.is_visible("#note-donnees-demo"))
+        self.assertFalse(page.is_visible("#note-demo-atelier-francais"))
 
     def test_depot_ia_toujours_appelee_et_sans_bouton_si_inactive(self):
         regler_ia(self.contexte, url=self.faux.url)

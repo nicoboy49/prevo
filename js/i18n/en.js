@@ -595,6 +595,7 @@ I18n.ajouter('en', {
   'socle.migrer_au_format_courant.sans_sauvegarde_demo': 'without backup (demo)',
   'socle.migrer_au_format_courant.sauvegarde_avant_passage_format': 'Backup before moving to format {courant} is not possible: {messageSansPointFinal}; the update will be tried again the next time it is opened.',
   'socle.migrer_au_format_courant.sauvegarde_faite_juste_avant': 'backup {sauvegarde} made just before',
+  'socle.note_donnees_demo.atelier_francais_interface_traduite': 'The demo data describes a French workshop: only the interface is translated.',
   'socle.note_donnees_demo.nulle_part_elles_vivent': 'Nowhere: it lives in this page and disappears when you close it. On your installation, it is CSV files on your PC, readable in Excel.',
   'socle.nouvel_id.donnees_nouvel_id_table_pas': 'Donnees.nouvelId: the table “{nomTable}” has no calculated ID.',
   'socle.ouvrir_fichiers_deposes.aucun_fichier_reconnu_fichiers': 'No file recognised: the files must be named equipements.csv, demandes.csv, ordres_travail.csv…',
