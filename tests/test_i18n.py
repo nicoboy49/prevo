@@ -565,6 +565,28 @@ class TestChargement(CasNavigateur):
         self.assertNotEqual(etat["aide"], etat["francais"])
         self.assertIn("Prévo : pas d'aide longue en « yy » ; elle s'affiche en « en ».", infos)
 
+    def test_police_sora_dessine_les_lettres_turques(self):
+        """CS163 (T343, D162) : ğ, Ğ, İ, ş, Ş (absentes du sous-ensemble latin) sont prises dans Sora latin-ext, chargée à
+        la demande depuis css/polices/ ; ı reste dans latin. index.html réel en file://."""
+        self.page.goto(url_fichier(RACINE / "index.html"))
+        self.attendre_etat(self.page, "demarrage")
+        resultat = self.page.evaluate("""async () => {
+          const essai = document.createElement('p');
+          essai.style.fontFamily = 'Sora'; essai.textContent = 'Iğdır, İstanbul, Şişli, ışık';
+          document.body.appendChild(essai);
+          await document.fonts.load('16px Sora', 'ğĞİşŞ');
+          const faces = [...document.fonts].filter((face) => face.family.replace(/["']/g, '') === 'Sora')
+            .map((face) => ({ etat: face.status, plage: face.unicodeRange.toUpperCase() }));
+          return { faces, pret: document.fonts.check('16px Sora', 'ğĞİşŞı') };
+        }""")
+        etendue = [face for face in resultat["faces"] if "U+100-2BA" in face["plage"] or "U+0100-02BA" in face["plage"]]
+        latin = [face for face in resultat["faces"] if face not in etendue]
+        self.assertEqual(len(etendue), 1, resultat["faces"])
+        self.assertEqual(etendue[0]["etat"], "loaded")
+        self.assertEqual(len(latin), 1, resultat["faces"])
+        self.assertIn("131", latin[0]["plage"])                               # ı : sous-ensemble latin
+        self.assertTrue(resultat["pret"])
+
     def test_langue_d_essai_prise_avant_le_schema_en_file(self):
         self.contexte.add_init_script("try { localStorage.setItem('prevo.langue', 'xx'); } catch (erreur) {}")
         self.page.goto(url_fichier(self.dossier / "index.html"))

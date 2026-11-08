@@ -530,7 +530,7 @@ See `/licenses/LICENSE-d3` for details of the license.
 
 
 ================================================================================
-5. Police Sora - fichier css/polices/sora-latin-wght-normal.woff2
+5. Police Sora - fichiers css/polices/sora-latin-wght-normal.woff2 et sora-latin-ext-wght-normal.woff2
 ================================================================================
 Projet : https://github.com/sora-xor/sora-font
 Licence : SIL Open Font License, Version 1.1

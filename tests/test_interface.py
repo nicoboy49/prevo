@@ -647,6 +647,8 @@ class TestReglesDuCode(unittest.TestCase):
 
     def test_police_et_mouvement_reduit(self):
         self.assertIn("url(polices/sora-latin-wght-normal.woff2)", self.css)
+        self.assertIn("url(polices/sora-latin-ext-wght-normal.woff2)", self.css)     # T343 (D162) : ğ, İ, ş
+        self.assertTrue((RACINE / "css" / "polices" / "sora-latin-ext-wght-normal.woff2").is_file())
         self.assertIn("prefers-reduced-motion", self.css)
         self.assertTrue((RACINE / "css" / "polices" / "sora-latin-wght-normal.woff2").is_file())
 

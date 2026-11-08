@@ -25,6 +25,8 @@ EMPREINTES = {
     # SheetJS CE 0.20.3 (lot 5), CDN officiel cdn.sheetjs.com, téléchargé le 2026-10-21
     "js/lib/xlsx.full.min.js": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
     "css/polices/sora-latin-wght-normal.woff2": "714cfbc8e4b3f224102a517dd5f39c85e114b27163602159deee4d8c4a8602f0",
+    # Sora latin-ext (Lot 5, T343, D162) : @fontsource-variable/sora 5.2.5 (même paquet que latin), jsDelivr, 2026-11-08
+    "css/polices/sora-latin-ext-wght-normal.woff2": "41687c928ef86e57644e21d12cd97450d7690d3a4a2c66def192b14a7de527e7",
 }
 
 IGNORES = [
