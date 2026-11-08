@@ -37,7 +37,10 @@ IGNORES = [
 NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "docs/brief-gmao.md"]
 
 # Ordre exact des scripts js/modules/ dans index.html : RECOPIE de docs/ARCHITECTURE.md §15.1
-# (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble.
+# (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble. Chantier 2.2 (T410) : cinq
+# fichiers nouveaux, controles-reserves.js et controles-catalogue.js après controles-regles.js,
+# controles-reserves-ecrans.js après controles-ecrans.js, equipe-habilitations.js après equipe-ecrans.js,
+# ordres-habilitations.js après ordres-impression.js.
 ORDRE_MODULES = [
     "apropos.js", "mise-a-jour.js", "aide-ecrans-textes.js", "aide-ecrans.js", "acces-textes.js", "connexion-ecrans.js",
     "installation-etapes.js", "installation-ecrans.js", "installation-fiche.js",
@@ -46,12 +49,13 @@ ORDRE_MODULES = [
     "parc-regles.js", "parc-arbre.js", "parc-formulaires.js", "parc-etiquettes.js", "parc-fiche.js",
     "demandes-regles.js", "demandes-ecritures.js", "demandes-signaler.js", "demandes-liste.js", "demandes-fiche.js",
     "ordres-regles.js", "ordres-ecritures.js", "ordres-liste.js", "ordres-fiche.js", "ordres-onglets.js",
-    "ordres-pieces.js", "ordres-impression.js",
+    "ordres-pieces.js", "ordres-impression.js", "ordres-habilitations.js",
     "preventif-regles.js", "preventif-ecritures.js", "preventif-ecrans.js", "preventif-calendrier.js",
     "suggestions-regles.js", "suggestions-ecrans.js",
     "magasin-regles.js", "magasin-ecritures.js", "magasin-articles.js", "magasin-mouvements.js", "magasin-achats.js",
-    "equipe-regles.js", "equipe-ecritures.js", "equipe-ecrans.js", "equipe-acces.js",
-    "controles-regles.js", "controles-ecritures.js", "controles-ecrans.js",
+    "equipe-regles.js", "equipe-ecritures.js", "equipe-ecrans.js", "equipe-habilitations.js", "equipe-acces.js",
+    "controles-regles.js", "controles-reserves.js", "controles-catalogue.js", "controles-ecritures.js",
+    "controles-ecrans.js", "controles-reserves-ecrans.js",
     "planning-regles.js", "planning-ecritures.js", "planning-ecrans.js",
     "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
     "rapport-contenu.js", "rapport-ecrans.js",
@@ -69,11 +73,12 @@ LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-del�
 # Ordre exact des scripts du socle dans index.html, avant ceux de js/modules/ : RECOPIE de docs/ARCHITECTURE.md §1
 # (« Ordre de chargement dans index.html »). js/formats.js juste après js/schema.js (chantier socle de données, T183).
 # Chantier multilingue (T234) : le moteur de traduction, les langues, le français, l'aide française et le chargeur de la
-# langue active juste avant js/schema.js.
+# langue active juste avant js/schema.js. Chantier 2.2 (T410) : le catalogue des contrôles et des habilitations
+# (js/catalogue/fr.js, T400, window.CatalogueFR gelé) juste après js/formats.js.
 ORDRE_SOCLE = [
     "js/lib/papaparse.min.js", "js/lib/qrcode.js", "js/lib/jsQR.js",
     "js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js", "js/i18n-chargeur.js",
-    "js/schema.js", "js/formats.js", "js/donnees.js",
+    "js/schema.js", "js/formats.js", "js/catalogue/fr.js", "js/donnees.js",
     "js/stockage-serveur.js", "js/stockage-dossier.js", "js/stockage-demo.js", "js/interface.js",
 ]
 

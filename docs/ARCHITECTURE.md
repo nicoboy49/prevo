@@ -29,6 +29,8 @@ js/i18n/aide/<code>.js     aide longue d'une langue (clés aide.*, repli silenci
 js/i18n-chargeur.js        ajoute la langue active (si ce n'est pas le français) avant js/schema.js
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
 js/formats.js              Formats   : registre des formats (colonnes de chaque format, étapes de migration, manifeste)
+js/catalogue/fr.js         CatalogueFR : catalogue des contrôles réglementaires et des habilitations (France, 2.2 ;
+                           généré par outils/generer_catalogue.py depuis docs/catalogue/*.json, gelé, lecture seule)
 js/donnees.js              Donnees   : CSV, chargement, contrôle, mutation, journal, rafraîchissement
 js/stockage-serveur.js     StockageServeur : adaptateur « serveur » (API HTTP)
 js/stockage-dossier.js     StockageDossier : adaptateur « dossier » (File System Access)
@@ -61,7 +63,9 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 passe par `zip-flux.js`), la traduction (chantier multilingue, T234) : `js/i18n.js` (le moteur, objet `I18n`),
 `js/i18n/langues.js`, `js/i18n/fr.js`, `js/i18n/aide/fr.js`, `js/i18n-chargeur.js` (la langue active, voir plus bas),
 `js/schema.js`, `js/formats.js` (juste après le schéma, dont il dépend seul :
-chantier « socle de données »),
+chantier « socle de données »), `js/catalogue/fr.js` (2.2, T410 : le catalogue des contrôles réglementaires et des
+habilitations, `window.CatalogueFR`, généré par `outils/generer_catalogue.py` en T400 ; objets gelés, en lecture seule,
+lus par les modules au moment de l'appel ; sans lui, les modules rendent une liste vide),
 `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
 §15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
@@ -71,7 +75,9 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 `accueil-bento.js` juste après `accueil.js`, §19 ; le lot 7 insère `aide-ecrans-textes.js`, `aide-ecrans.js` et
 `acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),
 `parametres-solo.js` juste après `parametres-codes.js` et `parametres-sauvegardes.js` juste après `parametres-solo.js`
-(§22.11)), `js/app.js` (en dernier).
+(§22.11) ; la 2.2 (T410) insère `controles-reserves.js` et `controles-catalogue.js` juste après `controles-regles.js`,
+`controles-reserves-ecrans.js` juste après `controles-ecrans.js`, `equipe-habilitations.js` juste après
+`equipe-ecrans.js` et `ordres-habilitations.js` juste après `ordres-impression.js`, §15.1), `js/app.js` (en dernier).
 Langue active (T234, T295) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (le choix du poste, écrit par
 le sélecteur de langue, §24.10) puis « prevo.langue.installation » (la langue de l'installation, §24.11 ; la langue du
 compte viendra plus tard) ; la première des deux déclarée par `js/i18n/langues.js` (sinon le français) est la langue
@@ -1386,10 +1392,12 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   parc-regles.js  parc-arbre.js  parc-formulaires.js  parc-etiquettes.js  parc-fiche.js
   demandes-regles.js  demandes-ecritures.js  demandes-signaler.js  demandes-liste.js  demandes-fiche.js
   ordres-regles.js  ordres-ecritures.js  ordres-liste.js  ordres-fiche.js  ordres-onglets.js  ordres-pieces.js  ordres-impression.js
+  ordres-habilitations.js
   preventif-regles.js  preventif-ecritures.js  preventif-ecrans.js  preventif-calendrier.js
   magasin-regles.js  magasin-ecritures.js  magasin-articles.js  magasin-mouvements.js  magasin-achats.js
-  equipe-regles.js  equipe-ecritures.js  equipe-ecrans.js  equipe-acces.js
-  controles-regles.js  controles-ecritures.js  controles-ecrans.js
+  equipe-regles.js  equipe-ecritures.js  equipe-ecrans.js  equipe-habilitations.js  equipe-acces.js
+  controles-regles.js  controles-reserves.js  controles-catalogue.js  controles-ecritures.js  controles-ecrans.js
+  controles-reserves-ecrans.js
   planning-regles.js  planning-ecritures.js  planning-ecrans.js
   indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
   rapport-contenu.js  rapport-ecrans.js
@@ -1398,7 +1406,15 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   parametres.js  parametres-codes.js  parametres-solo.js  parametres-sauvegardes.js  parametres-zip.js  parametres-acces.js  (puis import-*.js, §18.1, et wiki-*.js, §20 ; puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
-  `indicateurs-regles.js`, qui aurait dépassé 700 lignes. Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
+  `indicateurs-regles.js`, qui aurait dépassé 700 lignes.
+  Chantier 2.2 (T410, socle des lots L2 et L3) : cinq fichiers créés vides puis remplis par les tâches suivantes, chacun
+  complète l'objet de son module par `Object.assign` : `controles-reserves.js` (réserves des contrôles : règles pures,
+  T411, puis écritures, T413) et `controles-catalogue.js` (catalogue des contrôles : règles pures, T414, puis bloc du
+  formulaire, T416) après `controles-regles.js` ; `controles-reserves-ecrans.js` (carte « Réserves » et ses fenêtres,
+  T418 à T420) après `controles-ecrans.js` ; `equipe-habilitations.js` (fenêtres et carte des habilitations, T432)
+  après `equipe-ecrans.js` ; `ordres-habilitations.js` (RG8 à l'écran : bandeau, « passer outre », habilitation
+  exigée, T438 à T440) après `ordres-impression.js`. Une fonction d'un fichier chargé plus tard est cherchée au moment
+  de l'appel (`Controles.interne.x(...)`), comme dans `ordres-fiche.js`. Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
   écran de connexion, §22.4) se charge après `acces-textes.js` (ses textes) et avant `accueil.js` ; feuille
   `css/modules/connexion.css`. Lot 7 (T168) : `installation-etapes.js` (objet `InstallationEtapes`, les formulaires des
   huit étapes), `installation-ecrans.js` (objet `Installation`, l'écran plein de l'assistant, §22.10) et
