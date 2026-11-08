@@ -1329,6 +1329,7 @@ I18n.ajouter('fr', {
   'demandes.liste.traiter_nouvelles': 'À traiter (nouvelles)',
   'demandes.menu.demandes': 'Demandes',
   'demandes.menu.signaler': 'Signaler',
+  'demandes.menu.signaler_court': 'Signaler',
   'demandes.message_deja_traitee.demande_deja_ete_traitee': 'Cette demande a déjà été traitée sur un autre poste',
   'demandes.nom_du_profil.responsable': 'Responsable',
   'demandes.nouvelle.1_quel_equipement': '1. Quel équipement ?',

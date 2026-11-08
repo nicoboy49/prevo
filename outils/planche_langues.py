@@ -5,7 +5,9 @@ pt-PT) sur trois appareils — bureau 1440 px, Android (Pixel 7, 412 px), iPhone
 chaque écran principal :
     - détecte automatiquement un débordement horizontal de la page (largeur de défilement > largeur visible) ;
     - détecte un texte coupé : élément visible, avec du texte à lui, dont le contenu dépasse sa boîte alors que son
-      débordement est caché (overflow hidden ou clip, ellipsis) ;
+      débordement est caché (overflow hidden ou clip, ellipsis), coupé dans la langue et pas en français au même
+      écran (une coupure voulue, l'ellipsis d'une liste, l'est aussi en français) ; textes des lecteurs d'écran
+      (.visuellement-cache) exclus ;
     - prend une capture de la fenêtre (JPEG).
 Écrit une planche HTML (un tableau par appareil : un écran par ligne, une langue par colonne) et un rapport texte
 dans le dossier de sortie (hors du dépôt), et rend 1 si un débordement ou un texte coupé est trouvé.
@@ -36,14 +38,13 @@ MESURE_JS = """() => {
   const deborde = Math.max(0, doc.scrollWidth - doc.clientWidth);
   const coupes = [];
   for (const el of document.querySelectorAll('#app *')) {
-    if (!el.offsetParent || el.clientWidth === 0) continue;
+    if (!el.offsetParent || el.clientWidth <= 2 || el.closest('.visuellement-cache')) continue;   // lecteurs d'écran
     const propre = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
     if (!propre) continue;
     const style = getComputedStyle(el);
     const cache = ['hidden', 'clip'].includes(style.overflowX) || style.textOverflow === 'ellipsis';
     if (cache && el.scrollWidth > el.clientWidth + 1) {
-      coupes.push((el.id ? '#' + el.id : el.tagName.toLowerCase() + '.' + [...el.classList].join('.')) + ' « '
-        + el.textContent.trim().slice(0, 50) + ' »');
+      coupes.push(el.id ? '#' + el.id : el.tagName.toLowerCase() + '.' + [...el.classList].join('.'));
     }
   }
   return { deborde, coupes: coupes.slice(0, 8) };
@@ -98,13 +99,17 @@ def ecrire(sortie, resultats, langues, appareils):
             ligne = ["<tr><th>%s</th>" % html.escape(nom)]
             for langue in langues:
                 r = resultats[(appareil, nom, langue)]
-                ko = r["deborde"] > 0 or r["coupes"]
+                # Coupé dans cette langue et pas en français (même écran, même appareil) : la traduction est trop
+                # longue ; une coupure voulue (ellipsis d'une liste) l'est aussi en français.
+                francais = set(resultats.get((appareil, nom, "fr"), {}).get("coupes", []))
+                coupes = [] if langue == "fr" else [c for c in r["coupes"] if c not in francais]
+                ko = r["deborde"] > 0 or coupes
                 if ko:
                     problemes.append("%s, %s, %s : débordement %d px ; coupés : %s" % (
-                        appareil, langue, nom, r["deborde"], "; ".join(r["coupes"]) or "aucun"))
+                        appareil, langue, nom, r["deborde"], "; ".join(coupes) or "aucun"))
                 ligne.append("<td class='%s'><a href='%s'><img src='%s' width='%d'></a>%s</td>" % (
                     "ko" if ko else "", r["image"], r["image"], largeur,
-                    ("<small>%s</small>" % html.escape("débordement %d px ; %s" % (r["deborde"], "; ".join(r["coupes"]))))
+                    ("<small>%s</small>" % html.escape("débordement %d px ; %s" % (r["deborde"], "; ".join(coupes))))
                     if ko else ""))
             morceaux.append("".join(ligne) + "</tr>")
         morceaux.append("</table>")

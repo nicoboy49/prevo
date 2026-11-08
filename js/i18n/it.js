@@ -1333,6 +1333,7 @@ I18n.ajouter('it', {
   'demandes.liste.traiter_nouvelles': 'Da trattare (nuove)',
   'demandes.menu.demandes': 'Richieste',
   'demandes.menu.signaler': 'Segnala un problema',
+  'demandes.menu.signaler_court': 'Segnala',
   'demandes.message_deja_traitee.demande_deja_ete_traitee': 'Questa richiesta è già stata trattata su un\'altra postazione',
   'demandes.nom_du_profil.responsable': 'Responsabile',
   'demandes.nouvelle.1_quel_equipement': '1. Quale attrezzatura?',
