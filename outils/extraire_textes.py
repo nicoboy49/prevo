@@ -58,7 +58,8 @@ SECTIONS = ('commun', 'schema', 'valeurs', 'socle', 'planning', 'causes', 'dicte
             'installation', 'porte', 'parametres', 'sauvegardes', 'zip', 'serveur', 'ia')
 # Domaine d'un module js/modules/<préfixe>-….js ou <préfixe>.js : son préfixe, sauf ceux-là.
 MODULES_PARTICULIERS = {'parametres-sauvegardes.js': 'sauvegardes', 'parametres-zip.js': 'zip',
-                        'aide-ecrans-textes.js': 'aide-longue'}
+                        'aide-ecrans-textes.js': 'aide-longue',
+                        'brouillons.js': 'socle'}       # T329 : saisie gardée, commune aux écrans (textes commun.*)
 # Domaines qui ne sont pas une section de fr.js : domaine → (section, dictionnaire). L'aide longue générée
 # (aide-ecrans-textes.js) va dans js/i18n/aide/fr.js (clés aide.*, T247) : un domaine à part, pour que le contrôle
 # du domaine « aide » (aide courte, aide-ecrans.js) ne la compte pas (T237).
