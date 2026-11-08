@@ -627,6 +627,14 @@
       ],
       "classe": "identifiants",
       "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Électricité",
+      "fichiers": [
+        "js/modules/equipe-regles.js"
+      ],
+      "classe": "D155",
+      "raison": "Valeur de la famille des habilitations électriques dans le catalogue validé (docs/catalogue/habilitations-fr.json), comparée pour ne pas proposer d'intitulé, jamais affichée (T430 ; T446)."
     }
   ]
 }
