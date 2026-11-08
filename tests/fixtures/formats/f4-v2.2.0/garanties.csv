@@ -1,0 +1,3 @@
+﻿id;equipement_id;fournisseur_id;date_debut;date_fin;conditions;document;actif
+GAR-0001;EQ-0005;FOU-0005;2025-06-01;2027-05-31;Pièces et main-d'œuvre, hors garniture mécanique (pièce d'usure);;1
+GAR-0002;EQ-0007;;2024-09-15;2026-09-14;Garantie du constructeur : pièces seules, compresseur frigorifique compris;;1

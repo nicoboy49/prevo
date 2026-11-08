@@ -1,7 +1,8 @@
 # Jeux de fichiers d'exemple des formats de données
 
 Ces jeux servent aux tests des migrations (format 1 vers 2 vers 3, puis 3 vers 4 avec la reprise des observations
-en réserves), de la garde « données plus récentes » et de l'import ZIP, en mode serveur comme en mode dossier.
+en réserves), de l'ouverture d'une base déjà au format 4 (rien à migrer), de la garde « données plus récentes » et de
+l'import ZIP, en mode serveur comme en mode dossier.
 Données fictives, petites (12 enregistrements au plus par table, `parametres.csv` entier), reproductibles octet
 pour octet.
 
@@ -37,7 +38,44 @@ n'est abîmé. Un lecteur doit la migrer vers 3 : deux tables vides, une colonne
 Rien n'est abîmé. Une 2.1 la relit sans rien changer ; la 2.2 la passe au format 4. Un seul contrôle a des
 observations (`CTR-0004`, non levées) : la reprise (D183) doit donner une seule réserve (tableau plus bas).
 
-## Variantes (tirées de f3-v1.2.0, sauf reserves-a-reprendre, tirée de f3-v2.1.0)
+## Jeu au format 4 (variante de f3-v2.1.0)
+
+**f4-v2.2.0** : une base de la 2.2, au format 4 : `version_schema;'4`, 27 tables, chacune avec exactement les
+colonnes du format 4 dans l'ordre du schéma. Le générateur la tire de f3-v2.1.0 par son propre code (jamais par
+`serveur.py` ni `js/formats.js`) ; elle est stockée comme une variante (les 8 fichiers qui changent). Les 20 tables
+sans colonne nouvelle sont celles de f3-v2.1.0 à l'octet ; `equipements`, `ordres_travail`, `habilitations` et
+`controles_reglementaires` gardent toutes leurs cellules et reçoivent les colonnes du format 4 en fin, avec leur
+défaut (`source_periodicite` = `saisie`, les autres vides), sauf :
+
+- `equipements.cout_arret_h` : `180` (`EQ-0001`) et `312.5` (`EQ-0007`) ;
+- `ordres_travail.habilitation_requise` : `BR` (`OT-2025-0005`, groupe froid) ;
+- `habilitations` : `HAB-0001` (BR : `recyclage_mois` `36`, justificatif `20250310-090000-titre-habilitation-BR.pdf`,
+  `catalogue_id` `H02`, `nature_source` `recommandation`) et `HAB-0004` (CACES R489 : `60`,
+  `20211202-090000-caces-r489.pdf`, `H12`, `recommandation`) ; les justificatifs ne sont pas fournis (pas de dossier
+  `documents/`, que les sauvegardes ne copient pas) : un export ZIP de ce jeu les annonce manquants ;
+- `controles_reglementaires` : `CTR-0001` et `CTR-0002` avec `source_periodicite` `catalogue`, `nature_source`
+  `obligation`, `catalogue_id` `C01` et `C03`, `catalogue_relu_le` `2026-11-08` ; observations inchangées.
+
+Tables nouvelles : `garanties.csv` (`GAR-0001` pompe `EQ-0005` chez `FOU-0005`, `GAR-0002` groupe froid `EQ-0007`
+sans fournisseur, échue le 2026-09-14), `contrats_prestataires.csv` (`CTP-0001` en reconduction tacite de 12 mois,
+préavis de 3 mois, `equipement_ids` `EQ-0001;EQ-0002` ; `CTP-0002` sans reconduction, périmètre en texte seul) et
+`reserves_controle.csv` :
+
+| id | controle_id | date_controle | texte | gravite | echeance_levee | levee | date_levee | commentaire_levee | ot_id |
+|---|---|---|---|---|---|---|---|---|---|
+| RES-00001 | CTR-0004 | 2025-04-03 | Purgeur automatique du réservoir défectueux : à remplacer avant la prochaine inspection. | (vide) | (vide) | 0 | (vide) | (vide) | (vide) |
+| RES-00002 | CTR-0001 | 2026-02-10 | Fin de course haut du palan à régler | majeure | 2026-03-12 | 0 | (vide) | (vide) | (vide) |
+| RES-00003 | CTR-0002 | 2026-03-18 | Avertisseur sonore de recul inaudible | mineure | 2026-04-17 | 1 | 2026-04-02 | Avertisseur remplacé, essai concluant | (vide) |
+
+`RES-00001` est la réserve que le passage au format 4 tire de f3-v2.1.0 (la même que plus bas) ; `RES-00002` est
+ouverte, `RES-00003` levée à une date connue. Le journal est celui de f3-v2.1.0 (jeu fabriqué : aucune ligne de
+passage). Jeu canonique (dates AAAA-MM-JJ, booléens `0`/`1`, nombres avec un point, aucune cellule nouvelle à
+protéger par l'apostrophe, écrit comme Prévo l'écrit). Un lecteur doit la lire au format 4 sans rien migrer ni
+reprendre (chaque contrôle à observations a déjà sa réserve), ne rien écrire à l'ouverture (ni sauvegarde
+`avant-format-v4`, ni ligne de journal), et la réécrire aux mêmes octets, navigateur comme serveur. C'est le jeu des
+cas « sans passage de format » de la 2.2.
+
+## Variantes (tirées de f3-v1.2.0, sauf reserves-a-reprendre, tirée de f3-v2.1.0, et plus-recent, tirée de f4-v2.2.0)
 
 **f3-v2.0.0** : f3-v1.2.0 plus, dans `parametres.csv`, les clés de la 2.0 (`mode_solo`, `cloture_une_etape`,
 `solo_technicien_id`), et `acces/comptes.json` (`{"version": 1, "comptes": [...]}`, format écrit par `serveur.py`)
@@ -74,9 +112,11 @@ changer le numéro de format.
 après un enregistrement par Excel (les caractères hors Windows-1252 sont devenus `?`). Un lecteur doit détecter
 l'encodage, relire les dates en AAAA-MM-JJ, et réécrire en UTF-8 avec BOM.
 
-**plus-recent** : données d'une version plus récente : `version_schema;'5` (format 5 simulé : la 2.2 écrit le
-format 4), colonne inconnue `nouvelle_colonne_v5` en fin d'`ordres_travail.csv`, table inconnue `pieces_v5.csv`
-(3 colonnes, 2 lignes) ; les autres fichiers sont ceux de f3-v1.2.0. Un lecteur doit refuser d'écrire (garde
+**plus-recent** : données d'une version plus récente : f4-v2.2.0 (toutes les tables et colonnes du format 4) avec
+`version_schema;'5` (format 5 simulé : la 2.2 écrit le format 4), une colonne inconnue `nouvelle_colonne_v5` en fin
+d'`ordres_travail.csv` (`v5-1`, `v5-2`…), une table inconnue `pieces_v5.csv` (3 colonnes, 2 lignes), et
+`habilitations.justificatif` vide (le jeu ne cite ainsi aucun document : un export en lecture seule n'en cherche
+aucun) ; les autres fichiers sont ceux de f4-v2.2.0 (28 fichiers CSV). Un lecteur doit refuser d'écrire (garde
 « données plus récentes », demande de mettre Prévo à jour) et ne rien modifier ; en lecture seule, il peut ouvrir
 ce qu'il connaît.
 

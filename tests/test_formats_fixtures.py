@@ -4,8 +4,13 @@ Couvre : chaque jeu se matérialise ; version_schema et nombre de tables attendu
 12 enregistrements au plus par table ; BOM présent ou absent selon le jeu ; données fictives ; les jeux de la 2.2
 (T378) : f3-v2.1.0 et reserves-a-reprendre lus au format 3 par le serveur (format_du_fichier, version_de_base ; côté
 navigateur : tests/test_formats_js.py), controles_reglementaires.csv de reserves-a-reprendre écrit comme Prévo
-l'écrit, réserves attendues (règle D183 de CONCEPTION-L1 §3.2, recopiée ici) égales à celles de LISEZMOI.md ; et, si
-git et les étiquettes v1.1.0, v1.2.0 et v2.1.0 sont là, le générateur rejoué redonne exactement les mêmes octets.
+l'écrit, réserves attendues (règle D183 de CONCEPTION-L1 §3.2, recopiée ici) égales à celles de LISEZMOI.md ; le jeu
+f4-v2.2.0 (T394, base au format 4) : 27 tables aux colonnes exactes du format 4, lu au format 4 par le serveur, rien
+à migrer ni à reprendre, réécrit aux mêmes octets (côté navigateur : tests/test_formats_js.py et
+test_formats_serveur.py), les 20 tables sans colonne nouvelle identiques à f3-v2.1.0, les quatre autres complétées
+sans changer une cellule, les valeurs du format 4 et les réserves du LISEZMOI ; plus-recent : f4-v2.2.0 plus ses ajouts
+du format 5 ; et, si git et les étiquettes v1.1.0, v1.2.0 et v2.1.0 sont là, le générateur rejoué redonne exactement
+les mêmes octets.
 
 Lancer depuis la racine du projet :
     py -X utf8 -m unittest discover -s tests -p "test_formats_fixtures.py" -v
@@ -35,9 +40,9 @@ PLAGES_FICTIVES = ("04657100", "06399800")
 
 # jeu -> version_schema attendu (None : absent, soit le format 1)
 VERSION_SCHEMA = {"f1": None, "f2-v1.1.0": "2", "f3-v1.2.0": "3", "f3-v2.0.0": "3", "plus-recent": "5",
-                  "melange": "3", "f3-v2.1.0": "3", "reserves-a-reprendre": "3"}
-NB_TABLES = {"f2-v1.1.0": 22, "f3-v1.2.0": 24, "f3-v2.0.0": 24, "table-absente": 22, "plus-recent": 25,
-             "f3-v2.1.0": 24, "reserves-a-reprendre": 24}
+                  "melange": "3", "f3-v2.1.0": "3", "reserves-a-reprendre": "3", "f4-v2.2.0": "4"}
+NB_TABLES = {"f2-v1.1.0": 22, "f3-v1.2.0": 24, "f3-v2.0.0": 24, "table-absente": 22, "plus-recent": 28,
+             "f3-v2.1.0": 24, "reserves-a-reprendre": 24, "f4-v2.2.0": 27}
 # Jeux de la 2.2 (T378), au format 3 : chaque fichier, et la base
 JEUX_DE_LA_2_2 = ("f3-v2.1.0", "reserves-a-reprendre")
 COMMENTAIRE_LEVEE_REPRISE = "levée avant la 2.2, date inconnue"
@@ -66,7 +71,25 @@ RESERVES_ATTENDUES = {
         ("RES-00014", "CTR-0007", "2026-01-15", "Notice absente du local", "0"),
         ("RES-00015", "CTR-0008", "", "Rapport du contrôle initial non retrouvé", "0"),
     ],
-}# Fichiers sans BOM, par jeu (tous les autres CSV non vides en ont un) ; « * » : aucun CSV n'en a.
+}
+# Jeu f4-v2.2.0 (T394) : tables que le format 4 complète (colonnes en fin) et tables qu'il ajoute ; réserves (id,
+# controle_id, date_controle, texte, gravite, echeance_levee, levee, date_levee, commentaire_levee, ot_id), recopiées
+# de LISEZMOI.md : la première est la reprise des observations de f3-v2.1.0 (RESERVES_ATTENDUES).
+JEU_F4 = "f4-v2.2.0"
+COLONNES_DU_FORMAT_4 = {
+    "equipements": ["cout_arret_h"], "ordres_travail": ["habilitation_requise"],
+    "habilitations": ["recyclage_mois", "justificatif", "catalogue_id", "nature_source"],
+    "controles_reglementaires": ["source_periodicite", "nature_source", "catalogue_id", "catalogue_relu_le"]}
+TABLES_DU_FORMAT_4 = ("reserves_controle", "garanties", "contrats_prestataires")
+RESERVES_DU_F4 = [
+    ("RES-00001", "CTR-0004", "2025-04-03",
+     "Purgeur automatique du réservoir défectueux : à remplacer avant la prochaine inspection.", "", "", "0", "", "", ""),
+    ("RES-00002", "CTR-0001", "2026-02-10", "Fin de course haut du palan à régler", "majeure", "2026-03-12", "0", "", "",
+     ""),
+    ("RES-00003", "CTR-0002", "2026-03-18", "Avertisseur sonore de recul inaudible", "mineure", "2026-04-17", "1",
+     "2026-04-02", "Avertisseur remplacé, essai concluant", ""),
+]
+# Fichiers sans BOM, par jeu (tous les autres CSV non vides en ont un) ; « * » : aucun CSV n'en a.
 SANS_BOM = {"sans-bom": "*", "windows-1252": {"equipements.csv"}}
 
 
@@ -153,7 +176,7 @@ class TestJeux(unittest.TestCase):
         self.assertEqual(sorted(JEUX), sorted([
             "f1", "f2-v1.1.0", "f3-v1.2.0", "f3-v2.0.0", "vide", "entete-tronque", "colonnes-manquantes",
             "colonnes-en-trop", "sans-bom", "table-absente", "melange", "windows-1252", "plus-recent", "f3-v2.1.0",
-            "reserves-a-reprendre"]))
+            "reserves-a-reprendre", "f4-v2.2.0"]))
 
     def test_chaque_jeu_se_materialise(self):
         for nom in JEUX:
@@ -225,7 +248,7 @@ class TestJeux(unittest.TestCase):
         entete = (self.jeu("melange") / "ordres_travail.csv").read_bytes().split(b"\r\n", 1)[0]
         self.assertNotIn(b"astuce", entete)
         entete = (self.jeu("plus-recent") / "ordres_travail.csv").read_bytes().split(b"\r\n", 1)[0]
-        self.assertTrue(entete.endswith(b";nouvelle_colonne_v5"))
+        self.assertTrue(entete.endswith(b";astuce;habilitation_requise;nouvelle_colonne_v5"))
         self.assertTrue((self.jeu("plus-recent") / "pieces_v5.csv").is_file())
         self.assertFalse((self.jeu("plus-recent") / "pieces_v4.csv").exists())
         eq = (self.jeu("windows-1252") / "equipements.csv").read_bytes()
@@ -256,6 +279,101 @@ class TestJeux(unittest.TestCase):
                     self.assertEqual(entete, attendu, chemin.name)
         self.assertNotEqual((self.jeu("f3-v2.1.0") / "controles_reglementaires.csv").read_bytes(),
                             (self.jeu("reserves-a-reprendre") / "controles_reglementaires.csv").read_bytes())
+
+    def test_f4_au_format_4_cote_serveur_rien_a_migrer(self):
+        # 27 tables, chacune aux colonnes exactes du format 4 (format_du_fichier 4), base au format 4 : rien à migrer
+        # ni à reprendre (CTR-0004 a sa réserve) ; relue et réécrite par le serveur, chaque table redonne ses octets.
+        dossier = self.jeu(JEU_F4)
+        fichiers = {c.stem: c.read_bytes() for c in sorted(dossier.glob("*.csv"))}
+        self.assertEqual(sorted(fichiers), sorted(serveur.tables_du_format(4)))
+        base = {}
+        for table, octets in fichiers.items():
+            with self.subTest(table=table):
+                entete, lignes = serveur.lire_csv_tolerant(octets)
+                self.assertEqual(entete, serveur.colonnes_du_format(table, 4))
+                self.assertEqual(serveur.format_du_fichier(table, entete), 4)
+                self.assertEqual(serveur.ecrire_tableau_csv(entete, lignes), octets)
+                base[table] = {"entete": entete, "lignes": lignes_en_dictionnaires(octets)}
+        self.assertEqual(serveur.version_de_base(base["parametres"]["lignes"]), 4)
+        migree, journal, etapes = serveur.migrer_tables(base, 4, serveur.VERSION_SCHEMA_CSV)
+        self.assertIs(migree, base)
+        self.assertEqual((journal, etapes), ([], []))
+        self.assertEqual(serveur.reserves_reprises(base["controles_reglementaires"]["lignes"],
+                                                   base["reserves_controle"]["lignes"]), [])
+
+    def test_f4_tire_de_f3_v2_1_0_avec_les_valeurs_du_format_4(self):
+        f4, f3 = self.jeu(JEU_F4), self.jeu("f3-v2.1.0")
+        for chemin in sorted(f3.glob("*.csv")):
+            table = chemin.stem
+            with self.subTest(table=table):
+                if table == "parametres":
+                    self.assertEqual((f4 / chemin.name).read_bytes(), chemin.read_bytes().replace(
+                        b"version_schema;'3\r\n", b"version_schema;'4\r\n"))
+                    continue
+                if table not in COLONNES_DU_FORMAT_4:
+                    self.assertEqual((f4 / chemin.name).read_bytes(), chemin.read_bytes())
+                    continue
+                # Colonnes du format 4 en fin, les cellules de la 2.1 inchangées, ligne pour ligne
+                entete_avant, _ = serveur.lire_csv_tolerant(chemin.read_bytes())
+                entete_apres, _ = serveur.lire_csv_tolerant((f4 / chemin.name).read_bytes())
+                self.assertEqual(entete_apres, entete_avant + COLONNES_DU_FORMAT_4[table])
+                avant = lignes_en_dictionnaires(chemin.read_bytes())
+                apres = lignes_en_dictionnaires((f4 / chemin.name).read_bytes())
+                self.assertEqual(len(apres), len(avant))
+                self.assertEqual([{c: l[c] for c in a} for a, l in zip(avant, apres)], avant)
+        valeurs = {table: lignes_en_dictionnaires((f4 / (table + ".csv")).read_bytes())
+                   for table in list(COLONNES_DU_FORMAT_4) + list(TABLES_DU_FORMAT_4)}
+
+        def remplies(table, colonne):
+            return [l["id"] for l in valeurs[table] if l[colonne]]
+
+        self.assertEqual(remplies("equipements", "cout_arret_h"), ["EQ-0001", "EQ-0007"])
+        self.assertEqual(remplies("ordres_travail", "habilitation_requise"), ["OT-2025-0005"])
+        for colonne in COLONNES_DU_FORMAT_4["habilitations"]:
+            self.assertEqual(remplies("habilitations", colonne), ["HAB-0001", "HAB-0004"], colonne)
+        controles = valeurs["controles_reglementaires"]
+        self.assertEqual([(l["id"], l["source_periodicite"], l["nature_source"], l["catalogue_id"])
+                          for l in controles if l["source_periodicite"] != "saisie" or l["nature_source"]],
+                         [("CTR-0001", "catalogue", "obligation", "C01"), ("CTR-0002", "catalogue", "obligation", "C03")])
+        self.assertEqual(len([l for l in controles if l["source_periodicite"] == "saisie"]), len(controles) - 2)
+        # Réserves : la reprise de la 2.1 (règle D183 sur f3-v2.1.0), une ouverte, une levée datée ; LISEZMOI.md
+        self.assertEqual([tuple(l.values()) for l in valeurs["reserves_controle"]], RESERVES_DU_F4)
+        self.assertEqual([r[:4] + (r[6],) for r in RESERVES_DU_F4[:1]],
+                         reserves_reprises((f3 / "controles_reglementaires.csv").read_bytes()))
+        ouverte, levee = RESERVES_DU_F4[1], RESERVES_DU_F4[2]
+        self.assertEqual((ouverte[6], ouverte[7]), ("0", ""))
+        self.assertEqual(levee[6], "1")
+        self.assertRegex(levee[7], r"\A\d{4}-\d{2}-\d{2}\Z")
+        lisezmoi = LISEZMOI.read_text(encoding="utf-8")
+        for reserve in RESERVES_DU_F4:
+            self.assertIn("| " + " | ".join(c or "(vide)" for c in reserve) + " |", lisezmoi)
+        self.assertEqual([l["id"] for l in valeurs["garanties"]], ["GAR-0001", "GAR-0002"])
+        self.assertEqual([(l["id"], l["reconduction_tacite"]) for l in valeurs["contrats_prestataires"]],
+                         [("CTP-0001", "1"), ("CTP-0002", "0")])
+
+    def test_plus_recent_est_f4_plus_les_ajouts_du_format_5(self):
+        # Toutes les tables et colonnes du format 4 (aucune à compléter), plus nouvelle_colonne_v5 en fin des OT et la
+        # table pieces_v5, et aucun justificatif cité (le jeu ne fournit pas de documents) ; les autres fichiers sont
+        # ceux de f4-v2.2.0, à l'octet.
+        recent, f4 = self.jeu("plus-recent"), self.jeu(JEU_F4)
+        self.assertEqual(sorted(c.name for c in recent.glob("*.csv")),
+                         sorted([c.name for c in f4.glob("*.csv")] + ["pieces_v5.csv"]))
+        for chemin in sorted(f4.glob("*.csv")):
+            with self.subTest(fichier=chemin.name):
+                if chemin.name in ("parametres.csv", "ordres_travail.csv", "habilitations.csv"):
+                    continue
+                self.assertEqual((recent / chemin.name).read_bytes(), chemin.read_bytes())
+        habilitations = lignes_en_dictionnaires((recent / "habilitations.csv").read_bytes())
+        self.assertEqual({l["justificatif"] for l in habilitations}, {""})
+        self.assertEqual([dict(l, justificatif="") for l in lignes_en_dictionnaires(
+            (f4 / "habilitations.csv").read_bytes())], habilitations)
+        self.assertEqual((recent / "parametres.csv").read_bytes(), (f4 / "parametres.csv").read_bytes().replace(
+            b"version_schema;'4\r\n", b"version_schema;'5\r\n"))
+        entete, lignes = serveur.lire_csv_tolerant((recent / "ordres_travail.csv").read_bytes())
+        entete_f4, lignes_f4 = serveur.lire_csv_tolerant((f4 / "ordres_travail.csv").read_bytes())
+        self.assertEqual(entete, entete_f4 + ["nouvelle_colonne_v5"])
+        self.assertEqual([l[:-1] for l in lignes], lignes_f4)
+        self.assertEqual([l[-1] for l in lignes], ["v5-%d" % n for n in range(1, len(lignes) + 1)])
 
     def test_controles_a_reprendre_ecrits_comme_prevo(self):
         octets = (self.jeu("reserves-a-reprendre") / "controles_reglementaires.csv").read_bytes()

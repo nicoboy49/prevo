@@ -25,6 +25,9 @@ toujours dans un dossier temporaire, puis dans l'OPFS du navigateur : jamais de 
                fichier abîmé n'est jamais réécrit, il est signalé (problème « erreur » et bandeau), le reste passe au
                format 4 (contrôles abîmés : aucune réserve reprise) ;
                sauvegarde impossible : rien n'est écrit, bandeau, pas d'OT préventifs ; l'ouverture suivante passe ;
+    format 4  : f4-v2.2.0 (T394, base au format 4) en dossier → rien à migrer ni à reprendre : aucune sauvegarde
+               avant-format-v4, aucune ligne de journal, aucun fichier changé, réserves, garanties et contrats lus ;
+               en serveur → le démarrage ne réécrit aucune donnée, le navigateur non plus, pas de bandeau ;
     lecture seule (plus-recent, version_schema 5) : dossier → aucun octet modifié dans le dossier (pas même
                verrou.txt), bandeau sur tous les écrans, demande envoyée par l'interface refusée, écritures directes
                (Donnees, adaptateur) refusées par ErreurLectureSeule ; démo chargée depuis les CSV déposés et
@@ -757,6 +760,63 @@ class TestLectureSeule(CasFormats):
                 self.assertTrue(self.page.evaluate("Donnees.lectureSeule()"))
                 self.verifier_bandeau()
                 self.verifier_refus(self.page.evaluate(TENTER_ECRITURES_JS))
+                apres = {p.relative_to(serveur.dossier).as_posix(): p.read_bytes()
+                         for p in serveur.dossier.rglob("*") if p.is_file()}
+                self.assertEqual(apres, avant)
+
+
+# ---------------------------------------------------------------------------
+# Base déjà au format 4 (f4-v2.2.0, T394) : rien à faire, des deux côtés
+# ---------------------------------------------------------------------------
+
+class TestFormat4SansPassage(CasFormats):
+
+    def verifier_tables_du_format_4(self):
+        """Les tables du format 4 du jeu, lues en mémoire ; plus rien à compléter, pas de lecture seule."""
+        lues = self.page.evaluate("""() => ({
+          reserves: Donnees.lignes('reserves_controle').map((l) => [l.id, l.controle_id, l.levee, l.date_levee]),
+          garanties: Donnees.lignes('garanties').map((l) => l.id),
+          contrats: Donnees.lignes('contrats_prestataires').map((l) => [l.id, l.reconduction_tacite]),
+          etat: Donnees.etatDuFormat(), lectureSeule: Donnees.lectureSeule(),
+          version: Donnees.parametre('version_schema') })""")
+        self.assertEqual(lues["reserves"], [["RES-00001", "CTR-0004", "0", ""], ["RES-00002", "CTR-0001", "0", ""],
+                                            ["RES-00003", "CTR-0002", "1", "2026-04-02"]])
+        self.assertEqual(lues["garanties"], ["GAR-0001", "GAR-0002"])
+        self.assertEqual(lues["contrats"], [["CTP-0001", "1"], ["CTP-0002", "0"]])
+        self.assertEqual((lues["etat"]["depart"], lues["etat"]["aCompleter"]), (FORMAT_COURANT, []), lues["etat"])
+        self.assertFalse(lues["lectureSeule"])
+        self.assertEqual(lues["version"], str(FORMAT_COURANT))
+        self.assertEqual(self.page.locator("#bandeau-lecture-seule").count(), 0)
+
+    def test_dossier_f4_rien_a_migrer_aucun_fichier_change(self):
+        """Mode dossier : ni sauvegarde avant-format-v4, ni journal, ni fichier changé (verrou.txt et
+        derniere-version.json mis à part), réserves gardées à l'octet ; seconde ouverture : rien (verifier_passage)."""
+        origine, apres = self.verifier_passage("f4-v2.2.0", attendus=(set(), [], []))
+        self.assertIn(RESERVES, origine)
+        self.assertEqual({c: o for c, o in apres.items() if c in origine}, origine)
+        self.verifier_tables_du_format_4()
+
+    def test_serveur_f4_demarrage_et_navigateur_n_ecrivent_rien(self):
+        """Mode serveur : le démarrage ne réécrit aucune donnée (ni passage, ni sauvegarde avant-format-v4) ; le
+        navigateur lit la base au format 4 sans rien écrire ni signaler."""
+        origine = fichiers_du_jeu("f4-v2.2.0")
+        with tempfile.TemporaryDirectory(prefix="prevo-formats-") as temporaire:
+            source = copier_jeu("f4-v2.2.0", Path(temporaire) / "donnees")
+            self.autoriser_erreur(ERREUR_CSV_ABSENT)
+            with ServeurPrevo(source=source) as serveur:
+                avant = {p.relative_to(serveur.dossier).as_posix(): p.read_bytes()
+                         for p in serveur.dossier.rglob("*") if p.is_file()}
+                self.assertEqual({c: o for c, o in avant.items() if "/" not in c and c.endswith(".csv")}, origine)
+                self.assertFalse([c for c in avant if "_avant-format-v" in c])
+                self.assertNotIn("passage au format", serveur.sortie_console())
+                preregler_profil(self.contexte, "demandeur", nom="Lucie Essai")
+                self.page.goto(serveur.url + "/#/accueil")
+                attendre_pret(self.page)
+                self.page.wait_for_load_state("networkidle")
+                self.verifier_tables_du_format_4()
+                self.assertNotIn("pas encore au format", self.page.inner_text("#alertes-app"))
+                resultat = self.page.evaluate("Donnees.migrerAuFormatCourant()")
+                self.assertFalse(resultat["misAJour"], resultat)
                 apres = {p.relative_to(serveur.dossier).as_posix(): p.read_bytes()
                          for p in serveur.dossier.rglob("*") if p.is_file()}
                 self.assertEqual(apres, avant)

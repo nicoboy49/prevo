@@ -11,13 +11,14 @@ protection retirée). Couvre :
       (recopie de §14.1, §20.2 et du format 4 ci-dessous, indépendante de js/formats.js) ; variantes abîmées : 0
       (en-tête tronqué, colonne du format 1 manquante, fichier vide), 2 (ordres_travail sans astuce), null (table
       inconnue) ;
-    - versionDeBase : f1 1, f2 2, f3 3 (f3-v2.1.0 et reserves-a-reprendre compris), plus-recent 5 ; même règle que
-      Donnees.nombre (versionSchemaDe) ;
+    - versionDeBase : f1 1, f2 2, f3 3 (f3-v2.1.0 et reserves-a-reprendre compris), f4-v2.2.0 4, plus-recent 5 ;
+      même règle que Donnees.nombre (versionSchemaDe) ;
     - migrer(base, versionDeBase, 4) : aucune cellule d'origine perdue ni modifiée (champ à champ, colonnes inconnues
       comprises), colonnes nouvelles en fin avec leur défaut (après les colonnes inconnues, qui restent à leur
       place), tables créées vides, une ligne de journal par étape (f1 3, f2 2, f3 1) ; rejouée (versionDeBase relu) :
       aucun changement, journal vide ; rejouée depuis le format d'origine : même base (étapes idempotentes) ;
-      plus-recent : rien ne change ;
+      plus-recent : rien ne change ; f4-v2.2.0 (T394, base au format 4) : chaque fichier au format 4, rien à migrer
+      ni à reprendre (étape 3→4 rejouée : mêmes tables) ;
     - ETAPES : chaîne sans trou de 1 au format courant, descriptions qui citent ce que l'étape ajoute (celle du
       format 4 au mot près), appliquer pure (l'entrée n'est pas modifiée) et idempotente, cas fabriqués (colonnes
       inconnues, ligne qui a déjà la colonne, parametres absent, noms avec BOM et espaces, table du format 4 déjà
@@ -78,8 +79,8 @@ DESCRIPTION_FORMAT_4 = (
 
 # Format des fichiers de chaque jeu et format de la base (version_schema) ; les autres jeux : format 3 (2.0 et 2.1).
 FORMAT_DES_JEUX = 3
-FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2}
-VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "plus-recent": 5}
+FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2, "f4-v2.2.0": 4, "plus-recent": 4}
+VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "f4-v2.2.0": 4, "plus-recent": 5}
 # Fichiers dont le format n'est pas celui du jeu (variantes abîmées : description dans le variante.json du jeu).
 FORMATS_PARTICULIERS = {
     ("entete-tronque", "ordres_travail"): 0,     # en-tête coupé dans temps_prevu_h : colonnes du format 1 manquantes
@@ -341,7 +342,10 @@ class TestFormats(CasNavigateur):
         self.assertEqual(resultats["f3-v1.2.0"]["ordres_travail"], 3)
         self.assertEqual(resultats["f3-v1.2.0"]["wiki_pages"], 4)
         self.assertEqual(resultats["f3-v2.1.0"]["fournisseurs"], 4)
-        self.assertEqual(resultats["plus-recent"]["ordres_travail"], 3)
+        # f4-v2.2.0 et plus-recent (tiré de lui, T394) : chaque table du schéma au format 4
+        for jeu in ("f4-v2.2.0", "plus-recent"):
+            self.assertEqual({t: f for t, f in resultats[jeu].items() if t != "pieces_v5"},
+                             {t: FORMAT_COURANT for t in self.fichiers["f4-v2.2.0"]}, jeu)
         # Jeux de la 2.2 (T378) : au format 3 (colonne inconnue en fin de controles_reglementaires comprise)
         for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
             for table in ("equipements", "ordres_travail", "habilitations", "controles_reglementaires"):
@@ -603,6 +607,30 @@ class TestFormats(CasNavigateur):
                          [l["remarque_maison"] for l in r["base"]["tables"]["controles_reglementaires"]["lignes"]])
         self.assertEqual({l["source_periodicite"] for l in controles["lignes"]}, {"saisie"})
 
+    def test_f4_rien_a_migrer_ni_a_reprendre(self):
+        """f4-v2.2.0 (T394) : base au format 4, 27 tables ; migrer rend la base telle quelle ; aucune réserve à reprendre
+        (CTR-0004 a la sienne) ; l'étape 3→4 rejouée (fonction pure) rend les mêmes tables."""
+        r = self.evaluer("""(fichiers) => {
+          const base = baseDesFichiers(fichiers);
+          const de = Formats.versionDeBase(base.tables.parametres.lignes);
+          const resultat = Formats.migrer(base, de, Formats.courant);
+          return { de, journal: resultat.journal, etapes: resultat.etapes, meme: resultat.base === base,
+            tables: Object.keys(base.tables).sort(), nomsTables: Schema.nomsTables().slice().sort(),
+            reprises: Formats.reservesReprises(base.tables.controles_reglementaires.lignes,
+              base.tables.reserves_controle.lignes),
+            rejouee: JSON.stringify(Formats.ETAPES[2].appliquer(base).tables) === JSON.stringify(base.tables),
+            reserves: base.tables.reserves_controle.lignes.map((l) => [l.id, l.controle_id, l.levee, l.date_levee]) };
+        }""", self.fichiers["f4-v2.2.0"])
+        self.assertEqual(r["de"], FORMAT_COURANT)
+        self.assertEqual((r["journal"], r["etapes"]), ([], []))
+        self.assertTrue(r["meme"])
+        self.assertEqual(r["tables"], r["nomsTables"])
+        self.assertEqual(len(r["tables"]), NB_TABLES)
+        self.assertEqual(r["reprises"], [])
+        self.assertTrue(r["rejouee"])
+        self.assertEqual(r["reserves"], [["RES-00001", "CTR-0004", "0", ""], ["RES-00002", "CTR-0001", "0", ""],
+                                         ["RES-00003", "CTR-0002", "1", "2026-04-02"]])
+
     def test_plus_recent_rien_ne_change(self):
         r = self.evaluer("""(fichiers) => {
           const base = baseDesFichiers(fichiers);
@@ -621,7 +649,7 @@ class TestFormats(CasNavigateur):
         self.assertEqual(r["etapes"], [])
         self.assertTrue(r["meme"])
         self.assertTrue(r["intacte"])
-        self.assertEqual(r["formatOt"], 3)
+        self.assertEqual(r["formatOt"], 4)
         self.assertIsNone(r["formatPieces"])
         self.assertEqual(r["derniere"], "nouvelle_colonne_v5")
 

@@ -1,0 +1,4 @@
+﻿id;controle_id;date_controle;texte;gravite;echeance_levee;levee;date_levee;commentaire_levee;ot_id
+RES-00001;CTR-0004;2025-04-03;Purgeur automatique du réservoir défectueux : à remplacer avant la prochaine inspection.;;;0;;;
+RES-00002;CTR-0001;2026-02-10;Fin de course haut du palan à régler;majeure;2026-03-12;0;;;
+RES-00003;CTR-0002;2026-03-18;Avertisseur sonore de recul inaudible;mineure;2026-04-17;1;2026-04-02;Avertisseur remplacé, essai concluant;

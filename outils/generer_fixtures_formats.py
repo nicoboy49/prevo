@@ -1,4 +1,4 @@
-"""Génère les jeux de fichiers d'exemple des formats de données (tests/fixtures/formats/), T182, T378.
+"""Génère les jeux de fichiers d'exemple des formats de données (tests/fixtures/formats/), T182, T378, T394.
 
 Quatre jeux de base, tirés des fichiers de référence, chaque table réduite à 12 enregistrements :
     f1          tests/fixtures/v1/                      (format 1)
@@ -6,9 +6,11 @@ Quatre jeux de base, tirés des fichiers de référence, chaque table réduite �
     f3-v1.2.0   donnees/demo/ à l'étiquette v1.2.0      (format 3, 24 tables)
     f3-v2.1.0   donnees/demo/ à l'étiquette v2.1.0      (format 3, 24 tables)
 et des variantes stockées comme différences (variante.json + seulement les fichiers qui changent), dont
-plus-recent (format 5 simulé : version_schema 5, colonne nouvelle_colonne_v5, table pieces_v5) et
-reserves-a-reprendre (f3-v2.1.0 dont controles_reglementaires.csv est fabriqué pour la reprise des observations
-en réserves, D183 ; réserves attendues : tests/fixtures/formats/LISEZMOI.md).
+f4-v2.2.0 (base au format 4, 27 tables : f3-v2.1.0 complétée PAR CE SCRIPT, jamais par serveur.py ni js/formats.js,
+avec des valeurs dans les colonnes et les tables nouvelles), plus-recent (f4-v2.2.0 au format 5 simulé :
+version_schema 5, colonne nouvelle_colonne_v5, table pieces_v5) et reserves-a-reprendre (f3-v2.1.0 dont
+controles_reglementaires.csv est fabriqué pour la reprise des observations en réserves, D183 ; réserves attendues :
+tests/fixtures/formats/LISEZMOI.md).
 
 Reproductible octet pour octet : mêmes entrées, mêmes sorties (aucune date du jour, aucun hasard ; le sel du
 compte fictif est fixe). Bibliothèque standard seulement ; git doit connaître les étiquettes v1.1.0, v1.2.0 et
@@ -240,6 +242,131 @@ def compte_responsable():
             "a_changer": False, "cree_le": INSTANT_COMPTE, "modifie_le": INSTANT_COMPTE, "mot_de_passe_le": INSTANT_COMPTE}
 
 
+# ---------------------------------------------------------------- jeu f4-v2.2.0 (base au format 4)
+# Noms, ordre et défauts : .chantier/v2.2/CONCEPTION-L1.md §2 (recopiés ici : le jeu ne doit rien à serveur.py ni à
+# js/). Cellules sous leur forme dans le fichier ; jeu canonique (dates AAAA-MM-JJ ou vides, booléens 0/1, nombres
+# avec un point, aucune cellule à protéger par l'apostrophe), écrit comme Prévo l'écrit : un lecteur au format 4 le
+# relit et le réécrit aux mêmes octets, des deux côtés.
+COLONNES_DU_FORMAT_4 = {
+    "equipements.csv": [("cout_arret_h", "")],
+    "ordres_travail.csv": [("habilitation_requise", "")],
+    "habilitations.csv": [("recyclage_mois", ""), ("justificatif", ""), ("catalogue_id", ""), ("nature_source", "")],
+    "controles_reglementaires.csv": [("source_periodicite", "saisie"), ("nature_source", ""), ("catalogue_id", ""),
+                                     ("catalogue_relu_le", "")],
+}
+# Valeurs des colonnes nouvelles, par identifiant (les autres lignes : défaut)
+VALEURS_DU_FORMAT_4 = {
+    "equipements.csv": {"EQ-0001": {"cout_arret_h": "180"}, "EQ-0007": {"cout_arret_h": "312.5"}},
+    "ordres_travail.csv": {"OT-2025-0005": {"habilitation_requise": "BR"}},
+    "habilitations.csv": {
+        "HAB-0001": {"recyclage_mois": "36", "justificatif": "20250310-090000-titre-habilitation-BR.pdf",
+                     "catalogue_id": "H02", "nature_source": "recommandation"},
+        "HAB-0004": {"recyclage_mois": "60", "justificatif": "20211202-090000-caces-r489.pdf",
+                     "catalogue_id": "H12", "nature_source": "recommandation"}},
+    "controles_reglementaires.csv": {
+        "CTR-0001": {"source_periodicite": "catalogue", "nature_source": "obligation", "catalogue_id": "C01",
+                     "catalogue_relu_le": "2026-11-08"},
+        "CTR-0002": {"source_periodicite": "catalogue", "nature_source": "obligation", "catalogue_id": "C03",
+                     "catalogue_relu_le": "2026-11-08"}},
+}
+COLONNES_RESERVES = ["id", "controle_id", "date_controle", "texte", "gravite", "echeance_levee", "levee", "date_levee",
+                     "commentaire_levee", "ot_id"]
+COLONNES_GARANTIES = ["id", "equipement_id", "fournisseur_id", "date_debut", "date_fin", "conditions", "document",
+                      "actif"]
+COLONNES_CONTRATS = ["id", "fournisseur_id", "objet", "equipement_ids", "perimetre", "date_debut", "date_fin",
+                     "preavis_mois", "reconduction_tacite", "reconduction_mois", "montant_annuel", "document", "actif"]
+# Après la réserve reprise des observations de la 2.1 (RES-00001) : une réserve ouverte, une levée datée
+RESERVES_DE_LA_2_2 = [
+    ["CTR-0001", "2026-02-10", "Fin de course haut du palan à régler", "majeure", "2026-03-12", "0", "", "", ""],
+    ["CTR-0002", "2026-03-18", "Avertisseur sonore de recul inaudible", "mineure", "2026-04-17", "1", "2026-04-02",
+     "Avertisseur remplacé, essai concluant", ""],
+]
+GARANTIES = [
+    ["GAR-0001", "EQ-0005", "FOU-0005", "2025-06-01", "2027-05-31",
+     "Pièces et main-d'œuvre, hors garniture mécanique (pièce d'usure)", "", "1"],
+    ["GAR-0002", "EQ-0007", "", "2024-09-15", "2026-09-14",
+     "Garantie du constructeur : pièces seules, compresseur frigorifique compris", "", "1"],
+]
+CONTRATS = [
+    # reconduction tacite (12 mois), préavis de 3 mois, deux équipements (« ; » : cellule entre guillemets)
+    ["CTP-0001", "FOU-0002", "Maintenance préventive des compresseurs d'air", "EQ-0001;EQ-0002",
+     "Deux visites par an, dépannage sous 24 h ouvrées", "2025-01-01", "2026-12-31", "3", "1", "12", "4800", "", "1"],
+    ["CTP-0002", "FOU-0003", "Thermographie des armoires électriques", "",
+     "Armoires électriques de l'atelier (AE-01 à AE-03), une campagne par an", "2026-01-01", "2026-12-31", "1", "0",
+     "", "1350", "", "1"],
+]
+# Comme aProteger (js/donnees.js) : un texte qui commence ainsi, ou qui ressemble à un nombre, une date, une heure ou
+# un pourcentage, prendrait l'apostrophe de protection ; le jeu n'en a pas besoin (refusé s'il en avait).
+MOTIF_TEXTE_A_PROTEGER = re.compile(r"\A(?:[=+\-@\t\r']|[0-9][0-9.,:/%eE+\- ]*\Z)")
+
+
+def table_canonique(octets):
+    """(en-tête, lignes) d'une table de la base, refusée si Prévo ne la réécrivait pas aux mêmes octets."""
+    avec_bom, entete, lignes = lire_table(octets)
+    if not avec_bom or table_prevo(entete, lignes) != octets or any(len(l) != len(entete) for l in lignes):
+        raise ValueError("table de f3-v2.1.0 que Prévo ne réécrirait pas à l'identique")
+    return entete, lignes
+
+
+def au_format_4(nom, octets):
+    """Table de f3-v2.1.0 complétée au format 4 : colonnes nouvelles en fin, défaut ou valeur de VALEURS_DU_FORMAT_4."""
+    entete, lignes = table_canonique(octets)
+    colonnes = COLONNES_DU_FORMAT_4[nom]
+    valeurs = VALEURS_DU_FORMAT_4[nom]
+    if not set(valeurs) <= {l[0] for l in lignes}:
+        raise ValueError("%s : identifiant absent de f3-v2.1.0" % nom)
+    return table_prevo(entete + [c for c, _ in colonnes],
+                       [l + [valeurs.get(l[0], {}).get(c, defaut) for c, defaut in colonnes] for l in lignes])
+
+
+def reserve_reprise_de_la_2_1(octets_controles):
+    """Réserves que le passage au format 4 tire des observations de f3-v2.1.0 (D183, CONCEPTION-L1 §3.2), pour cette
+    base canonique : une par ligne non vide (coupée sur CRLF, CR ou LF, bords blancs retirés), date = derniere_date,
+    levée si observations_levees vaut 1 (commentaire fixe), le reste vide."""
+    entete, lignes = table_canonique(octets_controles)
+    i = {nom: entete.index(nom) for nom in ("id", "observations", "observations_levees", "derniere_date")}
+    reserves = []
+    for ligne in lignes:
+        if ligne[i["observations"]].startswith("'"):
+            raise ValueError("observations protégées : hors du cas canonique")
+        levee = "1" if ligne[i["observations_levees"]] == "1" else "0"
+        for morceau in re.split(r"\r\n|\r|\n", ligne[i["observations"]]):
+            if morceau.strip():
+                reserves.append(["RES-%05d" % (len(reserves) + 1), ligne[i["id"]], ligne[i["derniere_date"]],
+                                 morceau.strip(), "", "", levee, "",
+                                 "levée avant la 2.2, date inconnue" if levee == "1" else "", ""])
+    return reserves
+
+
+def jeu_f4(f3_21):
+    """{fichier: octets} des fichiers de f4-v2.2.0 qui diffèrent de f3-v2.1.0 (les 20 autres tables sont gardées)."""
+    reserves = reserve_reprise_de_la_2_1(f3_21["controles_reglementaires.csv"])
+    reserves += [["RES-%05d" % (len(reserves) + 1 + n)] + r for n, r in enumerate(RESERVES_DE_LA_2_2)]
+    textes = [r[3] for r in reserves] + [r[8] for r in reserves] + [c for g in GARANTIES for c in g[5:6]] + \
+             [c for t in CONTRATS for c in t[2:5]]
+    if any(t and MOTIF_TEXTE_A_PROTEGER.search(t) for t in textes):
+        raise ValueError("texte qui prendrait l'apostrophe de protection : hors du cas canonique")
+    fichiers = {nom: au_format_4(nom, f3_21[nom]) for nom in COLONNES_DU_FORMAT_4}
+    fichiers["parametres.csv"] = avec_parametres(f3_21["parametres.csv"], {"version_schema": "'4"}, [])
+    fichiers["reserves_controle.csv"] = table_prevo(COLONNES_RESERVES, reserves)
+    fichiers["garanties.csv"] = table_prevo(COLONNES_GARANTIES, GARANTIES)
+    fichiers["contrats_prestataires.csv"] = table_prevo(COLONNES_CONTRATS, CONTRATS)
+    return fichiers
+
+
+def avec_colonne_en_fin(octets, nom, valeur):
+    """Table écrite comme Prévo l'écrit, avec une colonne inconnue en fin (« valeur-1 », « valeur-2 »…)."""
+    entete, lignes = table_canonique(octets)
+    return table_prevo(entete + [nom], [l + ["%s-%d" % (valeur, n + 1)] for n, l in enumerate(lignes)])
+
+
+def avec_colonne_videe(octets, nom):
+    """Table écrite comme Prévo l'écrit, la colonne « nom » vidée sur chaque ligne."""
+    entete, lignes = table_canonique(octets)
+    i = entete.index(nom)
+    return table_prevo(entete, [l[:i] + [""] + l[i + 1:] for l in lignes])
+
+
 # ---------------------------------------------------------------- variantes
 
 def definir_variantes(f3, f3_21):
@@ -249,9 +376,18 @@ def definir_variantes(f3, f3_21):
     entete_ordres = ordres.split(b"\r\n", 1)[0]
     coupe = entete_ordres.index(b"technicien_id") + len(b"technicien_id;temps_pr")
     comptes = json.dumps({"version": 1, "comptes": [compte_responsable()]}, ensure_ascii=False, indent=2).encode("utf-8")
-    _, entete_eq, lignes_eq = lire_table(f3["equipements.csv"])
+    f4 = jeu_f4(f3_21)
     b = "f3-v1.2.0"
     return {
+        "f4-v2.2.0": (
+            "Base au format 4 (2.2) : f3-v2.1.0 complétée par le générateur (jamais par serveur.py ni js/formats.js), "
+            "version_schema 4, 27 tables ; colonnes du format 4 en fin de equipements, ordres_travail, habilitations "
+            "et controles_reglementaires, avec des valeurs (coût d'une heure d'arrêt sur 2 équipements, habilitation "
+            "exigée sur 1 OT, recyclage, justificatif, catalogue et nature sur 2 habilitations, périodicité tirée du "
+            "catalogue et nature de la source sur 2 contrôles) ; reserves_controle (la réserve reprise de la 2.1, une "
+            "ouverte, une levée datée), garanties (2), contrats_prestataires (2, dont un en reconduction tacite). "
+            "Jeu canonique : rien à migrer, relu et réécrit aux mêmes octets des deux côtés.", "f3-v2.1.0", [], [],
+            f4),
         "f3-v2.0.0": (
             "Base f3-v1.2.0 plus les réglages de la 2.0 (mode Solo, clôture en une étape, technicien « moi ») et un "
             "compte responsable fictif dans acces/comptes.json (format 3 inchangé).", b, [], [],
@@ -282,10 +418,13 @@ def definir_variantes(f3, f3_21):
             "enregistrement par Excel.", b, [], [],
             {"equipements.csv": dates_jjmmaaaa(f3["equipements.csv"], "date_mes")}),
         "plus-recent": (
-            "Données d'une version plus récente : version_schema 5, colonne inconnue nouvelle_colonne_v5 en fin de "
-            "ordres_travail.csv, table inconnue pieces_v5.csv.", b, [], [],
-            {"parametres.csv": avec_parametres(f3["parametres.csv"], {"version_schema": "'5"}, []),
-             "ordres_travail.csv": avec_colonne(ordres, "nouvelle_colonne_v5", None, "v5"),
+            "Données d'une version plus récente : f4-v2.2.0 (toutes les tables et colonnes du format 4) avec "
+            "version_schema 5, colonne inconnue nouvelle_colonne_v5 en fin de ordres_travail.csv, table inconnue "
+            "pieces_v5.csv, et habilitations.justificatif vide (aucun document cité : le jeu n'en fournit pas).",
+            "f4-v2.2.0", [], [],
+            {"parametres.csv": avec_parametres(f4["parametres.csv"], {"version_schema": "'5"}, []),
+             "ordres_travail.csv": avec_colonne_en_fin(f4["ordres_travail.csv"], "nouvelle_colonne_v5", "v5"),
+             "habilitations.csv": avec_colonne_videe(f4["habilitations.csv"], "justificatif"),
              "pieces_v5.csv": ecrire_table(True, ["id", "designation", "stock"],
                                            [["PIE-0001", "Pièce du futur A", "3"], ["PIE-0002", "Pièce du futur B", "0"]])}),
         "reserves-a-reprendre": (

@@ -1,0 +1,3 @@
+﻿id;fournisseur_id;objet;equipement_ids;perimetre;date_debut;date_fin;preavis_mois;reconduction_tacite;reconduction_mois;montant_annuel;document;actif
+CTP-0001;FOU-0002;Maintenance préventive des compresseurs d'air;"EQ-0001;EQ-0002";Deux visites par an, dépannage sous 24 h ouvrées;2025-01-01;2026-12-31;3;1;12;4800;;1
+CTP-0002;FOU-0003;Thermographie des armoires électriques;;Armoires électriques de l'atelier (AE-01 à AE-03), une campagne par an;2026-01-01;2026-12-31;1;0;;1350;;1

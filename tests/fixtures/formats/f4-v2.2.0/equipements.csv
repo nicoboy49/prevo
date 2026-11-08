@@ -1,0 +1,59 @@
+﻿id;repere;designation;localisation_id;parent_id;marque;modele;num_serie;date_mes;criticite;statut;heures_fonct_jour;habilitation_requise;consignation;document;actif;valeur_remplacement;cout_arret_h
+EQ-0001;'CP-01;Compresseur à vis 30 kW;LOC-0004;;Aerovis;AV 30 D;'AV30-2019-04571;2019-03-12;A;arrêt;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Fermer la vanne d'isolement d'air comprimé, la cadenasser, puis purger le circuit jusqu'à 0 bar.
+4. Attendre le refroidissement (au moins 30 minutes) avant d'ouvrir le circuit.
+5. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+6. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;32400;180
+EQ-0002;'CP-01.SEC;Sécheur d'air par réfrigération;LOC-0004;EQ-0001;Aerovis;SD-40;'SD40-2019-0233;2019-03-12;B;en service;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Fermer la vanne d'isolement d'air comprimé, la cadenasser, puis purger le circuit jusqu'à 0 bar.
+4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;6800;
+EQ-0003;'RA-01;Réservoir d'air comprimé 1000 L;LOC-0004;;Cuveltech;RV-1000;'00481723;2019-03-12;B;en service;;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Fermer la vanne d'isolement d'air comprimé, la cadenasser, puis purger le circuit jusqu'à 0 bar.
+3. Le réservoir reste sous pression tant que la vanne de départ réseau n'est pas fermée.
+4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;4200;
+EQ-0004;'PO-01;Pompe de circulation d'eau glacée;LOC-0004;;Hydronel;HC 65-200;'HY-65-18-3321;2018-06-04;B;en service;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Isoler la partie concernée du circuit d'eau et la vidanger.
+4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;7400;
+EQ-0005;'PO-02;Pompe centrifuge eau de refroidissement;LOC-0004;;Hydronel;HC 50-160;'HY-50-17-2987;2017-09-18;B;en service;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Isoler la partie concernée du circuit d'eau et la vidanger.
+4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;5650;
+EQ-0006;'PO-03;Pompe de relevage des eaux pluviales;LOC-0004;;Submersa;VR-7;'SU-7-20-0415;2020-02-10;C;en service;4;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;3300;
+EQ-0007;'GF-01;Groupe froid 80 kW;LOC-0004;;Frigora;GF-80 R;'FR80-2020-0771;2020-05-25;A;en service;16;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Isoler la partie concernée du circuit d'eau et la vidanger.
+4. Attendre le refroidissement (au moins 30 minutes) avant d'ouvrir le circuit.
+5. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+6. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;27500;312.5
+EQ-0008;'VE-01;Centrale de traitement d'air de l'atelier;LOC-0004;;Aéraulys;CTA-12;'AE-12-2016-118;2016-10-03;B;en service;10;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
+4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;18500;
+EQ-0009;'VE-02;Extracteur des fumées de soudage;LOC-0004;;Aéraulys;EX-4;'AE-04-2021-044;2021-04-12;C;en service;6;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
+4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;6900;
+EQ-0010;'AE-01;Armoire électrique générale basse tension (TGBT);LOC-0004;;Voltavel;TGBT-400;'VT-400-15-0092;2015-01-20;A;en service;24;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+4. Armoire alimentée par le transformateur : prévenir le chef d'atelier avant de couper.
+5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;14800;
+EQ-0011;'AE-02;Armoire de distribution de l'atelier Usinage;LOC-0002;;Voltavel;AD-250;'VT-250-15-0310;2015-01-20;B;en service;16;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;9600;
+EQ-0012;'AE-03;Armoire de commande de la ligne de conditionnement;LOC-0005;;Voltavel;AC-160;'VT-160-19-0654;2019-08-26;B;en service;16;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
+3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
+4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1;12400;

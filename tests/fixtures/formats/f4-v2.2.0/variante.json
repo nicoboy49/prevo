@@ -1,0 +1,6 @@
+{
+  "base": "f3-v2.1.0",
+  "description": "Base au format 4 (2.2) : f3-v2.1.0 complétée par le générateur (jamais par serveur.py ni js/formats.js), version_schema 4, 27 tables ; colonnes du format 4 en fin de equipements, ordres_travail, habilitations et controles_reglementaires, avec des valeurs (coût d'une heure d'arrêt sur 2 équipements, habilitation exigée sur 1 OT, recyclage, justificatif, catalogue et nature sur 2 habilitations, périodicité tirée du catalogue et nature de la source sur 2 contrôles) ; reserves_controle (la réserve reprise de la 2.1, une ouverte, une levée datée), garanties (2), contrats_prestataires (2, dont un en reconduction tacite). Jeu canonique : rien à migrer, relu et réécrit aux mêmes octets des deux côtés.",
+  "supprimer": [],
+  "vider": []
+}
