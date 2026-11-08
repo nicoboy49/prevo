@@ -1,0 +1,27 @@
+﻿id;equipement_id;nature;texte_reference;periodicite_mois;organisme;derniere_date;prochaine_date;rapport;observations;observations_levees;remarque_maison
+CTR-0001;EQ-0018;Vérification générale périodique du pont roulant;Arrêté du 1er mars 2004 (VGP), art. 23;12;Bureau Alpin de Contrôle (démo);2026-02-10;2027-02-10;;"
+ 
+Garde-corps de la passerelle desserré
+
+	
+   Fin de course haut à régler 
+ 
+Câble de levage : un toron cassé
+
+";0;maison-1
+CTR-0002;EQ-0030;Vérification générale périodique du chariot élévateur;Arrêté du 1er mars 2004 (VGP), art. 23;6;Bureau Alpin de Contrôle (démo);2026-03-18;2026-09-18;;"Klaxon de recul inaudible
+Ceinture du siège conducteur usée";1;maison-2
+CTR-0003;EQ-0010;Vérification périodique des installations électriques;"Code du travail, art. R4226-16 ; arrêté du 26 décembre 2011";12;Certif-Elec Services (démo);2025-11-12;2026-11-12;;;1;maison-3
+CTR-0004;EQ-0003;Inspection périodique du réservoir d'air comprimé;Arrêté du 20 novembre 2017;36;Bureau Alpin de Contrôle (démo);2025-04-03;2028-04-03;;;0;maison-4
+CTR-0005;EQ-0007;Contrôle d'étanchéité du circuit frigorifique;Règlement (UE) 2024/573;12;Frigo-Contrôle Sud (démo);2026-03-24;2027-03-24;;"'- Raccord de la vanne 3 suintant
+= Pression basse à surveiller
+- Étiquette du fluide illisible";0;maison-5
+CTR-0006;EQ-0009;Contrôle de l'aération et de l'assainissement des locaux;Code du travail, art. R4222-20;12;Bureau Alpin de Contrôle (démo);2026-06-02;2027-06-02;;"Gaine ""B"" percée ; débit insuffisant
+Filtre du caisson ""F7"" colmaté";0;maison-6
+CTR-0007;EQ-0011;Vérification périodique de la porte automatique de l'atelier;"Code du travail, art. R4224-12 ; arrêté du 21 décembre 1993";6;Portes Contrôle Alpes (démo);2026-01-15;2026-07-15;;"Cellule de sécurité inopérante
+Bord sensible fendu
+Signalisation au sol effacéeNotice absente du local";0;maison-7
+CTR-0008;EQ-0010;Vérification de l'éclairage de sécurité;Arrêté du 14 décembre 2011;12;Certif-Elec Services (démo);;;;Rapport du contrôle initial non retrouvé;0;maison-8
+CTR-0009;EQ-0012;Vérification des extincteurs de l'atelier;Code du travail, art. R4227-39;12;Sécurité Incendie Savoie (démo);2026-05-20;2027-05-20;;"
+ 	
+";0;maison-9

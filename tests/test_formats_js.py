@@ -9,7 +9,8 @@ protection retirée). Couvre :
     - formatDuFichier de chaque table de chaque jeu : format attendu calculé d'après ce que chaque format ajoute
       (recopie de §14.1 et §20.2 ci-dessous, indépendante de js/formats.js) ; variantes abîmées : 0 (en-tête tronqué,
       colonne du format 1 manquante, fichier vide), 2 (ordres_travail sans astuce), null (table inconnue) ;
-    - versionDeBase : f1 1, f2 2, f3 3, plus-recent 4 ; même règle que Donnees.nombre (versionSchemaDe) ;
+    - versionDeBase : f1 1, f2 2, f3 3 (f3-v2.1.0 et reserves-a-reprendre compris), plus-recent 5 ; même règle que
+      Donnees.nombre (versionSchemaDe) ;
     - migrer(base, versionDeBase, 3) : aucune cellule d'origine perdue ni modifiée (champ à champ, colonnes inconnues
       comprises), colonnes nouvelles en fin avec leur défaut, tables créées vides, une ligne de journal par étape
       (f1 2, f2 1, f3 0) ; rejouée (versionDeBase relu) : aucun changement, journal vide ; rejouée depuis le format
@@ -53,14 +54,14 @@ DEFAUTS_AJOUTES = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_i
 
 # Format des fichiers de chaque jeu (les autres : format 3) et format de la base (version_schema ; les autres : 3).
 FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2}
-VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "plus-recent": 4}
+VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "plus-recent": 5}
 # Fichiers dont le format n'est pas celui du jeu (variantes abîmées : description dans le variante.json du jeu).
 FORMATS_PARTICULIERS = {
     ("entete-tronque", "ordres_travail"): 0,     # en-tête coupé dans temps_prevu_h : colonnes du format 1 manquantes
     ("colonnes-manquantes", "equipements"): 0,   # sans modele (format 1) ni valeur_remplacement
     ("vide", "equipements"): 0,                  # 0 octet : aucun en-tête
     ("melange", "ordres_travail"): 2,            # sans astuce, dans une base au format 3
-    ("plus-recent", "pieces_v4"): None,          # table inconnue du schéma
+    ("plus-recent", "pieces_v5"): None,          # table inconnue du schéma
 }
 LIGNES_DE_JOURNAL = {
     1: ["passage au format 2 du fichier", "passage au format 3 du fichier"],
@@ -235,6 +236,12 @@ class TestFormats(CasNavigateur):
         self.assertEqual(resultats["f3-v1.2.0"]["ordres_travail"], 3)
         self.assertEqual(resultats["f3-v1.2.0"]["wiki_pages"], 3)
         self.assertEqual(resultats["plus-recent"]["ordres_travail"], 3)
+        # Jeux de la 2.2 (T378) : au format 3 (colonne inconnue en fin de controles_reglementaires comprise)
+        for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
+            self.assertEqual(resultats[jeu]["controles_reglementaires"], 3)
+            self.assertEqual(resultats[jeu]["ordres_travail"], 3)
+        self.assertEqual(self.fichiers["reserves-a-reprendre"]["controles_reglementaires"]["entete"][-1],
+                         "remarque_maison")
 
     def test_format_du_fichier_en_tetes_fabriques_sans_exception(self):
         resultat = self.evaluer("""(bom) => {
@@ -434,10 +441,10 @@ class TestFormats(CasNavigateur):
           return { de, courant: Formats.courant, journal: resultat.journal, etapes: resultat.etapes,
             meme: resultat.base === base, intacte: JSON.stringify(resultat.base) === avant,
             formatOt: Formats.formatDuFichier('ordres_travail', base.tables.ordres_travail.entete),
-            formatPieces: Formats.formatDuFichier('pieces_v4', base.tables.pieces_v4.entete),
+            formatPieces: Formats.formatDuFichier('pieces_v5', base.tables.pieces_v5.entete),
             derniere: base.tables.ordres_travail.entete.slice(-1)[0] };
         }""", self.fichiers["plus-recent"])
-        self.assertEqual(r["de"], 4)
+        self.assertEqual(r["de"], 5)
         self.assertGreater(r["de"], r["courant"])
         self.assertEqual(r["journal"], [])
         self.assertEqual(r["etapes"], [])
@@ -445,7 +452,7 @@ class TestFormats(CasNavigateur):
         self.assertTrue(r["intacte"])
         self.assertEqual(r["formatOt"], 3)
         self.assertIsNone(r["formatPieces"])
-        self.assertEqual(r["derniere"], "nouvelle_colonne_v4")
+        self.assertEqual(r["derniere"], "nouvelle_colonne_v5")
 
     # -----------------------------------------------------------------------------------------------------------
     # ETAPES : registre, pureté, idempotence

@@ -4,8 +4,8 @@ données », T186 ; décisions D167 à D169 ; js/donnees.js §4.11 et js/app.js,
 Chaque cas ouvre l'APPLICATION ENTIÈRE (index.html) sur une copie d'un jeu de tests/fixtures/formats/ (jeux_formats,
 toujours dans un dossier temporaire, puis dans l'OPFS du navigateur : jamais de données réelles) :
 
-    dossier  : pour f1, f2-v1.1.0, f3-v1.2.0, f3-v2.0.0, melange, colonnes-en-trop, table-absente, sans-bom et
-               entete-tronque (profil demandeur : pas d'OT préventifs générés) :
+    dossier  : pour f1, f2-v1.1.0, f3-v1.2.0, f3-v2.0.0, f3-v2.1.0, reserves-a-reprendre, melange, colonnes-en-trop,
+               table-absente, sans-bom et entete-tronque (profil demandeur : pas d'OT préventifs générés) :
                  - la sauvegarde « avant-format-v3 » (et la quotidienne) garde les fichiers d'origine à l'octet : elle
                    a été faite avant toute écriture ; aucune sauvegarde quand il n'y a rien à faire ;
                  - seuls les fichiers attendus changent ; aucune cellule d'origine perdue (comparaison champ à champ
@@ -17,7 +17,7 @@ toujours dans un dossier temporaire, puis dans l'OPFS du navigateur : jamais de 
                de l'en-tête (CS140 : la réécriture la perdrait) : le fichier abîmé n'est jamais réécrit, il est
                signalé (problème « erreur » et bandeau), le reste passe au format 3 ;
                sauvegarde impossible : rien n'est écrit, bandeau, pas d'OT préventifs ; l'ouverture suivante passe ;
-    lecture seule (plus-recent, version_schema 4) : dossier → aucun octet modifié dans le dossier (pas même
+    lecture seule (plus-recent, version_schema 5) : dossier → aucun octet modifié dans le dossier (pas même
                verrou.txt), bandeau sur tous les écrans, demande envoyée par l'interface refusée, écritures directes
                (Donnees, adaptateur) refusées par ErreurLectureSeule ; démo chargée depuis les CSV déposés et
                serveur → lecture seule et bandeau aussi ;
@@ -64,6 +64,8 @@ ATTENDUS = {
     "melange": ({"ordres_travail.csv"}, ["fichiers complétés au format 3 : ordres_travail"]),
     "f3-v1.2.0": (set(), []),
     "f3-v2.0.0": (set(), []),
+    "f3-v2.1.0": (set(), []),
+    "reserves-a-reprendre": (set(), []),
     "colonnes-en-trop": (set(), []),
     "table-absente": (set(), []),
     "sans-bom": (set(), []),
@@ -331,6 +333,14 @@ class TestDossierPassage(CasFormats):
         origine, apres = self.verifier_passage("f3-v2.0.0")
         self.assertEqual(apres["acces/comptes.json"], origine["acces/comptes.json"])
 
+    def test_f3_v2_1_0_rien_a_faire(self):
+        self.verifier_passage("f3-v2.1.0")
+
+    def test_reserves_a_reprendre_rien_a_faire_au_format_3(self):
+        # Jeu fabriqué pour la reprise des observations du format 4 (T378) : au format 3, rien n'est écrit.
+        self.verifier_passage("reserves-a-reprendre")
+        self.assertEqual(self.page.evaluate("Donnees.lignes('controles_reglementaires').length"), 9)
+
     def test_colonnes_en_trop_rien_a_faire(self):
         self.verifier_passage("colonnes-en-trop")
 
@@ -418,7 +428,7 @@ class TestDossierPassage(CasFormats):
 
 
 # ---------------------------------------------------------------------------
-# Lecture seule : données d'une version plus récente (plus-recent, version_schema 4)
+# Lecture seule : données d'une version plus récente (plus-recent, version_schema 5)
 # ---------------------------------------------------------------------------
 
 TENTER_ECRITURES_JS = """async () => {
@@ -457,7 +467,7 @@ class TestLectureSeule(CasFormats):
                 self.assertEqual(resultat["nom"], "ErreurLectureSeule")
                 self.assertTrue(resultat["lectureSeule"] and resultat["stockage"])
                 self.assertIn("version plus récente de Prévo", resultat["message"])
-                self.assertIn("format 4", resultat["message"])
+                self.assertIn("format 5", resultat["message"])
                 self.assertIn("dernière version de Prévo", resultat["message"])
 
     def verifier_bandeau(self):
@@ -465,7 +475,7 @@ class TestLectureSeule(CasFormats):
         self.assertTrue(bandeau.is_visible())
         texte = bandeau.inner_text()
         self.assertIn("Lecture seule", texte)
-        self.assertIn("format 4", texte)
+        self.assertIn("format 5", texte)
         self.assertEqual(bandeau.locator("button").count(), 0)          # pas de « Fermer »
 
     def test_dossier_aucun_octet_modifie_bandeau_partout_et_ecritures_refusees(self):

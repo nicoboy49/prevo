@@ -10,7 +10,7 @@ lire_csv_tolerant (apostrophe de protection comprise) et réécrites par ecrire_
    ajoutées avec COLONNES_PAR_TABLE et COLONNES_DES_FORMATS_SUIVANTS ; pour chaque jeu, format_du_fichier,
    version_de_base et migrer_tables : aucune cellule d'origine perdue ni modifiée (champ à champ), colonnes nouvelles
    en fin avec leur défaut, tables créées (wiki compris), journal (f1 2 lignes, f2 1, f3 0), idempotence, pureté
-   (entrée inchangée), plus-recent (version 4) laissé intact par migrer_tables(base, 4, 3) ; cas fabriqués et
+   (entrée inchangée), plus-recent (version 5) laissé intact par migrer_tables(base, 5, 3) ; cas fabriqués et
    erreurs.
 2. TestConcordanceNavigateur (Chromium, page-vide.html en file://) : mêmes listes que Schema et Formats (colonnes,
    tables, défauts, étapes) ; mêmes résultats que Formats.formatDuFichier, Formats.versionDeBase, Formats.ETAPES et
@@ -75,20 +75,21 @@ TABLES_AJOUTEES = {2: [], 3: ["wiki_pages", "wiki_journal"]}
 DEFAUTS_AJOUTES = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0",
                    "astuce": ""}
 FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2}
-VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "plus-recent": 4}
+VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "plus-recent": 5}
 FORMATS_PARTICULIERS = {
     ("entete-tronque", "ordres_travail"): 0,     # en-tête coupé dans temps_prevu_h : colonnes du format 1 manquantes
     ("colonnes-manquantes", "equipements"): 0,   # sans modele (format 1) ni valeur_remplacement
     ("vide", "equipements"): 0,                  # 0 octet : aucun en-tête
     ("melange", "ordres_travail"): 2,            # sans astuce, dans une base au format 3
-    ("plus-recent", "pieces_v4"): None,          # table inconnue du schéma
+    ("plus-recent", "pieces_v5"): None,          # table inconnue du schéma
 }
 LIGNES_DE_JOURNAL = {
     1: ["passage au format 2 du fichier", "passage au format 3 du fichier"],
     2: ["passage au format 3 du fichier"],
 }
 # Concordance navigateur / serveur : jeux dont les octets doivent être identiques, table par table.
-JEUX_CONCORDANTS = ("f1", "f2-v1.1.0", "f3-v1.2.0", "f3-v2.0.0", "sans-bom", "table-absente", "plus-recent")
+JEUX_CONCORDANTS = ("f1", "f2-v1.1.0", "f3-v1.2.0", "f3-v2.0.0", "sans-bom", "table-absente", "plus-recent",
+                    "f3-v2.1.0", "reserves-a-reprendre")
 # Écarts préexistants entre lecteurs/écrivains (docstring du module) : jeu → (table touchée, nature de l'écart).
 ECARTS_DOCUMENTES = {
     "colonnes-en-trop": ("equipements", "colonnes"),      # A : colonnes inconnues réécrites en fin par serialiser
@@ -422,13 +423,13 @@ class TestRegistreServeur(JeuxEnCopie, unittest.TestCase):
         base = base_de_fichiers(fichiers)
         avant = copy.deepcopy(base)
         de = serveur.version_de_base(base["parametres"]["lignes"])
-        self.assertEqual(de, 4)
+        self.assertEqual(de, 5)
         resultat, journal, etapes = serveur.migrer_tables(base, de, FORMAT_COURANT)
         self.assertIs(resultat, base)
         self.assertEqual((journal, etapes), ([], []))
         self.assertEqual(base, avant)
-        self.assertEqual(base["ordres_travail"]["entete"][-1], "nouvelle_colonne_v4")
-        self.assertIsNone(serveur.format_du_fichier("pieces_v4", base["pieces_v4"]["entete"]))
+        self.assertEqual(base["ordres_travail"]["entete"][-1], "nouvelle_colonne_v5")
+        self.assertIsNone(serveur.format_du_fichier("pieces_v5", base["pieces_v5"]["entete"]))
         # Réécrit tel quel, chaque fichier redonne ses octets (table inconnue et colonne inconnue comprises)
         for table, octets in fichiers.items():
             with self.subTest(table=table):
@@ -784,9 +785,20 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
         self.assertNotIn("wiki_pages", navigateur["octets"])
 
     def test_concordance_plus_recent(self):
-        # Tables connues : mêmes octets ; la table inconnue pieces_v4 n'est écrite que par le serveur, telle quelle.
+        # Tables connues : mêmes octets ; la table inconnue pieces_v5 n'est écrite que par le serveur, telle quelle.
         _, cote_serveur = self.verifier_concordance("plus-recent")
-        self.assertEqual(cote_serveur["octets"]["pieces_v4"], self.fichiers["plus-recent"]["pieces_v4"])
+        self.assertEqual(cote_serveur["octets"]["pieces_v5"], self.fichiers["plus-recent"]["pieces_v5"])
+
+    def test_concordance_f3_v2_1_0(self):
+        self.verifier_concordance("f3-v2.1.0")
+
+    def test_concordance_reserves_a_reprendre(self):
+        # Jeu canonique (T378) : controles_reglementaires a les mêmes octets des deux côtés (CRLF, LF et CR dans une
+        # cellule, « ; », guillemets, apostrophe de protection) ; sa colonne inconnue est gardée.
+        navigateur, cote_serveur = self.verifier_concordance("reserves-a-reprendre")
+        for chemin in (navigateur, cote_serveur):
+            self.assertIn("remarque_maison", chemin["entetes"]["controles_reglementaires"])
+            self.assertIn(b"remarque_maison", chemin["octets"]["controles_reglementaires"].split(b"\r\n", 1)[0])
 
     @unittest.expectedFailure
     def test_concordance_colonnes_en_trop(self):

@@ -1,13 +1,18 @@
-"""Génère les jeux de fichiers d'exemple des formats de données (tests/fixtures/formats/), T182.
+"""Génère les jeux de fichiers d'exemple des formats de données (tests/fixtures/formats/), T182, T378.
 
-Trois jeux de base, tirés des fichiers de référence, chaque table réduite à 12 enregistrements :
+Quatre jeux de base, tirés des fichiers de référence, chaque table réduite à 12 enregistrements :
     f1          tests/fixtures/v1/                      (format 1)
     f2-v1.1.0   donnees/demo/ à l'étiquette v1.1.0      (format 2, 22 tables)
     f3-v1.2.0   donnees/demo/ à l'étiquette v1.2.0      (format 3, 24 tables)
-et des variantes stockées comme différences (variante.json + seulement les fichiers qui changent).
+    f3-v2.1.0   donnees/demo/ à l'étiquette v2.1.0      (format 3, 24 tables)
+et des variantes stockées comme différences (variante.json + seulement les fichiers qui changent), dont
+plus-recent (format 5 simulé : version_schema 5, colonne nouvelle_colonne_v5, table pieces_v5) et
+reserves-a-reprendre (f3-v2.1.0 dont controles_reglementaires.csv est fabriqué pour la reprise des observations
+en réserves, D183 ; réserves attendues : tests/fixtures/formats/LISEZMOI.md).
 
 Reproductible octet pour octet : mêmes entrées, mêmes sorties (aucune date du jour, aucun hasard ; le sel du
-compte fictif est fixe). Bibliothèque standard seulement ; git doit connaître les étiquettes v1.1.0 et v1.2.0.
+compte fictif est fixe). Bibliothèque standard seulement ; git doit connaître les étiquettes v1.1.0, v1.2.0 et
+v2.1.0.
 
 Lancer depuis la racine du projet :
     python -I outils/generer_fixtures_formats.py [--sortie DOSSIER]
@@ -34,6 +39,9 @@ BOM = b"\xef\xbb\xbf"
 MOT_DE_PASSE_ESSAI = "essai-formats-prevo"
 SEL_FIXE = bytes(range(16))
 INSTANT_COMPTE = "2026-10-28T09:00:00"
+
+# Cellule entre guillemets : même règle que celluleCsv (js/donnees.js) et cellule_csv (serveur.py)
+MOTIF_A_GUILLEMETER = re.compile(r'[;"\r\n]|\A[ \t]|[ \t]\Z')
 
 MOTIF_COURRIEL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*")
 MOTIF_TELEPHONE = re.compile(r"(?<![\w.,])(?:(?:\+|00)33[ .-]?(?:\(0\)[ .-]?)?|0)([1-9])([ .-]?)(\d{2})\2(\d{2})\2(\d{2})\2(\d{2})(?!\w)")
@@ -159,6 +167,69 @@ def avec_parametres(octets, remplacements, ajouts):
     return b"".join(lignes)
 
 
+def cellule_prevo(texte):
+    return '"' + texte.replace('"', '""') + '"' if MOTIF_A_GUILLEMETER.search(texte) else texte
+
+
+def table_prevo(entete, lignes):
+    """Octets d'une table telle que Prévo l'écrit (BOM, « ; », CRLF après chaque ligne, guillemets de celluleCsv) ;
+    les cellules sont données sous leur forme dans le fichier (apostrophe de protection comprise)."""
+    texte = "".join(";".join(cellule_prevo(c) for c in ligne) + "\r\n" for ligne in [entete] + list(lignes))
+    return BOM + texte.encode("utf-8")
+
+
+# Variante reserves-a-reprendre : controles_reglementaires.csv fabriqué (cellules sous leur forme dans le fichier).
+# Jeu canonique (dates AAAA-MM-JJ ou vides, booléens 0/1) : lu de la même façon par le navigateur et le serveur ;
+# aucune cellule ne finit par une espace, une tabulation ou un CR (Donnees.csv.analyser les retirerait).
+COLONNE_INCONNUE_CONTROLES = "remarque_maison"
+CONTROLES_A_REPRENDRE = [
+    # 3 lignes non vides entre des lignes blanches (espaces, tabulation), bords blancs de chaque ligne
+    ["CTR-0001", "EQ-0018", "Vérification générale périodique du pont roulant", "Arrêté du 1er mars 2004 (VGP), art. 23",
+     "12", "Bureau Alpin de Contrôle (démo)", "2026-02-10", "2027-02-10", "",
+     "\n \nGarde-corps de la passerelle desserré\n\n\t\n   Fin de course haut à régler \n \n"
+     "Câble de levage : un toron cassé\n\n", "0"],
+    # observations levées : réserves levées, date de levée vide
+    ["CTR-0002", "EQ-0030", "Vérification générale périodique du chariot élévateur",
+     "Arrêté du 1er mars 2004 (VGP), art. 23", "6", "Bureau Alpin de Contrôle (démo)", "2026-03-18", "2026-09-18", "",
+     "Klaxon de recul inaudible\nCeinture du siège conducteur usée", "1"],
+    # observations vides, levées puis non levées : aucune réserve
+    ["CTR-0003", "EQ-0010", "Vérification périodique des installations électriques",
+     "Code du travail, art. R4226-16 ; arrêté du 26 décembre 2011", "12", "Certif-Elec Services (démo)", "2025-11-12",
+     "2026-11-12", "", "", "1"],
+    ["CTR-0004", "EQ-0003", "Inspection périodique du réservoir d'air comprimé", "Arrêté du 20 novembre 2017", "36",
+     "Bureau Alpin de Contrôle (démo)", "2025-04-03", "2028-04-03", "", "", "0"],
+    # lignes qui commencent par « - » ou « = » (puces gardées) ; la cellule commence par « - » : apostrophe
+    ["CTR-0005", "EQ-0007", "Contrôle d'étanchéité du circuit frigorifique", "Règlement (UE) 2024/573", "12",
+     "Frigo-Contrôle Sud (démo)", "2026-03-24", "2027-03-24", "",
+     "'- Raccord de la vanne 3 suintant\n= Pression basse à surveiller\n- Étiquette du fluide illisible", "0"],
+    # « ; » et guillemets
+    ["CTR-0006", "EQ-0009", "Contrôle de l'aération et de l'assainissement des locaux", "Code du travail, art. R4222-20",
+     "12", "Bureau Alpin de Contrôle (démo)", "2026-06-02", "2027-06-02", "",
+     'Gaine "B" percée ; débit insuffisant\nFiltre du caisson "F7" colmaté', "0"],
+    # CRLF, LF et CR dans une même cellule
+    ["CTR-0007", "EQ-0011", "Vérification périodique de la porte automatique de l'atelier",
+     "Code du travail, art. R4224-12 ; arrêté du 21 décembre 1993", "6", "Portes Contrôle Alpes (démo)", "2026-01-15",
+     "2026-07-15", "",
+     "Cellule de sécurité inopérante\r\nBord sensible fendu\nSignalisation au sol effacée\rNotice absente du local",
+     "0"],
+    # derniere_date vide : date du contrôle vide
+    ["CTR-0008", "EQ-0010", "Vérification de l'éclairage de sécurité", "Arrêté du 14 décembre 2011", "12",
+     "Certif-Elec Services (démo)", "", "", "", "Rapport du contrôle initial non retrouvé", "0"],
+    # observations faites de lignes blanches seulement : aucune réserve
+    ["CTR-0009", "EQ-0012", "Vérification des extincteurs de l'atelier", "Code du travail, art. R4227-39", "12",
+     "Sécurité Incendie Savoie (démo)", "2026-05-20", "2027-05-20", "", "\n \t\n", "0"],
+]
+
+
+def controles_a_reprendre(octets_base):
+    """controles_reglementaires.csv de la variante : en-tête de la base (2.1.0) suivi d'une colonne inconnue."""
+    _, entete, _ = lire_table(octets_base)
+    if any(len(cellules) != len(entete) for cellules in CONTROLES_A_REPRENDRE):
+        raise ValueError("CONTROLES_A_REPRENDRE : nombre de cellules différent de l'en-tête de la base")
+    lignes = [cellules + ["maison-%d" % (n + 1)] for n, cellules in enumerate(CONTROLES_A_REPRENDRE)]
+    return table_prevo(entete + [COLONNE_INCONNUE_CONTROLES], lignes)
+
+
 def compte_responsable():
     """Un compte responsable fictif, au format exact de serveur.creer_compte (scrypt N=2^15, r=8, p=3)."""
     empreinte = hashlib.scrypt(MOT_DE_PASSE_ESSAI.encode("utf-8"), salt=SEL_FIXE, n=2 ** 15, r=8, p=3,
@@ -171,8 +242,9 @@ def compte_responsable():
 
 # ---------------------------------------------------------------- variantes
 
-def definir_variantes(f3):
-    """{nom: (description, base, supprimer, vider, {fichier: octets})} : seuls les fichiers qui changent."""
+def definir_variantes(f3, f3_21):
+    """{nom: (description, base, supprimer, vider, {fichier: octets})} : seuls les fichiers qui changent.
+    f3 : base f3-v1.2.0 ; f3_21 : base f3-v2.1.0."""
     ordres = f3["ordres_travail.csv"]
     entete_ordres = ordres.split(b"\r\n", 1)[0]
     coupe = entete_ordres.index(b"technicien_id") + len(b"technicien_id;temps_pr")
@@ -210,12 +282,20 @@ def definir_variantes(f3):
             "enregistrement par Excel.", b, [], [],
             {"equipements.csv": dates_jjmmaaaa(f3["equipements.csv"], "date_mes")}),
         "plus-recent": (
-            "Données d'une version plus récente : version_schema 4, colonne inconnue nouvelle_colonne_v4 en fin de "
-            "ordres_travail.csv, table inconnue pieces_v4.csv.", b, [], [],
-            {"parametres.csv": avec_parametres(f3["parametres.csv"], {"version_schema": "'4"}, []),
-             "ordres_travail.csv": avec_colonne(ordres, "nouvelle_colonne_v4", None, "v4"),
-             "pieces_v4.csv": ecrire_table(True, ["id", "designation", "stock"],
+            "Données d'une version plus récente : version_schema 5, colonne inconnue nouvelle_colonne_v5 en fin de "
+            "ordres_travail.csv, table inconnue pieces_v5.csv.", b, [], [],
+            {"parametres.csv": avec_parametres(f3["parametres.csv"], {"version_schema": "'5"}, []),
+             "ordres_travail.csv": avec_colonne(ordres, "nouvelle_colonne_v5", None, "v5"),
+             "pieces_v5.csv": ecrire_table(True, ["id", "designation", "stock"],
                                            [["PIE-0001", "Pièce du futur A", "3"], ["PIE-0002", "Pièce du futur B", "0"]])}),
+        "reserves-a-reprendre": (
+            "Base f3-v2.1.0 dont controles_reglementaires.csv est fabriqué pour la reprise des observations en "
+            "réserves (D183) : 9 contrôles (lignes non vides entre des lignes blanches, observations levées, "
+            "observations vides levées et non levées, lignes qui commencent par « - » ou « = », « ; » et guillemets, "
+            "CRLF, LF et CR dans une même cellule, derniere_date vide, lignes blanches seulement) et une colonne "
+            "inconnue remarque_maison en fin ; dates AAAA-MM-JJ et booléens 0/1 (jeu canonique), format 3.",
+            "f3-v2.1.0", [], [],
+            {"controles_reglementaires.csv": controles_a_reprendre(f3_21["controles_reglementaires.csv"])}),
     }
 
 
@@ -234,11 +314,13 @@ def generer(sortie):
     sortie.mkdir(parents=True)
     bases = {"f1": construire_base(sources_f1()),
              "f2-v1.1.0": construire_base(sources_git("v1.1.0")),
-             "f3-v1.2.0": construire_base(sources_git("v1.2.0"))}
+             "f3-v1.2.0": construire_base(sources_git("v1.2.0")),
+             "f3-v2.1.0": construire_base(sources_git("v2.1.0"))}
     for nom, fichiers in bases.items():
         for fichier, octets in fichiers.items():
             ecrire_fichier(sortie / nom, fichier, octets)
-    for nom, (description, base, supprimer, vider, fichiers) in definir_variantes(bases["f3-v1.2.0"]).items():
+    variantes = definir_variantes(bases["f3-v1.2.0"], bases["f3-v2.1.0"])
+    for nom, (description, base, supprimer, vider, fichiers) in variantes.items():
         manifeste = json.dumps({"base": base, "description": description, "supprimer": supprimer, "vider": vider},
                                ensure_ascii=False, indent=2) + "\n"
         ecrire_fichier(sortie / nom, "variante.json", manifeste.encode("utf-8"))

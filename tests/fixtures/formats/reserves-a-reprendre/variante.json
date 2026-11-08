@@ -1,0 +1,6 @@
+{
+  "base": "f3-v2.1.0",
+  "description": "Base f3-v2.1.0 dont controles_reglementaires.csv est fabriqué pour la reprise des observations en réserves (D183) : 9 contrôles (lignes non vides entre des lignes blanches, observations levées, observations vides levées et non levées, lignes qui commencent par « - » ou « = », « ; » et guillemets, CRLF, LF et CR dans une même cellule, derniere_date vide, lignes blanches seulement) et une colonne inconnue remarque_maison en fin ; dates AAAA-MM-JJ et booléens 0/1 (jeu canonique), format 3.",
+  "supprimer": [],
+  "vider": []
+}
