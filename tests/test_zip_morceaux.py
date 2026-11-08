@@ -112,6 +112,16 @@ BESOIN_EXPORT_2GO_MO = int(os.environ.get("PREVO_RECETTE_BESOIN_MO") or (0 if ES
 DATE_ZIP = (2026, 11, 5, 12, 0, 0)             # date des ZIP écrits par l'écrivain (étapes 10 et 11)
 MESURES = {}
 ETAT = {}                                      # ZIP et sommes passés d'une étape à la suivante
+# Format 4 (2.2) : une base d'avant le format 4 (f3-v1.2.0, étape 08) passe au format 4 au démarrage du serveur, qui ne
+# crée pas garanties ni contrats_prestataires (CONCEPTION-L1 §3.3) : leurs 404 à l'ouverture sont voulus (table absente
+# = table vide), et ces fichiers n'existent qu'après l'import.
+ERREUR_TABLE_DU_FORMAT_4_ABSENTE = r"status of 404.*/api/csv/(garanties|contrats_prestataires)\b"
+
+
+def octets_des_tables(dossier):
+    """{table: octets du CSV, ou None s'il n'existe pas} de chaque table du format courant."""
+    return {table: (dossier / (table + ".csv")).read_bytes() if (dossier / (table + ".csv")).is_file() else None
+            for table in tzl.TABLES}
 
 
 def mo(octets):
@@ -1084,13 +1094,15 @@ class TestZipParMorceaux(unittest.TestCase):
 
         # a. Dossier des documents plafonné à 2 Go (quota_documents_mo à 2 048, l'ancien défaut, audit F2 ; fichier de
         #    configuration : avec les comptes, le responsable importe) : 2 090 Mo de documents n'y entrent pas :
-        #    l'import s'arrête proprement, sans toucher aux tables.
+        #    l'import s'arrête proprement, sans toucher aux tables. Essai (petits volumes : 190 Mo de documents) : quota
+        #    de 100 Mo, pour que le déroulé du refus soit le même.
         def refuse():
-            with ServeurPrevo(source=source, comptes=True, reglages={"quota_documents_mo": 2048}) as serveur:
+            quota = 100 if ESSAI else 2048
+            with ServeurPrevo(source=source, comptes=True, reglages={"quota_documents_mo": quota}) as serveur:
                 with Navigateur(self, self.temporaire / "profil-08", self.temporaire / "telechargements") as nav:
                     serveur.poser_session(nav.contexte, "responsable")
                     page = self.ouvrir_serveur(nav, serveur)
-                    avant = {table: (serveur.dossier / (table + ".csv")).read_bytes() for table in tzl.TABLES}
+                    avant = octets_des_tables(serveur.dossier)
                     debut = time.monotonic()
                     page.set_input_files("#fichier-import-zip", str(chemin))
                     page.wait_for_selector("#confirmation-import-zip", timeout=DELAI_MS)
@@ -1099,8 +1111,8 @@ class TestZipParMorceaux(unittest.TestCase):
                     duree = round(time.monotonic() - debut, 1)
                     texte = re.sub(r"\s+", " ", page.inner_text("dialog"))
                     page.goto("about:blank")
-                    self.sans_erreur(nav, [r"status of 413"])
-                apres = {table: (serveur.dossier / (table + ".csv")).read_bytes() for table in tzl.TABLES}
+                    self.sans_erreur(nav, [r"status of 413", ERREUR_TABLE_DU_FORMAT_4_ABSENTE])
+                apres = octets_des_tables(serveur.dossier)
                 copies = sum(1 for p in (serveur.dossier / "documents").iterdir() if p.is_file())
             shutil.rmtree(self.temporaire / "profil-08", ignore_errors=True)
             return {"duree_s": duree, "message": texte[:400], "documents_copies": copies,
@@ -1119,7 +1131,7 @@ class TestZipParMorceaux(unittest.TestCase):
                     page = self.ouvrir_serveur(nav, serveur)
                     mesure, termine = self.mesurer(nav, lambda: self.importer(page, chemin, DOCUMENTS_2GO))
                     page.goto("about:blank")
-                    self.sans_erreur(nav)
+                    self.sans_erreur(nav, [ERREUR_TABLE_DU_FORMAT_4_ABSENTE])
                 dossier = serveur.dossier
                 csv_ecrits = {table: (dossier / (table + ".csv")).read_bytes() for table in tzl.TABLES}
                 debut = time.monotonic()
@@ -1177,8 +1189,11 @@ class TestZipParMorceaux(unittest.TestCase):
             with Navigateur(self, self.temporaire / "profil-10", self.temporaire / "telechargements") as nav:
                 page = nav.page
                 page.goto(self.statique.url + "/tests/fixtures/page-vide.html")
-                for chemin in SCRIPTS_TRADUCTION + ["js/modules/zip-flux.js"]:   # moteur de traduction d'abord
-                    page.add_script_tag(url=self.statique.url + "/" + chemin)
+                # « script », jamais « chemin » : produire() déplace le ZIP vers le « chemin » de la méthode ; une
+                # boucle sur « chemin » ici le remplaçait par « js/modules/zip-flux.js » (le ZIP écrasait ce fichier du
+                # dépôt : trouvé par la recette T397).
+                for script in SCRIPTS_TRADUCTION + ["js/modules/zip-flux.js"]:   # moteur de traduction d'abord
+                    page.add_script_tag(url=self.statique.url + "/" + script)
                 page.evaluate("() => { const c = document.createElement('input'); c.type = 'file'; c.id = 'source'; "
                               "document.body.appendChild(c); }")
                 page.set_input_files("#source", str(source))

@@ -1,9 +1,10 @@
 """Tests du passage de parametres.version_schema au format courant (tâche T37, ARCHITECTURE.md §14.1 ;
-format 3 depuis le lot 6, §20.2 ; chantier « socle de données », T186 : étapes explicites, D168).
+format 3 depuis le lot 6, §20.2, format 4 depuis la 2.2 ; chantier « socle de données », T186 : étapes explicites,
+D168). Les motifs, libellés et nombres d'étapes sont calculés depuis le format courant (FORMAT_COURANT de commun.py).
 
 Décision de Nicolas (2026-10-20) : JUSTE AVANT que version_schema passe au format courant sur une base
 existante, Prévo fait une sauvegarde automatique « AAAA-MM-JJ_HHMMSS_avant-format-vN » (N = format
-visé, 3 depuis le lot 6 ; une base au format 1 passe directement au format 3, une seule sauvegarde),
+visé, le format courant ; une base au format 1 passe directement au format courant, une seule sauvegarde),
 restaurable depuis Paramètres comme les autres (Donnees.migrerAuFormatCourant(), ancien nom
 Donnees.mettreAJourVersionSchema()). Depuis T186 (D168), le NAVIGATEUR ne fait ce passage qu'en mode dossier
 et en démo, par étapes explicites (Formats.migrer) : chaque table que le passage complète est réécrite, puis
@@ -12,14 +13,16 @@ démarrage (T185) : le navigateur n'écrit rien et montre un bandeau au responsa
 
     serveur  : le navigateur ne fait plus le passage : appel sans effet (ni sauvegarde, ni écriture, ni
                journal) ; une base au format 2 (sans wiki_pages.csv ni wiki_journal.csv, ordres_travail.csv
-               sans la colonne astuce) ouverte par le responsable : aucun fichier changé à l'octet, pas d'OT
-               préventif généré, bandeau ; les tables du wiki lues vides, la colonne astuce signalée en
-               simple information ; écran Paramètres « Avant format 3 » (sauvegarde demandée à l'API) puis
-               restauration de toutes les tables ; API brute (motif inconnu, « ../x », corps vide) ;
+               sans les colonnes astuce et habilitation_requise) ouverte par le responsable : aucun fichier changé
+               à l'octet, pas d'OT préventif généré, bandeau ; les tables du wiki lues vides, la colonne astuce
+               signalée en simple information ; écran Paramètres « Avant format N » (N = format courant ;
+               sauvegarde demandée à l'API) puis restauration de toutes les tables ; API brute (motif inconnu,
+               « ../x », corps vide) ;
     dossier  : passage avec StockageDossier (dossier simulé dans l'OPFS) : sauvegarde d'abord, tables du
-               format 1 complétées, version 3, deux lignes de journal (une par étape), second appel sans
-               effet, restauration ; sauvegarde impossible → rien n'est écrit, ErreurStockage claire ; un
-               autre poste passé au format 3 entre-temps : version_schema pas réécrite ; règles de noms
+               format 1 complétées (colonnes des formats 2 à 4), version courante, une ligne de journal par étape
+               (trois au format 4), second appel sans effet, restauration ; sauvegarde impossible → rien n'est
+               écrit, ErreurStockage claire ; un autre poste passé au format courant entre-temps : version_schema
+               pas réécrite ; règles de noms
                identiques à celles du serveur ;
     démo     : aucune sauvegarde, aucune erreur ; passage en mémoire seulement.
 
@@ -151,12 +154,12 @@ class TestServeur(CasServeurV1):
     def test_ecran_parametres_avant_format_courant_puis_restauration_de_toutes_les_tables(self):
         with ServeurPrevo() as serveur:
             page = self.ouvrir_application_v1(serveur)
-            # La sauvegarde « avant-format-v3 » est celle que le serveur fait avant son passage (ici demandée à l'API).
+            # La sauvegarde « avant-format-vN » est celle que le serveur fait avant son passage (ici demandée à l'API).
             statut, reponse = demander_sauvegarde(serveur, {"motif": MOTIF_AVANT_FORMAT_COURANT})
             self.assertEqual(statut, 200, reponse)
             nom = reponse["sauvegarde"]
             self.assertRegex(nom, MOTIF_NOM_AVANT_FORMAT_COURANT)
-            # Puis le passage (fait ailleurs) : version 3 sur le disque.
+            # Puis le passage (fait ailleurs) : version courante sur le disque.
             passe = PARAMETRES_V1.read_bytes().replace(b"version_schema;'1", ("version_schema;'" + FORMAT_COURANT).encode())
             (serveur.dossier / "parametres.csv").write_bytes(passe)
             page.evaluate("Donnees.rechargerTable('parametres')")
@@ -195,8 +198,8 @@ def retirer_derniere_colonne(chemin, nom):
 
 
 class TestFormat2ModeServeur(CasServeurV1):
-    """Lot 6 (§20.2) et T186 (D168) : une base au format 2 (la démo sans wiki_pages.csv, wiki_journal.csv ni colonne
-    astuce) ouverte en mode serveur : le navigateur n'écrit rien, il le dit au responsable."""
+    """Lot 6 (§20.2) et T186 (D168) : une base au format 2 (la démo sans wiki_pages.csv, wiki_journal.csv ni colonnes
+    astuce et habilitation_requise) ouverte en mode serveur : le navigateur n'écrit rien, il le dit au responsable."""
 
     def test_ouverture_d_une_base_au_format_2_aucun_fichier_change_bandeau_au_responsable(self):
         with ServeurPrevo() as serveur:
@@ -336,8 +339,8 @@ class TestApiMotif(unittest.TestCase):
             self.assertEqual(statut, 200, reponse)
             self.assertRegex(reponse["sauvegarde"], MOTIF_NOM_MANUEL)
 
-            # Motifs de la liste fermée : « …_avant-format-v2 » (lot 2) et « …_avant-format-v3 » (lot 6),
-            # listés et restaurables.
+            # Motifs de la liste fermée : « …_avant-format-v2 » (lot 2) et celui du format courant (« …_avant-format-v4 »
+            # depuis la 2.2), listés et restaurables.
             statut, reponse = demander_sauvegarde(serveur, {"motif": MOTIF_AVANT_FORMAT_COURANT})
             self.assertEqual(statut, 200, reponse)
             self.assertRegex(reponse["sauvegarde"], MOTIF_NOM_AVANT_FORMAT_COURANT)
@@ -470,7 +473,7 @@ class TestDossier(CasNavigateur):
             nom = resultat["valeur"]["sauvegarde"]
             self.assertRegex(nom, MOTIF_NOM_AVANT_FORMAT_COURANT)
             self.assertEqual(resultat["valeur"]["depart"], 1)
-            # Écritures explicites (T186) : les trois tables du format 1 sont complétées (colonnes des formats 2 et 3).
+            # Écritures explicites (T186) : les trois tables du format 1 sont complétées (colonnes des formats 2 à 4).
             self.assertEqual(sorted(resultat["valeur"]["tables"]), ["demandes", "equipements", "ordres_travail"])
             self.assertEqual(resultat["valeur"]["abimees"], [])
 
@@ -483,7 +486,7 @@ class TestDossier(CasNavigateur):
             self.assertEqual(version_schema(self.lire("parametres.csv")), FORMAT_COURANT)
             entete_ordres = self.lire("ordres_travail.csv").decode("utf-8-sig").split("\r\n", 1)[0].split(";")
             self.assertEqual(entete_ordres[-3:], ["anomalie_constatee", "astuce", "habilitation_requise"])   # formats 2, 3 puis 4
-            # Une ligne de journal par étape (1 → 2, puis 2 → 3).
+            # Une ligne de journal par étape (1 → 2, 2 → 3, puis 3 → 4).
             actions = actions_journal_version(self.lire("journal.csv"))
             self.assertEqual(actions, ["passage au format %d du fichier ; sauvegarde %s faite juste avant" % (n, nom)
                                        for n in range(2, FORMAT_COURANT_NUM + 1)])

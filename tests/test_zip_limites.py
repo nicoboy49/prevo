@@ -398,7 +398,9 @@ class TestDepassements(CasNavigateur):
         return self.page.evaluate("([e, i]) => ZipDonnees.depassements(e, i)", [entrees, incomplet])
 
     def test_rien_aux_limites_exactes_une_phrase_par_depassement(self):
-        charger_scripts(self.page, ["js/modules/zip-flux.js", "js/modules/zip-lecture.js", "js/modules/zip-donnees.js"])
+        # js/schema.js d'abord : zip-donnees.js tire ses colonnes « document » du schéma à son chargement (T388).
+        charger_scripts(self.page, ["js/schema.js", "js/modules/zip-flux.js", "js/modules/zip-lecture.js",
+                                    "js/modules/zip-donnees.js"])
         self.assertEqual(self.page.evaluate("Object.assign({}, ZipLecture.LIMITES)"),
                          dict(LIMITES, seuilTaux=MIO))
         self.assertEqual(self.page.evaluate("[ZipLecture.LIMITES.zip === ZipFlux.LIMITES.octets, "
@@ -535,6 +537,9 @@ class TestAllerRetour(CasNavigateur):
         return page.evaluate(EMPREINTES_OPFS_JS, [NOM_DOSSIER, debuts or {}])
 
     def test_serveur_export_puis_import_dans_une_autre_base_sans_perte(self):
+        # La base B (f3-v1.2.0) passe au format 4 au démarrage du serveur, qui ne crée pas garanties ni
+        # contrats_prestataires (CONCEPTION-L1 §3.3) : leurs 404 à l'ouverture sont voulus (table absente = vide).
+        self.autoriser_erreur(re.compile(r"status of 404.*/api/csv/(garanties|contrats_prestataires)\b"))
         chemin, entrees = self.export_du_serveur()
         source_b = ecrire_dossier(self.temporaire / "base-b", tzi.fichiers_du_jeu("f3-v1.2.0"))
         with ServeurPrevo(source=source_b) as serveur:

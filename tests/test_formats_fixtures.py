@@ -259,8 +259,11 @@ class TestJeux(unittest.TestCase):
         self.assertNotIn(b"astuce", entete)
         entete = (self.jeu("plus-recent") / "ordres_travail.csv").read_bytes().split(b"\r\n", 1)[0]
         self.assertTrue(entete.endswith(b";astuce;habilitation_requise;nouvelle_colonne_v5"))
-        self.assertTrue((self.jeu("plus-recent") / "pieces_v5.csv").is_file())
-        self.assertFalse((self.jeu("plus-recent") / "pieces_v4.csv").exists())
+        # La table inconnue du format 5 (LISEZMOI : 3 colonnes, 2 lignes) ; la liste exacte des tables du jeu est vérifiée
+        # par test_plus_recent_est_f4_plus_les_ajouts_du_format_5.
+        pieces = (self.jeu("plus-recent") / "pieces_v5.csv").read_bytes()
+        self.assertEqual(pieces.split(b"\r\n", 1)[0], BOM + b"id;designation;stock")
+        self.assertEqual(len(lignes_en_dictionnaires(pieces)), 2)
         eq = (self.jeu("windows-1252") / "equipements.csv").read_bytes()
         with self.assertRaises(UnicodeDecodeError):
             eq.decode("utf-8")

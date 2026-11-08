@@ -933,7 +933,7 @@ class ParcoursPlusRecent:
 
     def exporter_en_lecture_seule(self, mode):
         """Paramètres : « Sauvegarder maintenant » refusé avec le message (le navigateur n'écrit rien) ; export ZIP
-        possible : format 4, colonne inconnue gardée, table inconnue non exportée."""
+        possible : format du jeu plus-recent (5), colonne inconnue gardée, table inconnue non exportée."""
         self.aller("#/parametres", "#btn-export-zip")
         self.page.evaluate("window.__toasts = []")
         self.page.click("#btn-sauvegarder")

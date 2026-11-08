@@ -14,8 +14,8 @@ l'étiquette v2.0.0-beta.2, avec les options de chaque version. La page est test
                manifeste), en File, ArrayBuffer et Blob ; variantes (stocké, ZIP64 local, dossier documents/) ; format 2
                et format 1 migrés en mémoire, lignes intactes champ à champ ; fichier au format 2 dans une base au
                format 3 ; tables absentes ; 10 000 entrées ; aucune écriture ni requête pendant la lecture ;
-               depuis le format 4 (2.2, T399) : l'export de cette version est fait de la démo (seule base au format
-               courant du dépôt), lu sans migration ; les exports 1.2 à 2.1 (jeux aux formats 1 à 3) sont mis au
+               depuis le format 4 (2.2, T399) : l'export de cette version est fait du jeu f4-v2.2.0 (base au format
+               courant, T394 ; recette T397), lu sans migration ; les exports 1.2 à 2.1 (jeux aux formats 1 à 3) sont mis au
                format courant : tables nouvelles annoncées (info), vides et dans `absentes`, sauf reserves_controle
                remplie par la reprise des observations (D183), colonnes du format 4 à leur défaut ;
     refusés  : chemins hostiles (../x.csv, /x.csv, C:/x.csv, documents/../../x.csv, a\\b.csv, segment vide, caractère
@@ -78,7 +78,6 @@ DOCUMENTS = {
 # Valeur par défaut des colonnes que les formats 2 à 4 ajoutent (recopie de test_formats_js) : anomalie_constatee est
 # un booléen, controles_reglementaires.source_periodicite vaut « saisie » (format 4).
 DEFAUTS = DEFAUTS_AJOUTES
-DOSSIER_DEMO = RACINE / "donnees" / "demo"
 # Reprise des observations en réserves au passage au format 4 (D183) : dans f2-v1.1.0, f3-v1.2.0 et f3-v2.0.0, seul
 # CTR-0004 a des observations (une ligne, non levées) → une réserve ; f1 n'a pas de contrôles → aucune.
 RESERVES_REPRISES = {"f1": 0, "f2-v1.1.0": 1, "f3-v1.2.0": 1, "f3-v2.0.0": 1, "table-absente": 1}
@@ -160,9 +159,9 @@ def fichiers_du_jeu(nom, avec_acces=False):
 
 
 def fichiers_du_format_courant():
-    """{nom : octets} des CSV du jeu de démo (données fictives, lues sans être modifiées), seule base au format courant
-    du dépôt : ce qu'exporte cette version (les jeux de tests/fixtures/formats sont aux formats 1 à 3)."""
-    fichiers = {chemin.name: chemin.read_bytes() for chemin in sorted(DOSSIER_DEMO.glob("*.csv"))}
+    """{nom : octets} des CSV d'une copie du jeu f4-v2.2.0 (T394 : base au format courant, 27 tables) : ce qu'exporte
+    cette version (les autres jeux de base de tests/fixtures/formats sont aux formats 1 à 3)."""
+    fichiers = {chemin: octets for chemin, octets in fichiers_du_jeu("f4-v2.2.0").items() if chemin.endswith(".csv")}
     assert b"\r\nversion_schema;'%d\r\n" % FORMAT_COURANT in fichiers["parametres.csv"]
     return fichiers
 
@@ -399,7 +398,7 @@ class CasZip(CasNavigateur):
 class TestZipAcceptes(CasZip):
 
     def test_export_complet_avec_manifeste_exact(self):
-        # Export de cette version : base au format courant (la démo, seule du dépôt), lue sans migration.
+        # Export de cette version : base au format courant (jeu f4-v2.2.0, 27 tables), lue sans migration.
         fichiers = dict(fichiers_du_format_courant(), **DOCUMENTS)
         contenu_manifeste = manifeste(fichiers, manquants=["photo-perdue.jpg"])
         resultat = self.accepte(octets_zip(dict(fichiers, **{"documents/": b"", "manifeste.json": contenu_manifeste})))
@@ -427,7 +426,7 @@ class TestZipAcceptes(CasZip):
 
     def test_zip_fait_par_zipflux_et_formats_manifeste_comme_l_export(self):
         """Comme l'export depuis T228 : ZipFlux.ecrivain et Formats.manifeste ; deflate, puis stocké ; lu en
-        ArrayBuffer et en Blob. Base au format courant (la démo), comme l'export de cette version."""
+        ArrayBuffer et en Blob. Base au format courant (jeu f4-v2.2.0), comme l'export de cette version."""
         fichiers = dict(fichiers_du_format_courant(), **DOCUMENTS)
         en_base64 = {nom: base64.b64encode(octets).decode("ascii") for nom, octets in fichiers.items()}
         for stocker in (False, True):
