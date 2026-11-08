@@ -1,4 +1,4 @@
-"""Écrit FICHE_TECHNIQUE_CSV.md, la fiche technique des fichiers CSV de Prévo (23 depuis le format 3), d'après le schéma.
+"""Écrit FICHE_TECHNIQUE_CSV.md, la fiche technique des fichiers CSV de Prévo (27 depuis le format 4), d'après le schéma.
 
 Le schéma est la seule source : js/schema.js (objet Schema) est lu dans Chromium (Playwright, outil de
 développement, déjà utilisé par les tests) ; la fiche est donc toujours fidèle aux fichiers réels.
@@ -50,6 +50,11 @@ ROLES = {
                    "savoir-faire ; seul le texte validé y est enregistré."),
     "wiki_journal": ("Journal du wiki (format 3) : OT en file, propositions de l'IA et leur décision, écritures "
                      "à la main, contradictions tranchées."),
+    "reserves_controle": ("Réserves levées ou ouvertes lors d'un contrôle réglementaire (format 4) : une ligne "
+                          "par réserve, reprise des anciennes observations."),
+    "garanties": "Garanties des équipements (format 4) : durée, fournisseur, conditions et document.",
+    "contrats_prestataires": ("Contrats de maintenance avec les prestataires (format 4) : objet, période, montant "
+                              "annuel et équipements concernés."),
 }
 
 TYPES = [

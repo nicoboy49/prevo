@@ -2,7 +2,7 @@
 
 Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4, `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres.js`) : ne pas le modifier à la main.
 
-Prévo range ses données dans **24 fichiers CSV** (format **version 3**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
+Prévo range ses données dans **27 fichiers CSV** (format **version 4**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
 
 ## 1. Règles communes à tous les fichiers
 
@@ -31,7 +31,7 @@ Prévo range ses données dans **24 fichiers CSV** (format **version 3**), dans 
 | `ref` | identifiant d'une ligne d'un autre fichier |
 | `document` | nom d'un fichier du dossier `documents/` (photo, PDF…) ; en mode serveur, préfixé `AAAAMMJJ-HHMMSS-` (§5) |
 
-## 3. Les 24 fichiers
+## 3. Les 27 fichiers
 
 | Fichier | Contenu | Identifiant |
 | --- | --- | --- |
@@ -59,6 +59,9 @@ Prévo range ses données dans **24 fichiers CSV** (format **version 3**), dans 
 | `journal.csv` | Journal des modifications (qui, quand, quoi) ; on n'y fait qu'ajouter. | `J-AAAAMMJJHHMMSS-XXXX` (horodatage puis 4 caractères tirés au hasard) |
 | `wiki_pages.csv` | Pages du wiki de maintenance (format 3) : équipements, composants, modes de défaillance et savoir-faire ; seul le texte validé y est enregistré. | `WP-NNNN` (ex. `WP-0001`) |
 | `wiki_journal.csv` | Journal du wiki (format 3) : OT en file, propositions de l'IA et leur décision, écritures à la main, contradictions tranchées. | `WJ-NNNNN` (ex. `WJ-00001`) |
+| `reserves_controle.csv` | Réserves levées ou ouvertes lors d'un contrôle réglementaire (format 4) : une ligne par réserve, reprise des anciennes observations. | `RES-NNNNN` (ex. `RES-00001`) |
+| `garanties.csv` | Garanties des équipements (format 4) : durée, fournisseur, conditions et document. | `GAR-NNNN` (ex. `GAR-0001`) |
+| `contrats_prestataires.csv` | Contrats de maintenance avec les prestataires (format 4) : objet, période, montant annuel et équipements concernés. | `CTP-NNNN` (ex. `CTP-0001`) |
 
 ### 3.1 `localisations.csv` — Localisations
 
@@ -98,6 +101,7 @@ Le parc : chaque machine ou sous-ensemble, sa criticité, sa consignation.
 | `document` | Document | `document` |  |  |  |  |
 | `actif` | Actif | `booleen` |  |  | `1` |  |
 | `valeur_remplacement` | Valeur de remplacement (€ HT) | `decimal` |  |  |  | depuis le format 2 ; autres noms reconnus : valeur de remplacement, valeur à neuf, prix de remplacement |
+| `cout_arret_h` | Coût d'une heure d'arrêt (€/h) | `decimal` |  |  |  | depuis le format 4 |
 
 ### 3.3 `demandes.csv` — Demandes d'intervention
 
@@ -162,6 +166,7 @@ Ordres de travail (OT) : correctifs, préventifs, réglementaires, amélioration
 | `ot_lie_id` | Ordre de travail lié | `ref` |  | réf. `ordres_travail.csv` |  |  |
 | `anomalie_constatee` | Anomalie constatée | `booleen` |  |  | `0` | depuis le format 2 |
 | `astuce` | Astuce pour la prochaine fois | `texte_long` |  |  |  | depuis le format 3 |
+| `habilitation_requise` | Habilitation exigée par l'OT | `texte` |  |  |  | depuis le format 4 |
 
 ### 3.5 `ot_operations.csv` — Opérations d'ordre de travail
 
@@ -328,6 +333,10 @@ Habilitations des techniciens et leurs échéances.
 | `intitule` | Intitulé | `texte` |  |  |  | autres noms reconnus : habilitation, intitulé, titre |
 | `date_obtention` | Date d'obtention | `date` |  |  |  | autres noms reconnus : obtenue le, date obtention |
 | `date_echeance` | Date d'échéance | `date` |  |  |  | autres noms reconnus : échéance, valable jusqu'au, date d'expiration, expiration |
+| `recyclage_mois` | Recyclage (mois) | `entier` |  |  |  | depuis le format 4 |
+| `justificatif` | Justificatif | `document` |  |  |  | depuis le format 4 |
+| `catalogue_id` | Type du catalogue | `texte` |  |  |  | depuis le format 4 |
+| `nature_source` | Nature de la source | `choix` |  | `obligation`, `norme`, `recommandation` |  | depuis le format 4 |
 
 ### 3.15 `compteurs.csv` — Compteurs
 
@@ -375,6 +384,10 @@ Contrôles réglementaires périodiques (VGP, électricité…).
 | `rapport` | Rapport | `document` |  |  |  |  |
 | `observations` | Observations | `texte_long` |  |  |  |  |
 | `observations_levees` | Observations levées | `booleen` |  |  | `0` |  |
+| `source_periodicite` | Origine de la périodicité | `choix` |  | `catalogue`, `saisie` | `saisie` | depuis le format 4 |
+| `nature_source` | Nature de la source | `choix` |  | `obligation`, `norme`, `recommandation` |  | depuis le format 4 |
+| `catalogue_id` | Ligne du catalogue | `texte` |  |  |  | depuis le format 4 |
+| `catalogue_relu_le` | Catalogue relu le | `date` |  |  |  | depuis le format 4 |
 
 ### 3.18 `codes_defaillance.csv` — Codes de défaillance
 
@@ -503,6 +516,64 @@ Journal du wiki (format 3) : OT en file, propositions de l'IA et leur décision,
 | `decide_par` | Décidé par | `texte` |  |  |  |  |
 | `decide_le` | Décidé le | `date_heure` |  |  |  |  |
 | `motif` | Motif | `texte_long` |  |  |  |  |
+
+### 3.25 `reserves_controle.csv` — Réserves des contrôles
+
+Réserves levées ou ouvertes lors d'un contrôle réglementaire (format 4) : une ligne par réserve, reprise des anciennes observations.
+
+- Identifiant : `RES-NNNNN` (ex. `RES-00001`).
+
+| Colonne | Libellé | Type | Obligatoire | Valeurs ou référence | Défaut | Remarques |
+| --- | --- | --- | --- | --- | --- | --- |
+| `id` | Identifiant | `id` |  |  |  |  |
+| `controle_id` | Contrôle | `ref` | oui | réf. `controles_reglementaires.csv` |  |  |
+| `date_controle` | Date du contrôle | `date` |  |  |  |  |
+| `texte` | Réserve | `texte_long` | oui |  |  |  |
+| `gravite` | Gravité | `choix` |  | `mineure`, `majeure`, `critique` |  |  |
+| `echeance_levee` | Échéance de levée | `date` |  |  |  |  |
+| `levee` | Levée | `booleen` |  |  | `0` |  |
+| `date_levee` | Date de levée | `date` |  |  |  |  |
+| `commentaire_levee` | Commentaire de levée | `texte_long` |  |  |  |  |
+| `ot_id` | OT lié | `ref` |  | réf. `ordres_travail.csv` |  |  |
+
+### 3.26 `garanties.csv` — Garanties
+
+Garanties des équipements (format 4) : durée, fournisseur, conditions et document.
+
+- Identifiant : `GAR-NNNN` (ex. `GAR-0001`).
+
+| Colonne | Libellé | Type | Obligatoire | Valeurs ou référence | Défaut | Remarques |
+| --- | --- | --- | --- | --- | --- | --- |
+| `id` | Identifiant | `id` |  |  |  |  |
+| `equipement_id` | Équipement | `ref` | oui | réf. `equipements.csv` |  |  |
+| `fournisseur_id` | Fournisseur | `ref` |  | réf. `fournisseurs.csv` |  |  |
+| `date_debut` | Début de garantie | `date` |  |  |  |  |
+| `date_fin` | Fin de garantie | `date` | oui |  |  |  |
+| `conditions` | Conditions | `texte_long` |  |  |  |  |
+| `document` | Document | `document` |  |  |  |  |
+| `actif` | Actif | `booleen` |  |  | `1` |  |
+
+### 3.27 `contrats_prestataires.csv` — Contrats de prestataires
+
+Contrats de maintenance avec les prestataires (format 4) : objet, période, montant annuel et équipements concernés.
+
+- Identifiant : `CTP-NNNN` (ex. `CTP-0001`).
+
+| Colonne | Libellé | Type | Obligatoire | Valeurs ou référence | Défaut | Remarques |
+| --- | --- | --- | --- | --- | --- | --- |
+| `id` | Identifiant | `id` |  |  |  |  |
+| `fournisseur_id` | Prestataire | `ref` | oui | réf. `fournisseurs.csv` |  |  |
+| `objet` | Objet du contrat | `texte` | oui |  |  |  |
+| `equipement_ids` | Équipements concernés | `texte` |  |  |  |  |
+| `perimetre` | Périmètre | `texte_long` |  |  |  |  |
+| `date_debut` | Début | `date` |  |  |  |  |
+| `date_fin` | Fin | `date` | oui |  |  |  |
+| `preavis_mois` | Préavis de résiliation (mois) | `entier` |  |  |  |  |
+| `reconduction_tacite` | Reconduction tacite | `booleen` |  |  | `0` |  |
+| `reconduction_mois` | Durée d'une reconduction (mois) | `entier` |  |  |  |  |
+| `montant_annuel` | Montant annuel (€ HT) | `decimal` |  |  |  |  |
+| `document` | Document | `document` |  |  |  |  |
+| `actif` | Actif | `booleen` |  |  | `1` |  |
 
 ## 4. Import depuis un tableur
 
