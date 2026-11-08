@@ -19,7 +19,7 @@ the [issues](https://github.com/nicoboy49/prevo/issues).
 ## 2.1 — more languages, then the trainer mode
 
 - **Turkish, Italian and Portuguese** (Portugal), in machine translation at first: the interface says so, and
-  corrections are welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+  corrections are welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)). Done for version 2.1.0.
 - **Trainer mode**: packs of breakdown scenarios distributed as ZIP files, one copy per trainee, reset in one click.
 
 ## 2.2 — "the manager sleeps well"

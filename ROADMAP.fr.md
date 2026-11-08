@@ -19,7 +19,7 @@ pied du menu), ou les [issues](https://github.com/nicoboy49/prevo/issues).
 ## 2.1 — d'autres langues, puis le mode formateur
 
 - **Turc, italien et portugais** (du Portugal), en traduction automatique d'abord : l'interface le dit, et les
-  corrections sont bienvenues (voir [CONTRIBUTING.fr.md](CONTRIBUTING.fr.md)).
+  corrections sont bienvenues (voir [CONTRIBUTING.fr.md](CONTRIBUTING.fr.md)). Fait pour la version 2.1.0.
 - **Mode formateur** : des packs de scénarios de pannes distribués en ZIP, une copie par stagiaire, remise à zéro en un
   clic.
 

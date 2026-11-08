@@ -8,7 +8,7 @@ avec acces/comptes.json) dans un dossier temporaire ou dans l'OPFS du navigateur
                        octets d'origine (acces/ compris, FORMAT.md §8), aucune « avant-format-* » (format 3 des deux
                        côtés), version notée ; connexion du responsable, aucun bandeau, un équipement modifié par le
                        formulaire ; aucune perte ; second démarrage : aucune nouvelle « avant-mise-a-jour » ;
-                       passage suivant (appli simulée en 2.0.1) : nouvelle sauvegarde, version 2.0.1 notée ;
+                       passage suivant (appli simulée en version suivante) : nouvelle sauvegarde, version notée ;
                        export ZIP (vrai bouton) puis import dans une base neuve : mêmes CSV, journal + 1 ligne.
     TestBeta2Dossier   mode dossier (OPFS simulé) : mêmes contrôles, puis rechargement : rien de neuf.
 
@@ -35,7 +35,8 @@ from test_recette_socle import (DERNIERE_VERSION, DONNEES_DU_DEPOT, ERREUR_CSV_A
                                 valeur_comparable)
 
 JEU = "f3-v2.0.0"
-VERSION_SUIVANTE = "2.0.1"        # T340 : la version courante est la 2.0.0 ; le passage suivant simule la 2.0.1
+# Passage suivant : la version qui suit la version courante (correctif +1), toujours plus récente (T340, T376).
+VERSION_SUIVANTE = ".".join(VERSION_APPLI.split("-")[0].split(".")[:2] + [str(int(VERSION_APPLI.split("-")[0].split(".")[2]) + 1)])
 DESIGNATION = "Pompe de refroidissement (recette bêta 2)"
 CHANGEES = {"equipements.csv": {("EQ-0005", "designation")}}
 # Fichiers de données qu'une session du responsable peut réécrire (OT préventifs générés à l'ouverture, journal).
@@ -160,7 +161,7 @@ class TestBeta2Serveur(CasBeta2):
             self.assertEqual(sum(1 for n in noms if MOTIF_AVANT_MISE_A_JOUR.match(n)), 1)
             self.assertEqual(version_notee(fichiers_de(second.dossier)), VERSION_APPLI)
 
-        # Passage suivant : l'appli est la 2.0.1 (simulée) → nouvelle sauvegarde, version 2.0.1 notée, aucune perte.
+        # Passage suivant : l'appli est la version suivante (simulée) → nouvelle sauvegarde, version notée, aucune perte.
         with ServeurVersion(VERSION_SUIVANTE, self.temporaire / "appli-finale", source=suite, comptes=True) as finale:
             apres_finale = fichiers_de(finale.dossier)
             console = finale.sortie_console()

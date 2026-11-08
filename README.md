@@ -225,16 +225,17 @@ Prévo (above): even alone on a PC, that is the recommended mode.
 
 ## Languages
 
-Prévo is shown in **French** and **English** (British English; numbers, amounts and dates in the format of the
-language). The language follows this order: that of the signed-in **account**, otherwise the choice made on **this
+Prévo is shown in **French**, **English** (British English), **Turkish**, **Italian** and **Portuguese** (Portugal);
+numbers, amounts and dates follow the format of the language. Turkish, Italian and Portuguese are machine
+translations (the interface says so, corrections welcome); their long help and the guide are in English. The language follows this order: that of the signed-in **account**, otherwise the choice made on **this
 workstation** (or on the phones' front door), otherwise the **installation language** (Settings › Company). The demo
 opens in the browser's language. The texts that Prévo writes itself into the data (work order history, pre-filled
 titles…) are in the installation language; list values stay in French in the CSV files, and are translated on screen.
 The currency can also be set (EUR by default), with no conversion of amounts. The demo data is in French (the demo
 set is not translated).
 
-**Adding or fixing a language**: see [CONTRIBUTING.md](CONTRIBUTING.md#add-or-fix-a-language). Turkish,
-Italian and Portuguese are planned for 2.1 ([roadmap](ROADMAP.md)).
+**Adding or fixing a language**: see [CONTRIBUTING.md](CONTRIBUTING.md#add-or-fix-a-language), or report a wrong
+translation with the "Fix a translation" form (Prévo links to it).
 
 ## Privacy
 

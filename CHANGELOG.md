@@ -7,6 +7,28 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [2.1.0] - 2026-11-08
+
+Lot 5 du chantier multilingue : turc, italien et portugais du Portugal.
+
+### Ajouté
+
+- **Prévo en turc, en italien et en portugais du Portugal** : toute l'interface, l'aide à l'écran et les messages du
+  serveur, en traduction automatique ; le sélecteur de langue les propose sous leur nom (Türkçe, Italiano,
+  Português). Une mention « Traduction automatique — corrections bienvenues » (pied du menu, « Ce poste », « À
+  propos ») ouvre le formulaire GitHub « Corriger une traduction », pré-rempli avec la langue et la version.
+- **Aide longue et guide en anglais** pour ces trois langues (le guide en français ou en anglais seulement).
+- **Lettres turques** (ğ, İ, ş) dessinées dans la police de Prévo (sous-ensemble latin-ext de Sora).
+- **Glossaire métier en cinq langues** (docs/GLOSSAIRE.md) et contrôle de sa cohérence
+  (outils/controler_glossaire.py).
+
+### Modifié
+
+- **Wiki rédigé par l'IA dans la langue de l'installation** (en français jusqu'ici) : ses garde-fous (consignes de
+  sécurité, nouveauté, dates, comptages) valent dans les cinq langues.
+- **Masquage avant l'envoi à l'IA** : les numéros de téléphone internationaux (+ ou 00, turcs, italiens, portugais,
+  britanniques) sont masqués comme les numéros français.
+
 ## [2.0.0] - 2026-11-08
 
 Première version stable de la 2.0 : elle reprend aussi tout ce qu'apportent la 2.0.0 bêta 1 et la bêta 2
@@ -313,7 +335,8 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.0.0...HEAD
+[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.2...v2.0.0
 [2.0.0-beta.2]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.1...v2.0.0-beta.2
 [2.0.0-beta.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v2.0.0-beta.1

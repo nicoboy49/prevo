@@ -230,15 +230,16 @@ téléphones ou avec l'assistant IA, installez Prévo (ci-dessus) : même seul s
 
 ## Langues
 
-Prévo s'affiche en **français** et en **anglais** (anglais britannique ; nombres, montants et dates au format de la
-langue). La langue suit cet ordre : celle du **compte** connecté, sinon le choix fait sur **ce poste** (ou sur la porte
+Prévo s'affiche en **français**, en **anglais** (britannique), en **turc**, en **italien** et en **portugais** (du
+Portugal) ; nombres, montants et dates au format de la langue. Le turc, l'italien et le portugais sont des traductions
+automatiques (l'interface le dit, corrections bienvenues) ; leur aide longue et le guide sont en anglais. La langue suit cet ordre : celle du **compte** connecté, sinon le choix fait sur **ce poste** (ou sur la porte
 des téléphones), sinon la **langue de l'installation** (Paramètres › Entreprise). La démo s'ouvre dans la langue du
 navigateur. Les textes que Prévo écrit lui-même dans les données (historique des OT, titres pré-remplis…) sont dans la
 langue de l'installation ; les valeurs des listes restent en français dans les fichiers CSV, et traduites à l'écran.
 La devise se règle aussi (EUR par défaut), sans conversion des montants.
 
-**Ajouter ou corriger une langue** : voir [CONTRIBUTING.fr.md](CONTRIBUTING.fr.md#ajouter-ou-corriger-une-langue). Le
-turc, l'italien et le portugais sont prévus pour la 2.1 ([feuille de route](ROADMAP.fr.md)).
+**Ajouter ou corriger une langue** : voir [CONTRIBUTING.fr.md](CONTRIBUTING.fr.md#ajouter-ou-corriger-une-langue), ou
+signaler une traduction fausse par le formulaire « Corriger une traduction » (Prévo y renvoie).
 
 ## Confidentialité
 
