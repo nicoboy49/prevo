@@ -120,7 +120,15 @@ PREPARER_PAR_PREVO_JS = """async ({ documents, citations, rapports }) => {
   }
   const nomRendu = (nom) => (Object.prototype.hasOwnProperty.call(noms, nom) ? noms[nom] : nom);
   for (const [table, champ, rang, nom] of citations) {
-    await Donnees.modifier(table, (lignes) => { lignes[rang][champ] = nomRendu(nom); }, { action: 'test : document cité' });
+    await Donnees.modifier(table, (lignes) => {
+      if (!lignes[rang]) {                       // table vide dans la démo (garanties, contrats) : une ligne complète
+        const nouvelle = {};
+        Schema.table(table).champs.forEach((c) => { nouvelle[c.nom] = ''; });
+        nouvelle.id = Schema.table(table).identifiant.prefixe + '0001';
+        lignes.push(nouvelle);
+      }
+      lignes[rang][champ] = nomRendu(nom);
+    }, { action: 'test : document cité' });
   }
   await Donnees.modifier('parametres', (lignes) => {
     let ligne = lignes.find((l) => l.cle === 'rapports_mensuels');
@@ -157,6 +165,13 @@ def remplacer_une_fois(chemin, avant, apres):
     chemin.write_bytes(texte.replace(avant, apres).encode("utf-8"))
 
 
+def lire_csv_zip(octets):
+    """Lignes ({colonne: valeur}) d'un CSV de Prévo (BOM, « ; », CRLF), sans guillemets dans ces tests."""
+    lignes = octets.decode("utf-8-sig").split("\r\n")
+    entete = lignes[0].split(";")
+    return [dict(zip(entete, ligne.split(";"))) for ligne in lignes[1:] if ligne]
+
+
 def en_base64(octets):
     return base64.b64encode(octets).decode("ascii")
 
@@ -169,6 +184,9 @@ DOCUMENTS_PAR_PREVO = {
     "vgp-pont-2026.pdf": octets_pdf("vgp"),
     "rapport-mensuel-2026-08.html": page_rapport("2026-08"),
     "rapport-mensuel-2026-09.html": page_rapport("2026-09"),
+    "habilitation-caces.pdf": octets_pdf("caces"),
+    "garantie-presse.pdf": octets_pdf("garantie"),
+    "contrat-maintenance.pdf": octets_pdf("contrat"),
 }
 CITATIONS_PAR_PREVO = [
     ["equipements", "document", 0, "notice-machine.pdf"],
@@ -176,6 +194,9 @@ CITATIONS_PAR_PREVO = [
     ["demandes", "photo", 1, NOM_PIEGE],
     ["controles_reglementaires", "rapport", 0, "vgp-pont-2026.pdf"],
     ["controles_reglementaires", "rapport", 1, "vgp-chariot-absent.pdf"],
+    ["habilitations", "justificatif", 0, "habilitation-caces.pdf"],
+    ["garanties", "document", 0, "garantie-presse.pdf"],
+    ["contrats_prestataires", "document", 0, "contrat-maintenance.pdf"],
 ]
 RAPPORTS_PAR_PREVO = ["rapport-mensuel-2026-08.html", "rapport-mensuel-2026-09.html"]
 MANQUANTS_PAR_PREVO = [NOM_PIEGE, "vgp-chariot-absent.pdf"]
@@ -223,6 +244,14 @@ class CasExport(CasNavigateur):
         for nom, octets in documents.items():
             self.assertEqual(documents_du_zip[nom], octets, nom)
         self.assertEqual(set(noms), set(csv_du_zip) | {"documents/" + nom for nom in documents} | {"manifeste.json"})
+        # T388 : un document cité par une colonne de type document (justificatif, garantie, contrat) est cité dans le CSV
+        for table, colonne in (("habilitations", "justificatif"), ("garanties", "document"),
+                               ("contrats_prestataires", "document")):
+            if not documents:
+                break
+            cites = {ligne[colonne] for ligne in lire_csv_zip(entrees[table + ".csv"]) if ligne[colonne]}
+            self.assertTrue(cites, table)
+            self.assertLessEqual(cites, set(documents), table)
 
         manifeste = json.loads(entrees["manifeste.json"].decode("utf-8"))
         self.assertEqual(list(manifeste), CLES_MANIFESTE + (["manquants"] if manquants else []))
@@ -272,6 +301,9 @@ class TestServeur(CasExport):
             "vgp-pont-2026.pdf": octets_pdf("vgp"),
             "rapport-mensuel-2026-08.html": page_rapport("2026-08"),
             "20261001-083000-rapport-mensuel-2026-09.html": page_rapport("2026-09"),
+            "habilitation-caces.pdf": octets_pdf("caces"),
+            "garantie-presse.pdf": octets_pdf("garantie"),
+            "contrat-maintenance.pdf": octets_pdf("contrat"),
         }
         for nom, octets in attendus.items():
             (documents / nom).write_bytes(octets)
@@ -289,6 +321,13 @@ class TestServeur(CasExport):
                            "2026-02-10;2027-02-10;vgp-pont-2026.pdf;;1")
         remplacer_une_fois(dossier / "controles_reglementaires.csv", "2026-03-18;2026-09-18;;;1",
                            "2026-03-18;2026-09-18;vgp-chariot-absent.pdf;;1")
+        remplacer_une_fois(dossier / "habilitations.csv", "HAB-0001;TEC-0001;BR;2025-03-10;2028-03-10;;;;",
+                           "HAB-0001;TEC-0001;BR;2025-03-10;2028-03-10;;habilitation-caces.pdf;;")
+        for table, ligne in (("garanties", "GAR-0001;EQ-0001;;2026-01-01;2027-01-01;;garantie-presse.pdf;1"),
+                             ("contrats_prestataires",
+                              "CTP-0001;;Maintenance;;;2026-01-01;2027-01-01;;;;;contrat-maintenance.pdf;1")):
+            csv = dossier / (table + ".csv")
+            csv.write_bytes(csv.read_bytes() + (ligne + "\r\n").encode("utf-8"))
         parametres = dossier / "parametres.csv"
         parametres.write_bytes(parametres.read_bytes() + (
             "rapports_mensuels;rapport-mensuel-2026-08.html,20261001-083000-rapport-mensuel-2026-09.html\r\n"

@@ -51,11 +51,15 @@
 
 const ZipDonnees = (() => {
 
-  const CHAMPS_DOCUMENTS = Object.freeze([
-    Object.freeze(['equipements', 'document']),
-    Object.freeze(['demandes', 'photo']),
-    Object.freeze(['controles_reglementaires', 'rapport']),
-  ]);
+  // T388 : dérivés du schéma (tout champ de type « document », dans l'ordre des tables) : equipements.document,
+  // demandes.photo, controles_reglementaires.rapport, habilitations.justificatif, garanties.document et
+  // contrats_prestataires.document ; sinon un justificatif joint serait perdu à l'export (règle T208).
+  const CHAMPS_DOCUMENTS = Object.freeze(Schema.nomsTables().reduce((liste, nomTable) => {
+    Schema.table(nomTable).champs.forEach((champ) => {
+      if (champ.type === 'document') liste.push(Object.freeze([nomTable, champ.nom]));
+    });
+    return liste;
+  }, []));
   const DOSSIER_DOCUMENTS = 'documents/';
   const NOM_MANIFESTE = 'manifeste.json';
   const MOTIF_EXPORT = 'export';
