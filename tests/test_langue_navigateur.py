@@ -67,7 +67,8 @@ class TestLangueNavigateur(CasNavigateur):
     # -- langue sans réglage ---------------------------------------------------------------------
 
     def test_langue_du_navigateur_a_la_demo(self):
-        for locale, attendue in (("en-US", "en"), ("fr-CA", "fr"), ("de-DE", "en"), ("pt-BR", "en")):
+        # CS154 : langue du navigateur si Prévo la parle (pt-* dont pt-BR → pt-PT, déclarée depuis le Lot 5), sinon anglais.
+        for locale, attendue in (("en-US", "en"), ("fr-CA", "fr"), ("de-DE", "en"), ("pt-BR", "pt-PT"), ("it-CH", "it")):
             with self.subTest(locale=locale):
                 etat = self.ouvrir_demo(locale)
                 self.assertEqual((etat["langue"], etat["lang"], etat["poste"], etat["mode"]),
@@ -85,7 +86,8 @@ class TestLangueNavigateur(CasNavigateur):
           return { avant, apres, installation: I18n.langueAAfficher('', '', ['pt-BR']),
                    poste: I18n.langueAAfficher('fr', 'en', ['pt-BR']), sans: I18n.langueAAfficher('', '') };
         }""")
-        self.assertEqual(cas["avant"], ["en", "fr", "fr", "en", "en", "en", "en", "en"])
+        # Turc, italien et portugais du Portugal sont déclarés depuis le Lot 5 : de-DE puis it → it, pt-BR → pt-PT.
+        self.assertEqual(cas["avant"], ["en", "fr", "fr", "it", "en", "en", "pt-PT", "en"])
         self.assertEqual(cas["apres"], ["pt-PT", "pt-PT", "pt-PT", "pt-PT", "pt-PT"])
         self.assertEqual((cas["installation"], cas["poste"], cas["sans"]), ("pt-PT", "fr", "fr"))
 
