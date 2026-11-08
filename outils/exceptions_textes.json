@@ -323,6 +323,14 @@
       ],
       "classe": "D159",
       "raison": "Morceaux du complément de la consigne d'ingestion du wiki, en français comme elle (Wiki.consigneDansLaLangue, Lot 5, T374) : envoyés au modèle, jamais affichés."
+    },
+    {
+      "variable": "REMPLACEMENTS_AFFICHES",
+      "fichiers": [
+        "js/modules/controles-catalogue.js"
+      ],
+      "classe": "D146",
+      "raison": "Morceau du résumé de la ligne C18 du catalogue Prévo remplacé à l'affichage (réponse provisoire n° 1, CS175 : jamais « conforme » à l'écran) : contenu du catalogue, en français dans toutes les langues (CDC 2.2 §3.2), comme js/catalogue/fr.js (T414)."
     }
   ],
   "textes": [
