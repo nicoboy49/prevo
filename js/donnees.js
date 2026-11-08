@@ -1811,7 +1811,8 @@ const Donnees = (() => {
   // Étapes du passage depuis `depart`, calculées en mémoire par Formats.migrer sur les en-têtes des tables données
   // (aucune ligne n'est copiée) : [{ vers, passage, tables }] dans l'ordre, où passage est la ligne de journal de
   // Formats (« passage au format N du fichier ») et tables les tables données que l'étape complète. Une table
-  // absente que l'étape crée n'est pas comptée : elle reste absente (lue vide) jusqu'à sa première écriture.
+  // absente que l'étape crée n'est pas comptée : elle reste absente (lue vide) jusqu'à sa première écriture
+  // (reserves_controle : écrite par la reprise s'il y a des réserves à reprendre, phase 3 bis de migrerAuFormatCourant).
   function etapesDuPassage(depart, nomsTables) {
     let base = { tables: {} };
     for (const nomTable of nomsTables) { base.tables[nomTable] = { entete: entreeDe(nomTable).entete.slice(), lignes: [] }; }
@@ -1862,6 +1863,55 @@ const Donnees = (() => {
     });
   }
 
+  // Reprise des observations des contrôles en réserves (D183 ; note de conception du format 4, §3.3 à §3.5) : la
+  // table que l'étape qui crée reserves_controle remplit, au lieu de la laisser absente jusqu'à sa première écriture.
+  const TABLE_DES_RESERVES = 'reserves_controle';
+  const TABLE_DES_CONTROLES = 'controles_reglementaires';
+
+  // Vrai si le fichier d'une table se relit sans perte pour la reprise : présent, non abîmé, en-tête lisible
+  // (format reconnu ; un fichier vide se lit sans ligne).
+  function relisiblePourReprise(nomTable, entree) {
+    return !entree.absente && !entree.abime
+      && (entree.entete.length === 0 || Formats.formatDuFichier(nomTable, entree.entete) > 0);
+  }
+
+  // Phase « 3 bis » du passage : réserves tirées des observations (Formats.reservesReprises), écrites dans
+  // reserves_controle par le chemin habituel (enregistrerLignes : contrôle de version ; conflit → table relue et
+  // réserves recalculées, 3 essais au total ; un autre poste les a peut-être déjà reprises). Décidée sur les tables
+  // FRAÎCHES : controles_reglementaires absente, abîmée ou à l'en-tête illisible, ou reserves_controle abîmée ou à
+  // l'en-tête illisible → rien ; absente → créée s'il y a au moins une réserve à reprendre. Les lignes existantes de
+  // reserves_controle sont gardées, les reprises ajoutées après elles. Idempotente : un contrôle qui a déjà une
+  // réserve ne reçoit rien. Rend vrai si reserves_controle a été écrite.
+  async function reprendreObservationsEnReserves() {
+    const description = descriptionTable(TABLE_DES_RESERVES);
+    return enSerie(TABLE_DES_RESERVES, async () => {
+      let controles = entreeDe(TABLE_DES_CONTROLES);
+      if (controles.perime) { controles = await rechargerSansAttente(TABLE_DES_CONTROLES); }
+      if (!relisiblePourReprise(TABLE_DES_CONTROLES, controles)) { return false; }
+      let entree = entreeDe(TABLE_DES_RESERVES);
+      if (entree.perime) { entree = await rechargerSansAttente(TABLE_DES_RESERVES); }
+      for (let essai = 1; essai <= NOMBRE_ESSAIS; essai += 1) {
+        if (!entree.absente && !relisiblePourReprise(TABLE_DES_RESERVES, entree)) { return false; }
+        const reprises = Formats.reservesReprises(controles.lignes, entree.lignes);
+        if (reprises.length === 0) { return false; }
+        const nouvelles = entree.lignes.concat(reprises)
+          .map((ligne) => ligneNormalisee(description, entree.colonnesInconnues, ligne));
+        try {
+          await enregistrerLignes(TABLE_DES_RESERVES, description, entree, nouvelles);
+          return true;
+        } catch (erreur) {
+          if (!(erreur instanceof ErreurConflit)) { throw erreur; }
+          statistiques.conflits += 1;
+          if (essai === NOMBRE_ESSAIS) {
+            throw new ErreurConflit(messageConflitPersistant(TABLE_DES_RESERVES), erreur.versionActuelle);
+          }
+          entree = await rechargerSansAttente(TABLE_DES_RESERVES);
+        }
+      }
+      return false;
+    });
+  }
+
   // Passage au format courant (mode dossier et démo, D168). Sans effet (rien n'est écrit) en mode serveur, en
   // lecture seule, sur une base vide ou déjà au format courant ; idempotent : un second appel n'écrit rien.
   //   0. parametres.csv abîmé (sauf démo) : ErreurFichierAbime et RIEN n'est écrit, pas même la sauvegarde (T204) ;
@@ -1871,6 +1921,9 @@ const Donnees = (() => {
   //   3. chaque table que le passage change (sauf parametres) est réécrite par le chemin habituel ; une table à
   //      l'en-tête illisible (format 0), ou abîmée au point qu'une réécriture en perdrait une partie, n'est JAMAIS
   //      réécrite : signalée (problemes()) et laissée telle quelle ;
+  //   3 bis. si le passage comprend l'étape qui crée reserves_controle (3→4) : les observations des contrôles sans
+  //      réserve y sont reprises (reprendreObservationsEnReserves) ; la table, créée ou complétée, compte parmi les
+  //      tables de cette étape (journal, résultat). Avant 4 : version_schema au format 4 ⇒ reprise faite ;
   //   4. parametres.version_schema, décidé sur les lignes FRAÎCHES (rien si un autre poste l'a déjà mis) ;
   //   5. une ligne de journal par étape (table parametres, ligne version_schema) : « passage au format N du
   //      fichier ; sauvegarde … faite juste avant » (texte relu par la suggestion S4) ; pour une étape qui ne fait
@@ -1918,6 +1971,13 @@ const Donnees = (() => {
     for (const nomTable of lisibles) {
       if (nomTable === 'parametres' || !etapes.some((etape) => etape.tables.includes(nomTable))) { continue; }
       if (await ecrireAuFormatCourant(nomTable)) { resultat.tables.push(nomTable); }
+    }
+
+    // 3 bis. La reprise des observations en réserves (D183), après les tables complétées et avant version_schema.
+    const etapeDesReserves = etapes.find((etape) => etape.vers === descriptionTable(TABLE_DES_RESERVES).depuisVersion);
+    if (etapeDesReserves && await reprendreObservationsEnReserves()) {
+      if (!etapeDesReserves.tables.includes(TABLE_DES_RESERVES)) { etapeDesReserves.tables.push(TABLE_DES_RESERVES); }
+      resultat.tables.push(TABLE_DES_RESERVES);
     }
 
     // 4. Puis version_schema, décidée sur les lignes FRAÎCHES (modifier relit la table en cas de conflit et
