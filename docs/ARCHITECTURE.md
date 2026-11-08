@@ -66,7 +66,7 @@ chantier « socle de données »),
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
 §15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
 `suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1 ; le lot 4 insère `ia.js`,
-`ia-prompts.js`, `ia-encadre.js`, `dictee.js`, `poste.js` juste après `causes-frequentes.js`, §17.1 ;
+`ia-masquage.js` (Lot 5, T374 : `Ia.masquer`), `ia-prompts.js`, `ia-encadre.js`, `dictee.js`, `poste.js` juste après `causes-frequentes.js`, §17.1 ;
 le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-codes.js`, §18.1, et
 `accueil-bento.js` juste après `accueil.js`, §19 ; le lot 7 insère `aide-ecrans-textes.js`, `aide-ecrans.js` et
 `acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),

@@ -35,7 +35,7 @@ from faux_wiki import lire_message
 
 CLE = "sk-test-cle-ia-prevo-5f3a9c"
 SCRIPTS_REGLES = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
-                  "js/modules/ia.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js", "js/modules/ia-serveur.js"]
+                  "js/modules/ia.js", "js/modules/ia-masquage.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js", "js/modules/ia-serveur.js"]
 FONCTIONS = ["reformulerDI", "compteRendu", "codes", "checkList", "commentaireRapport"]
 # Valeurs « interdites » glissées dans les données passées à Ia.demander : elles ne doivent jamais partir.
 MARQUEURS_INTERDITS = ["77.77", "987.65", "photo-secrete.jpg", "notice-secrete.pdf"]

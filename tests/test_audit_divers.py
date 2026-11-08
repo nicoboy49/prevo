@@ -22,7 +22,7 @@ import zipfile
 from commun import RACINE, CasNavigateur, charger_scripts
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
-           "js/modules/ia.js", "js/modules/ia-prompts.js"]
+           "js/modules/ia.js", "js/modules/ia-masquage.js", "js/modules/ia-prompts.js"]
 
 # Numéro de téléphone français : 0X XX XX XX XX ou +33 / 0033, groupes collés ou séparés par un même caractère.
 # Pas précédé d'un chiffre, d'une lettre, d'un point ou d'une virgule (décimales « 0.0514459929 ») ; sauf une

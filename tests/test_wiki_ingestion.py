@@ -86,7 +86,7 @@ from faux_wiki import lire_message, reponse_ingestion
 
 SCRIPTS = [
     "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js", "js/interface.js",
-    "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js", "js/modules/ia.js", "js/modules/ia-prompts.js",
+    "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js", "js/modules/ia.js", "js/modules/ia-masquage.js", "js/modules/ia-prompts.js",
     "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-entites.js", "js/modules/wiki-texte.js",
     "js/modules/wiki-recherche.js",
     "js/modules/wiki-ingestion.js",

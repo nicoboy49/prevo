@@ -52,38 +52,15 @@ Object.assign(Ia, (() => {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
   }
 
-  // Masquage avant l'envoi (audit I4, ARCHITECTURE.md §22.12) : les textes libres d'un atelier (descriptions, comptes
-  // rendus, notes, astuces, pages du wiki) peuvent contenir un numéro de téléphone ou une adresse de courriel ; ils
-  // partent remplacés par « [téléphone] » et « [courriel] ». Numéros français : 0X XX XX XX XX ou +33 X XX XX XX XX
-  // (aussi 0033), groupes collés ou séparés par un même caractère (espace, point ou tiret), « (0) » toléré après +33.
-  // Un même séparateur partout : une date « 05.10.2026 08:30 » ou un OT « OT-2026-0107 » ne ressemble pas à un numéro ;
-  // ni « 15 855 h » ni « 0,58 bar » (pas de 0 suivi de neuf chiffres).
-  const MOTIF_COURRIEL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
-  const MOTIF_TELEPHONE = new RegExp('(?<![\\p{L}\\p{N}])(?:(?:\\+|00)33[ .-]?(?:\\(0\\)[ .-]?)?|0)[1-9]([ .-]?)\\d{2}'
-    + '(?:\\1\\d{2}){3}(?![\\p{L}\\p{N}])', 'gu');
-  // Lot 5 (T374, D159) : formats internationaux. Indicatif « + » ou « 00 » (tous pays) suivi d'au moins 7 chiffres en
-  // groupes (« (0) » toléré) ; numéros nationaux sans indicatif : turcs 0XXX XXX XX XX, portables italiens
-  // 3XX XXX XXXX, portugais 9XX XXX XXX ou 2XX XXX XXX, portables britanniques 07XXX XXXXXX.
-  const MOTIF_TELEPHONE_INTERNATIONAL = new RegExp('(?<![\\p{L}\\p{N}])(?:(?:\\+|00)[1-9]\\d{0,2}(?:[ .-]?\\(0\\))?'
-    + '[ .-]?\\d{1,4}(?:[ .-]?\\d{2,4}){2,4}|0[2-5]\\d{2}([ .-]?)\\d{3}\\1\\d{2}\\1\\d{2}'
-    + '|3\\d{2}([ .-]?)\\d{3}\\2\\d{4}|[29]\\d{2}([ .-]?)\\d{3}\\3\\d{3}|07\\d{3}[ .-]?\\d{6})(?![\\p{L}\\p{N}])', 'gu');
-
-  /** Texte → le même texte, numéros de téléphone et adresses de courriel remplacés (« [téléphone] », « [courriel] »). */
-  function masquer(valeur) {
-    return (valeur === null || valeur === undefined ? '' : String(valeur))
-      .replace(MOTIF_COURRIEL, '[courriel]').replace(MOTIF_TELEPHONE, '[téléphone]')
-      .replace(MOTIF_TELEPHONE_INTERNATIONAL, '[téléphone]');
-  }
-
   // Texte d'une ligne : masqué, espaces et sauts de ligne réduits, longueur bornée. Tout texte d'atelier envoyé à l'IA
   // passe par uneLigne ou bloc (toutes les fonctions, ingestion du wiki et relance comprises).
   function uneLigne(valeur, max) {
-    return masquer(texte(valeur)).replace(/\s+/g, ' ').slice(0, max || CHAMP_MAX);
+    return Ia.masquer(texte(valeur)).replace(/\s+/g, ' ').slice(0, max || CHAMP_MAX);
   }
 
   // Texte de plusieurs lignes (notes, compte rendu) : masqué, fins de ligne normalisées, longueur bornée.
   function bloc(valeur, max) {
-    return masquer(texte(valeur)).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').slice(0, max || CHAMP_MAX);
+    return Ia.masquer(texte(valeur)).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').slice(0, max || CHAMP_MAX);
   }
 
   function ligne(libelle, valeur) {
@@ -558,25 +535,12 @@ Object.assign(Ia, (() => {
         + '["OT-AAAA-NNNN"]}]}]}, {"action": "creer", "titre": "…", "type": "savoir-faire", "rattache_a": "…", '
         + '"rubriques": […]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", "ot": ["OT-AAAA-NNNN"]}]}');
 
-  // Lot 5 (T374) : dans une autre langue d'installation, la ligne des mots refusés et celle de la nouveauté citent
-  // aussi les mots de cette langue (Wiki.VOCABULAIRE_*_PAR_LANGUE, forme comparable ; « … » : tout mot qui commence
-  // ainsi). En français, la consigne est inchangée.
-  const FIN_MOTS_REFUSES = 'pour votre sécurité ;\n';
-  const FIN_NOUVEAUTE = '« dernier »…).';
-  function systemeIngestionWiki(code) {
-    const vocabulaire = (nom) => (typeof Wiki !== 'undefined' && Wiki[nom] && Wiki[nom][code]) || null;
-    const securite = code !== 'fr' && vocabulaire('VOCABULAIRE_SECURITE_PAR_LANGUE');
-    const nouveaute = code !== 'fr' && vocabulaire('VOCABULAIRE_NOUVEAUTE_PAR_LANGUE');
-    if (!securite) return SYSTEME_INGESTION_WIKI;
-    const mots = (liste) => liste.map((e) => (e.endsWith('*') ? e.slice(0, -1) + '…' : e)).join(', ');
-    return SYSTEME_INGESTION_WIKI
-      .replace(FIN_MOTS_REFUSES, 'pour votre sécurité ; dans la langue de la réponse aussi : ' + mots(securite) + ' ;\n')
-      .replace(FIN_NOUVEAUTE, '« dernier »… ; ni ' + mots(nouveaute || []) + ').');
-  }
+  // Lot 5 (T374) : dans une autre langue d'installation, la consigne cite aussi ses mots (Wiki.consigneDansLaLangue).
+  const systemeIngestionWiki = (code) => (typeof Wiki !== 'undefined' && Wiki.consigneDansLaLangue
+    ? Wiki.consigneDansLaLangue(SYSTEME_INGESTION_WIKI, code) : SYSTEME_INGESTION_WIKI);
 
   const ingestionWiki = {
-    // D159, Lot 5 (T374) : le wiki est rédigé dans la langue de l'installation (celle des textes écrits dans les
-    // données, D156), maintenant que ses garde-fous (sécurité, nouveauté, dates, comptages) valent dans les 5 langues.
+    // D159, Lot 5 (T374) : rédigé dans la langue de l'installation (D156) ; garde-fous valables dans les 5 langues.
     get langue() { return I18n.langueDesDonnees; },
     get systeme() { return systemeIngestionWiki(I18n.langueDesDonnees); },
     utilisateur(d) {
@@ -723,6 +687,5 @@ Object.assign(Ia, (() => {
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus, consigneLangue,
     jetonsRapport,
-    masquer,
   };
 })());

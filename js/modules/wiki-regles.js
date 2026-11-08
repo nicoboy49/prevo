@@ -120,6 +120,23 @@ const Wiki = (() => {
   });
   const VOCABULAIRE_NOUVEAUTE = Object.freeze([].concat(...Object.values(VOCABULAIRE_NOUVEAUTE_PAR_LANGUE)));
 
+  // Consigne d'ingestion du wiki dans la langue de l'installation (Lot 5, T374) : la consigne française (D159) reste
+  // telle quelle en français ; dans une autre langue, sa ligne des mots refusés et celle de la nouveauté citent aussi
+  // les mots de cette langue (forme comparable ; « … » : tout mot qui commence ainsi).
+  const FIN_MOTS_REFUSES = 'pour votre sécurité ;\n';
+  const FIN_NOUVEAUTE = '« dernier »…).';
+  const COMPLEMENT_CONSIGNE = Object.freeze({ racine: '…', securite: 'pour votre sécurité ; dans la langue de la '
+    + 'réponse aussi : ', nouveaute: '« dernier »… ; ni ' });
+  function consigneDansLaLangue(consigne, code) {
+    const securite = code !== 'fr' && VOCABULAIRE_SECURITE_PAR_LANGUE[code];
+    if (!securite) return consigne;
+    const mots = (liste) => liste.map((e) => (e.endsWith('*') ? e.slice(0, -1) + COMPLEMENT_CONSIGNE.racine : e))
+      .join(', ');
+    return consigne
+      .replace(FIN_MOTS_REFUSES, COMPLEMENT_CONSIGNE.securite + mots(securite) + ' ;\n')
+      .replace(FIN_NOUVEAUTE, COMPLEMENT_CONSIGNE.nouveaute + mots(VOCABULAIRE_NOUVEAUTE_PAR_LANGUE[code] || []) + ').');
+  }
+
   // Raison du refus d'un texte qui touche à la sécurité (IA, à la main) : lue à l'affichage, jamais figée.
   function messageSecuriteIa() {
     return I18n.t('wiki.message_securite_ia.ia_redige_jamais_consigne');
@@ -181,7 +198,7 @@ const Wiki = (() => {
 
   return {
     SEUILS, RUBRIQUES, RUBRIQUES_REECRITES, LIMITES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE,
-    VOCABULAIRE_SECURITE_PAR_LANGUE, VOCABULAIRE_NOUVEAUTE_PAR_LANGUE,
+    VOCABULAIRE_SECURITE_PAR_LANGUE, VOCABULAIRE_NOUVEAUTE_PAR_LANGUE, consigneDansLaLangue,
     get MESSAGE_SECURITE_IA() { return messageSecuriteIa(); },
     get MESSAGE_SECURITE_MAIN() { return messageSecuriteMain(); },
     comparable, citations, sansCitations, nombreDeMots, termesDeSecurite,
