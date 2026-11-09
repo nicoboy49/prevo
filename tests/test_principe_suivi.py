@@ -7,12 +7,17 @@ Sans navigateur (TestTextes) :
   - aucune valeur de js/i18n/en.js ni de js/i18n/aide/en.js ne contient « compliant » (cinq langues dès chaque
     tâche : QUESTIONS-L2-L6, L2-L3 Q2 ; « compliance » du respect du préventif n'est pas visé) ;
   - la phrase est, mot pour mot, la valeur française de controles.principe.texte (une clé par domaine : la section
-    commun est figée), traduite dans chaque langue déclarée.
+    commun est figée), traduite dans chaque langue déclarée ; equipe.principe.texte (T432), rangée dans la section
+    equipe, porte la même phrase que controles.principe.texte, dans chaque langue.
 En démo (TestEcransControles, index.html en file://, profil Responsable) : la phrase est affichée sur la liste
 #/controles, sur le formulaire #/controles/nouveau (en saisie libre comme avec une ligne du catalogue choisie) et sur
 la fiche d'un contrôle ; aucun de ces écrans ne dit « conforme », même avec la ligne C18 du catalogue choisie (son
 résumé validé dit « équipement fixe conforme » : réponse provisoire n° 1, remplacé à l'affichage).
-Les écrans Habilitations (T432) et Garanties et contrats (L4) s'ajouteront ici.
+En démo (TestEcransHabilitations, T432, profil Responsable) : la phrase est sur la carte « Habilitations » de la fiche
+d'un technicien, sur la vue #/equipe?filtre=a-renouveler et dans la fenêtre « Ajouter une habilitation »
+(en saisie libre comme avec un type du catalogue choisi : électricité, TST avec sa mention, CACES, autorisation de
+conduite) ; aucun de ces écrans ne dit « conforme ».
+Les écrans Garanties et contrats (L4) s'ajouteront ici.
 
 Bibliothèque standard + Playwright. Lancer depuis la racine du projet (au travers du verrou des navigateurs) :
     py -X utf8 -m unittest discover -s tests -p "test_principe_suivi.py" -v
@@ -30,6 +35,7 @@ from jslex import decoder  # noqa: E402
 
 PHRASE = "Prévo est une aide au suivi ; la responsabilité reste celle de l'employeur."
 CLE_PHRASE = "controles.principe.texte"
+CLE_PHRASE_EQUIPE = "equipe.principe.texte"
 MOT_CONFORME = re.compile(r"(?<![\w-])conformes?(?![\w-])", re.IGNORECASE)
 MOT_COMPLIANT = re.compile(r"(?<![\w-])compliant(?![\w-])", re.IGNORECASE)
 LANGUES = ["en", "tr", "it", "pt-PT"]
@@ -76,13 +82,21 @@ class TestTextes(unittest.TestCase):
         self.assertEqual(valeurs("en")[CLE_PHRASE],
                          ["Prévo is an aid to keeping track; responsibility remains with the employer."])
 
+    def test_la_phrase_de_l_equipe_est_la_meme_dans_les_cinq_langues(self):
+        self.assertEqual(textes_langues.Langue("fr", RACINE, textes_langues.fichiers_de("fr")).entrees[CLE_PHRASE_EQUIPE][0],
+                         "equipe")
+        for code in ["fr"] + LANGUES:
+            with self.subTest(langue=code):
+                lues = valeurs(code)
+                self.assertEqual(lues[CLE_PHRASE_EQUIPE], lues[CLE_PHRASE])
+
 
 # Textes de l'écran : #contenu (titres, notes, formulaires, options des listes comprises).
 TEXTE_JS = "() => document.querySelector('#contenu').innerText"
 
 
-class TestEcransControles(CasNavigateur):
-    """Démo, profil Responsable : liste, formulaire de création, fiche."""
+class CasDemoResponsable(CasNavigateur):
+    """index.html en file://, « Essayer avec les données de démo », profil Responsable."""
 
     def setUp(self):
         super().setUp()
@@ -97,6 +111,10 @@ class TestEcransControles(CasNavigateur):
     def aller(self, route, selecteur):
         self.page.evaluate("(route) => { location.hash = route; }", route)
         self.page.wait_for_selector(selecteur)
+
+
+class TestEcransControles(CasDemoResponsable):
+    """Démo, profil Responsable : liste, formulaire de création, fiche."""
 
     def phrases(self):
         return self.page.eval_on_selector_all("#contenu .controles-principe",
@@ -122,6 +140,41 @@ class TestEcransControles(CasNavigateur):
         identifiant = self.page.evaluate("() => Donnees.lignes('controles_reglementaires')[0].id")
         self.aller("#/controles/" + identifiant, "#contenu .controles-source")
         self.verifier_ecran("fiche")
+
+
+class TestEcransHabilitations(CasDemoResponsable):
+    """Démo, profil Responsable : fiche d'un technicien (carte « Habilitations »), vue « à renouveler », fenêtre
+    « Ajouter une habilitation » (equipe-habilitations.js, T432)."""
+
+    def phrases(self, racine="#contenu"):
+        return self.page.eval_on_selector_all(racine + " .equipe-principe",
+                                              "elements => elements.filter((e) => e.getClientRects().length)"
+                                              ".map((e) => e.textContent.trim())")
+
+    def verifier_ecran(self, nom, racine="#contenu"):
+        with self.subTest(ecran=nom):
+            self.assertEqual(self.phrases(racine), [PHRASE])
+            texte = self.page.evaluate("(racine) => document.querySelector(racine).innerText", racine)
+            self.assertIn(PHRASE, texte)
+            self.assertIsNone(MOT_CONFORME.search(texte), "« conforme » sur l'écran %s" % nom)
+
+    def test_phrase_sur_les_ecrans_habilitations_et_jamais_conforme(self):
+        technicien = self.page.evaluate("() => Donnees.lignes('techniciens')[0].id")
+        self.aller("#/equipe/" + technicien, "#contenu .equipe-carte-habilitations")
+        self.verifier_ecran("fiche d'un technicien")
+        self.aller("#/equipe?filtre=a-renouveler", "#contenu .equipe-a-renouveler")
+        self.verifier_ecran("à renouveler")
+        self.aller("#/equipe/" + technicien, "#contenu #equipe-ajouter-habilitation")
+        self.page.click("#equipe-ajouter-habilitation")
+        self.page.wait_for_selector("dialog[open] [name=catalogue_id]")
+        self.verifier_ecran("fenêtre, saisie libre", "dialog[open]")
+        for ligne in ("H02", "H03", "H12", "H14"):
+            self.page.select_option("dialog[open] [name=catalogue_id]", ligne)
+            self.page.wait_for_selector("dialog[open] .equipe-type-encart:not([hidden])")
+            self.verifier_ecran("fenêtre, %s choisi" % ligne, "dialog[open]")
+            if ligne == "H03":
+                self.assertIn("à confirmer avec votre organisme de formation",
+                              self.page.inner_text("dialog[open] .equipe-type-encart .equipe-type-mention"))
 
 
 if __name__ == "__main__":

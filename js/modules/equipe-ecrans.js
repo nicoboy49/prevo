@@ -1,8 +1,10 @@
 'use strict';
 // Equipe (3/3) — écran « Équipe » (ARCHITECTURE.md §15.8, §15.2) : liste #/equipe (?etat=actifs|
 // inactifs|tous, ?recherche=, ?filtre=a-renouveler : habilitations échues ou à renouveler, lien de
-// l'accueil), création #/equipe/nouveau, fiche #/equipe/<id> (habilitations qui comptent avec leur
-// statut, renouvellement, correction, historique) ; puis l'enregistrement des écrans auprès d'App.
+// l'accueil), création #/equipe/nouveau, fiche #/equipe/<id> (carte « Habilitations », historique) ;
+// puis l'enregistrement des écrans auprès d'App. La carte « Habilitations » et les fenêtres Ajouter,
+// Renouveler, Corriger sont dans equipe-habilitations.js (2.2, T432), chargé après ce fichier : la fiche
+// les cherche au moment de l'appel (Equipe.interne.carteHabilitations, Equipe.interne.brancherHabilitations).
 // Profils : le responsable a tous les boutons ; le technicien consulte, SANS aucun taux horaire (ni
 // à l'écran ni dans le DOM : la valeur n'est jamais écrite dans la page) ; le demandeur n'a pas accès.
 // Lot 7 : le bouton « Accès » (comptes, appareils, journal des connexions) mène à #/equipe/acces,
@@ -11,8 +13,8 @@
 Object.assign(Equipe, (() => {
 
   // Règles et outils de equipe-regles.js et equipe-ecritures.js.
-  const { texte, dateIso, estActif, verifierHabilitation, CAPACITE_MAX_H } = Equipe.interne;
-  const { STATUTS_HABILITATION, habilitationsQuiComptent, aRenouveler } = Equipe;
+  const { texte, dateIso, estActif, CAPACITE_MAX_H } = Equipe.interne;
+  const { habilitationsQuiComptent, aRenouveler } = Equipe;
 
   const FILTRE_A_RENOUVELER = 'a-renouveler';
   const ETATS = ['actifs', 'inactifs', 'tous'];
@@ -237,6 +239,7 @@ Object.assign(Equipe, (() => {
       <article class="carte equipe-a-renouveler">
         ${alertes.length ? UI.html`<ul class="equipe-habilitations">${alertes.map(ligne)}</ul>`
           : UI.vide(I18n.t('equipe.arenouveler.aucune_habilitation_renouveler'), I18n.t('equipe.arenouveler.habilitations_techniciens_actifs_sont'), 'equipe')}
+        <p class="note equipe-principe">${I18n.t('equipe.principe.texte')}</p>
       </article></div>`);
   }
 
@@ -316,85 +319,8 @@ Object.assign(Equipe, (() => {
   }
 
   // ===========================================================================================
-  // 9. Fiche #/equipe/<id> : habilitations (ajout, renouvellement, correction), historique
+  // 9. Fiche #/equipe/<id> : carte « Habilitations » (equipe-habilitations.js), technicien, historique
   // ===========================================================================================
-
-  /** Intitulés déjà connus (habilitations et équipements) proposés à la saisie. */
-  function intitulesConnus() {
-    const connus = new Set();
-    Donnees.lignes('habilitations').forEach((h) => { if (texte(h.intitule)) connus.add(texte(h.intitule)); });
-    Donnees.lignes('equipements').forEach((e) => texte(e.habilitation_requise).split(',').map(texte).filter(Boolean).forEach((i) => connus.add(i)));
-    return Array.from(connus).sort((a, b) => UI.comparerTextes(a, b));
-  }
-
-  function champsHabilitation(habilitation, avecIntitule) {
-    const champs = [];
-    if (avecIntitule) {
-      const idListe = UI.identifiantUnique('equipe-intitules');
-      const bloc = UI.champ(definitionChamp('habilitations', 'intitule', { obligatoire: true }), habilitation ? habilitation.intitule : '',
-        { placeholder: I18n.t('equipe.champs_habilitation.ex_br_h_0'), attributs: { list: idListe, autocomplete: 'off' } });
-      bloc.appendChild(UI.element(UI.html`<datalist id="${idListe}">${intitulesConnus().map((i) => UI.html`<option value="${i}"></option>`)}</datalist>`));
-      champs.push(bloc);
-    }
-    champs.push(UI.champ(definitionChamp('habilitations', 'date_obtention', { obligatoire: true }),
-      habilitation ? habilitation.date_obtention : Donnees.aujourdhui()));
-    champs.push(UI.champ(definitionChamp('habilitations', 'date_echeance'), habilitation ? habilitation.date_echeance : '',
-      { aide: I18n.t('equipe.champs_habilitation.vide_habilitation_sans_echeance') }));
-    return champs;
-  }
-
-  async function ouvrirAjout(technicien) {
-    const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
-      titre: I18n.t('equipe.ouvrir_ajout.ajouter_habilitation'), libelleValider: I18n.t('commun.bouton.ajouter'),
-      introduction: UI.html`<p>${I18n.html('equipe.ouvrir_ajout.habilitation_habilitation_deja_utilisez', { nomAffiche: nomAffiche(technicien) })}</p>`,
-      champs: champsHabilitation(null, true),
-      verifier: verifierHabilitation,
-      action: (valeurs) => Equipe.ajouterHabilitation(technicien.id, valeurs),
-    });
-    if (fait) await apresEcriture(I18n.t('equipe.ouvrir_ajout.habilitation_ajoutee'));
-  }
-
-  async function ouvrirRenouvellement(habilitation) {
-    const echeance = dateIso(habilitation.date_echeance) ? UI.dateFr(habilitation.date_echeance) : I18n.t('equipe.ouvrir_renouvellement.aucune');
-    const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
-      titre: I18n.t('equipe.ouvrir_renouvellement.renouveler_habilitation'), libelleValider: I18n.t('equipe.ouvrir_renouvellement.renouveler'),
-      introduction: UI.html`<p>${I18n.html('equipe.ouvrir_renouvellement.echeance_actuelle_nouvelle_ligne', { intitule: habilitation.intitule, echeance })}</p>`,
-      champs: champsHabilitation(null, false),
-      verifier: (valeurs) => verifierHabilitation(Object.assign({ intitule: habilitation.intitule }, valeurs)),
-      action: (valeurs) => Equipe.renouvelerHabilitation(habilitation.id, valeurs),
-    });
-    if (fait) await apresEcriture(I18n.t('equipe.ouvrir_renouvellement.habilitation_renouvelee'));
-  }
-
-  async function ouvrirCorrection(habilitation) {
-    const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
-      titre: I18n.t('equipe.ouvrir_correction.corriger_habilitation'), libelleValider: I18n.t('commun.bouton.enregistrer'),
-      introduction: UI.html`<p>${I18n.t('equipe.ouvrir_correction.erreur_saisie_seulement_renouvellement')}</p>`,
-      champs: champsHabilitation(habilitation, true),
-      verifier: verifierHabilitation,
-      action: (valeurs) => Equipe.modifierHabilitation(habilitation.id, valeurs),
-    });
-    if (fait) await apresEcriture(I18n.t('equipe.ouvrir_correction.habilitation_corrigee'));
-  }
-
-  function carteHabilitations(technicien, responsable, jour) {
-    const liste = habilitationsAvecEtat(technicien.id, jour)
-      .sort((a, b) => STATUTS_HABILITATION.indexOf(a.etat.statut) - STATUTS_HABILITATION.indexOf(b.etat.statut)
-        || UI.comparerTextes(texte(a.habilitation.intitule), texte(b.habilitation.intitule)));
-    return UI.html`<article class="carte equipe-carte-habilitations">
-      <div class="entete-carte"><h2>${I18n.html('equipe.carte_habilitations.habilitations_nb_liste', { nbListe: liste.length })}</h2>
-        ${responsable ? UI.html`<button type="button" class="btn btn-secondaire" id="equipe-ajouter-habilitation">${UI.icone('ajouter')}${I18n.t('equipe.ouvrir_ajout.ajouter_habilitation')}</button>` : ''}</div>
-      ${liste.length ? UI.html`<ul class="equipe-habilitations">${liste.map(({ habilitation, etat }) => UI.html`<li>
-        <div class="equipe-tete"><b class="equipe-intitule">${habilitation.intitule}</b>${statutHtml(habilitation, etat)}</div>
-        <div class="equipe-dates">${dateIso(habilitation.date_echeance)
-    ? I18n.t('equipe.habilitations.obtenue_echeance', { obtention: UI.dateFr(habilitation.date_obtention), echeance: UI.dateFr(habilitation.date_echeance) })
-    : I18n.t('equipe.habilitations.obtenue_sans_echeance', { obtention: UI.dateFr(habilitation.date_obtention) })}</div>
-        ${responsable ? UI.html`<div class="actions equipe-actions">
-          <button type="button" class="btn btn-secondaire" data-action="renouveler" data-habilitation="${habilitation.id}">${UI.icone('actualiser')}${I18n.t('equipe.ouvrir_renouvellement.renouveler')}</button>
-          <button type="button" class="btn btn-fantome" data-action="corriger" data-habilitation="${habilitation.id}">${I18n.t('equipe.carte_habilitations.corriger')}</button></div>` : ''}
-      </li>`)}</ul>` : UI.html`<p class="muted">${I18n.t('equipe.carte_habilitations.aucune_habilitation_enregistree_technicien')}</p>`}
-    </article>`;
-  }
 
   /** Toutes les lignes d'habilitation du technicien (renouvellements compris), les plus récentes d'abord. */
   function carteHistorique(technicien) {
@@ -446,22 +372,18 @@ Object.assign(Equipe, (() => {
         ${estActif(technicien) ? '' : UI.html`<div class="alertes"><div class="alerte attention" role="status">${UI.icone('alerte')}
           <div class="alerte-texte">${I18n.html('equipe.fiche.technicien_desactive_plus_propose')}</div></div></div>`}
         <div class="grille equipe-grille">
-          <div class="c7">${carteHabilitations(technicien, responsable, jour)}</div>
+          <div class="c7">${Equipe.interne.carteHabilitations(technicien, responsable, jour)}</div>
           <div class="c5 equipe-zone-technicien"></div>
         </div>
         ${carteHistorique(technicien)}
       </div>`);
+    // Boutons de la carte « Habilitations » (responsable) et liens des justificatifs (equipe-habilitations.js).
+    Equipe.interne.brancherHabilitations(conteneur, technicien, responsable);
     const zone = UI.$('.equipe-zone-technicien', conteneur);
     if (!responsable) { UI.remplir(zone, carteDescription(technicien)); return; }
     const carte = UI.element(UI.html`<article class="carte"><h2>${I18n.t('equipe.carte_technicien.titre')}</h2></article>`);
     carte.appendChild(formulaireTechnicien(technicien));
     zone.appendChild(carte);
-    UI.$('#equipe-ajouter-habilitation', conteneur).addEventListener('click', () => ouvrirAjout(technicien));
-    UI.$$('button[data-action]', conteneur).forEach((bouton) => bouton.addEventListener('click', () => {
-      const habilitation = Donnees.trouver('habilitations', bouton.dataset.habilitation);
-      if (!habilitation) { UI.toast(I18n.t('equipe.fiche.habilitation_existe_plus_actualisez'), 'attention'); return; }
-      if (bouton.dataset.action === 'renouveler') ouvrirRenouvellement(habilitation); else ouvrirCorrection(habilitation);
-    }));
   }
 
   // ===========================================================================================
@@ -495,6 +417,9 @@ Object.assign(Equipe, (() => {
       afficher: afficherFiche,
     });
   });
+
+  // Outils d'écran prêtés à equipe-habilitations.js (carte « Habilitations » et fenêtres), chargé après ce fichier.
+  Object.assign(Equipe.interne, { nomAffiche, statutHtml, habilitationsAvecEtat, definitionChamp, apresEcriture });
 
   // libelleStatut : libellé d'un état calculé d'habilitation, aussi pour le wiki (fiche d'un technicien).
   return { libelleStatut };

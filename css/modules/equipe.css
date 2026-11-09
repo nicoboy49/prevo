@@ -32,6 +32,15 @@
 .equipe-intitule { color: var(--fort); font-weight: 800; }
 .equipe-dates { color: var(--texte-2); font-size: .9375rem; }
 .equipe-actions { justify-content: flex-start; }
+/* 2.2 (T432) : recyclage et nature de la source, type du catalogue, justificatif, rappel du CACES, phrase D182 */
+.equipe-details { display: flex; flex-direction: column; gap: .2rem; color: var(--texte-2); font-size: .9375rem; min-width: 0; }
+.equipe-recyclage .badge { margin-left: .4rem; }
+.equipe-ecart { color: var(--texte-ambre); margin-left: .5rem; }
+.equipe-justificatif-ligne { overflow-wrap: anywhere; }
+.equipe-justificatif-lien .icone { vertical-align: middle; }
+.equipe-rappel-caces { margin: 0; }
+.equipe-carte-habilitations .equipe-principe { margin-top: 1rem; }
+.equipe-a-renouveler .equipe-principe { margin-top: 1rem; }
 
 /* =========================================================================================
    3. Fiche d'un technicien, historique, fenêtres
@@ -45,6 +54,13 @@
 .equipe-lignes li:last-child { border-bottom: 0; }
 .equipe-lignes .muted { margin: 0; font-size: .875rem; }
 .equipe-fenetre p { margin: 0; }
+/* Fenêtre d'habilitation (T432) : encart du type du catalogue (contenu en français, lang="fr") */
+.equipe-type-encart { margin: 0; display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+.equipe-type-encart > * { margin: 0; }
+.equipe-type-encart dd { overflow-wrap: anywhere; }
+.equipe-type-liens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.equipe-type-liens a { overflow-wrap: anywhere; }
+.equipe-conduite b { color: var(--texte); }
 
 /* =========================================================================================
    4. Téléphone (≤ 640 px) : cartes sans cadre englobant, zones tactiles de 48 px
@@ -57,6 +73,7 @@
   .equipe-tete .equipe-lien { min-height: 48px; display: inline-flex; align-items: center; }
   .equipe-carte-habilitations .entete-carte .btn, .equipe-actions .btn { flex: 1 1 100%; }
   .equipe-statut { align-items: flex-start; }
+  .equipe-justificatif-lien, .equipe-type-liens a { display: inline-block; min-height: 48px; padding-top: .75rem; }
 }
 
 /* =========================================================================================

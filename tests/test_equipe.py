@@ -9,7 +9,9 @@ les statuts attendus sont recalculés en Python à la date du jour de l'applicat
 Familles (le nom du test le dit) :
     creation     : créer un technicien, lui ajouter une habilitation, la renouveler → 2 lignes,
                    l'ancienne intacte ; refus (nom vide, échéance avant l'obtention, capacité,
-                   taux, intitulé déjà présent) sans rien écrire ;
+                   taux, intitulé déjà présent) sans rien écrire ; fenêtres d'equipe-habilitations.js
+                   (2.2, T432 ; détail dans test_habilitations.py) : type « Autre (saisie libre) » par
+                   défaut, sans recyclage ; le renouvellement ne redemande pas l'intitulé ;
     statuts      : statuts des habilitations qui comptent sur la démo = calcul Python ;
                    ?filtre=a-renouveler = Equipe.aRenouveler = calcul Python ;
     desactivation: un technicien désactivé quitte la liste des actifs (confirmation demandée) ;
@@ -175,6 +177,8 @@ class TestCreation(CasEquipe):
             avant = habilitations.read_bytes()
             page.click("#equipe-ajouter-habilitation")
             page.wait_for_selector("dialog [name=intitule]")
+            self.assertEqual((page.input_value("dialog [name=catalogue_id]"), page.input_value("dialog [name=recyclage_mois]")),
+                             ("", ""))
             obtention = (aujourdhui - datetime.timedelta(days=1000)).isoformat()
             echeance = (aujourdhui + datetime.timedelta(days=20)).isoformat()
             page.fill("dialog [name=intitule]", "BR")
@@ -196,6 +200,7 @@ class TestCreation(CasEquipe):
             page.click("button[data-action='renouveler'][data-habilitation='%s']" % ancienne["id"])
             page.wait_for_selector("dialog [name=date_echeance]")
             self.assertEqual(page.input_value("dialog [name=date_obtention]"), aujourdhui.isoformat())
+            self.assertEqual(page.locator("dialog [name=intitule]").count(), 0)
             nouvelle_echeance = (aujourdhui + datetime.timedelta(days=3 * 365)).isoformat()
             page.fill("dialog [name=date_echeance]", nouvelle_echeance)
             self.valider_fenetre()
