@@ -3,7 +3,7 @@ js/modules/indicateurs-graphiques.js, js/modules/indicateurs-ecrans.js, css/modu
 
 Familles (le nom du test le dit) :
     echarts      : ECharts absent à l'état « prêt » et sur l'accueil, chargé à l'ouverture de
-                   #/indicateurs ; sept graphiques rendus en SVG ; un échec de chargement laisse un
+                   #/indicateurs ; huit graphiques rendus en SVG ; un échec de chargement laisse un
                    message clair dans chaque carte et les tableaux « Voir les valeurs » visibles ;
     instruments  : chaque valeur du bandeau = Indicateurs.global(période, filtres) arrondie (heures et
                    % à 1 décimale, euros à 2) ; une valeur null affiche sa raison ; effectifs visibles ;
@@ -42,7 +42,8 @@ from pathlib import Path
 
 from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
 
-GRAPHIQUES = ["pareto-pannes", "pareto-arrets", "heures-mois", "mtbf-a", "mttr-a", "causes", "charge"]
+# « pareto-cout » : Pareto du coût de l'arrêt (2.2, T474 ; détaillé par tests/test_indicateurs_cout_arret.py).
+GRAPHIQUES = ["pareto-pannes", "pareto-arrets", "pareto-cout", "heures-mois", "mtbf-a", "mttr-a", "causes", "charge"]
 INSTRUMENTS = {
     # data-indicateur : (clé de Indicateurs.global, unité affichée)
     "disponibilite": ("disponibilite", "%"), "mtbf": ("mtbf", "h"), "mttr": ("mttr", "h"),
@@ -124,9 +125,12 @@ ATTENDUS_GRAPHIQUES_JS = """() => {
   const nom = (t) => ((t.prenom || '') + ' ' + (t.nom || '')).trim() || t.id;
   const resultatA = (cle) => Indicateurs.mtbfMttrCriticiteA(p).filter((l) => garderA(l.equipementId))
     .map((l) => [repere(l.equipementId), l[cle].valeur === null ? l[cle].raison : a(l[cle].valeur, 1)]);
+  const coutsHoraires = new Map(Indicateurs.coutArret(p, filtres).parEquipement.map((l) => [l.equipementId, l.coutHoraireCentimes / 100]));
   return {
     'pareto-pannes': Indicateurs.paretoPannes(p, 10, filtres).map((l) => [repere(l.equipementId), l.valeur, a(l.cumulPct, 1)]),
     'pareto-arrets': Indicateurs.paretoArrets(p, 10, filtres).map((l) => [repere(l.equipementId), a(l.valeur, 1), a(l.cumulPct, 1)]),
+    'pareto-cout': Indicateurs.paretoCoutArret(p, 10, filtres).map((l) => [repere(l.equipementId), a(l.heures, 2),
+      coutsHoraires.get(l.equipementId), l.centimes / 100, a(l.cumulPct, 1)]),
     'heures-mois': Indicateurs.heuresParMois(p.fin.slice(0, 7), 12, filtres)
       .map((l) => [l.mois.slice(5, 7) + '/' + l.mois.slice(0, 4), a(l.correctif, 1), a(l.preventif, 1), a(l.autres, 1)]),
     'mtbf-a': resultatA('mtbf'),
@@ -487,7 +491,7 @@ class TestIndicateursServeur(CasIndicateurs):
                         else:
                             self.assertEqual(lu, attendu)
         # Le jeu de démo remplit ces graphiques (sinon le test ne prouverait rien)
-        for graphique in ("pareto-pannes", "pareto-arrets", "heures-mois", "mtbf-a", "causes", "charge"):
+        for graphique in ("pareto-pannes", "pareto-arrets", "pareto-cout", "heures-mois", "mtbf-a", "causes", "charge"):
             self.assertGreater(len(attendus[graphique]), 0, graphique)
 
     def test_graphiques_un_seul_axe_de_valeurs_legende_des_deux_series_et_palette_daltonisme(self):

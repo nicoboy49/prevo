@@ -4,8 +4,10 @@
 //   - onglet « Tableau de bord » : période (?periode=mois|mois-precedent|3-mois|12-mois|du-au,
 //     ?du=, ?au=), filtres criticité et atelier (?criticite=, ?atelier=) ; bandeau d'instruments
 //     (chaque valeur non calculable dit pourquoi ; effectifs visibles ; « dont attente de pièces »
-//     sous le MTTR quand elle est calculable) ; encadré « Comprendre » ; sept graphiques
-//     (Indicateurs.graphique) ; délais de prise en charge ; tableau par équipement trié par clic ;
+//     sous le MTTR quand elle est calculable) ; encadré « Comprendre » ; huit graphiques
+//     (Indicateurs.graphique), dont le Pareto du coût de l'arrêt suivi de la carte « Non chiffré »
+//     (2.2, D188, CS174 : responsable seulement, jamais estimé) ; délais de prise en charge ;
+//     tableau par équipement trié par clic ;
 //   - onglet « Rapports mensuels » (?onglet=rapports) : Rapport.afficherOnglet (rapport-*.js) s'il
 //     existe.
 // Les réglages restent dans l'adresse (history.replaceState) : un lien ou un rechargement rouvre la
@@ -146,6 +148,9 @@ Object.assign(Indicateurs, (() => {
     reglages.periode = periode.code;                 // « du-au » sans dates valables → 12 mois
     const filtres = { criticite: reglages.criticite, atelier: reglages.atelier };
     const global = Indicateurs.global(periode, filtres, jour);
+    // Coût de l'arrêt (D188) : montré au seul profil qui a les coûts (D126 : le serveur cache cout_arret_h au
+    // technicien et au demandeur, qui y verraient de faux « non chiffré »).
+    const coutArret = App.estResponsable() ? Indicateurs.coutArret(periode, filtres) : null;
     UI.$('#indicateurs-periode', formulaire).value = periode.code;
     UI.$$('.indicateurs-date', formulaire).forEach((bloc) => { bloc.hidden = periode.code !== 'du-au'; });
     Object.assign(zone.dataset, {
@@ -155,7 +160,7 @@ Object.assign(Indicateurs, (() => {
     UI.remplir(zone, UI.html`
       <p class="indicateurs-resume" aria-live="polite">${periode.libelle}${resumeFiltres(filtres)}</p>
       <div class="instruments indicateurs-instruments">${instruments(global, jour)}</div>
-      ${comprendre(global)}
+      ${comprendre(global, coutArret !== null)}
       <div class="grille indicateurs-graphiques"></div>
       <div class="grille">
         <article class="carte c12 indicateurs-delais"><h2>${I18n.t('indicateurs.resultats.delais_prise_charge')}</h2>${delais(global.delais)}</article>
@@ -164,7 +169,7 @@ Object.assign(Indicateurs, (() => {
           <div class="indicateurs-equipements"></div></article>
       </div>`);
     UI.$('.indicateurs-equipements', zone).appendChild(tableauEquipements(periode, filtres));
-    dessinerGraphiques(UI.$('.indicateurs-graphiques', zone), periode, filtres, jour);
+    dessinerGraphiques(UI.$('.indicateurs-graphiques', zone), periode, filtres, jour, coutArret);
   }
 
   function resumeFiltres(filtres) {
@@ -277,7 +282,7 @@ Object.assign(Indicateurs, (() => {
     return lignes;
   }
 
-  function comprendre(global) {
+  function comprendre(global, avecCoutArret) {
     const tolerance = Donnees.parametre('tolerance_preventif_pct', '10');
     const manques = nonCalculables(global);
     return UI.html`<details class="encadre indicateurs-comprendre"><summary>${I18n.t('indicateurs.comprendre.comprendre_indicateurs')}</summary>
@@ -294,6 +299,7 @@ Object.assign(Indicateurs, (() => {
         <li>${I18n.html('indicateurs.comprendre.ot_retard_ot_ouverts')}</li>
         <li>${I18n.html('indicateurs.comprendre.delai_prise_charge_temps')}</li>
         <li>${I18n.html('indicateurs.comprendre.cout_main_uvre_pieces')}</li>
+        ${avecCoutArret ? UI.html`<li>${I18n.html('indicateurs.comprendre.cout_arret_pannes_duree')}</li>` : ''}
         <li>${I18n.html('indicateurs.comprendre.valeur_stock_stock_prix')}</li>
       </ul>
       ${manques.length ? UI.html`<h3>${I18n.t('indicateurs.comprendre.non_calculable_selection')}</h3><ul class="indicateurs-manques">${manques}</ul>` : ''}
@@ -317,7 +323,7 @@ Object.assign(Indicateurs, (() => {
   }
 
   // ===========================================================================================
-  // 17. Les sept graphiques (séries des règles → Indicateurs.graphique)
+  // 17. Les huit graphiques (séries des règles → Indicateurs.graphique) et la carte « Non chiffré »
   // ===========================================================================================
 
   function repere(equipementId) {
@@ -353,6 +359,84 @@ Object.assign(Indicateurs, (() => {
         colonnes: [COLONNE_EQUIPEMENT, { cle: 'valeur', libelle: I18n.t('indicateurs.graphe_paretos.duree_arret_h'), type: 'nombre', decimales: 1 }, cumul],
         lignes: arrets, hauteur: Indicateurs.options.hauteurBarres(arrets.length), vide: arrets.length ? '' : I18n.t('indicateurs.graphe_paretos.aucune_duree_arret_saisie') },
     ];
+  }
+
+  // Coût de l'arrêt (2.2, D188, CS174) : Indicateurs.coutArret et paretoCoutArret (indicateurs-series.js §8), au
+  // centime. Rien n'est estimé : un équipement sans coût horaire et une panne sans durée ne sont pas comptés, ils
+  // sont listés dans la carte « Non chiffré », en entier (le rapport mensuel n'en cite que 8 et renvoie ici).
+
+  /** Ce qui manque au calcul : « 1 équipement non chiffré, 1 OT sans durée » ('' quand il est complet). */
+  function manqueCoutArret(calcul) {
+    const morceaux = [];
+    if (calcul.nonChiffres.length) morceaux.push(I18n.t('indicateurs.graphe_cout_arret.equipements_non_chiffres', { n: calcul.nonChiffres.length }));
+    if (calcul.sansDuree.length) morceaux.push(I18n.t('indicateurs.graphe_cout_arret.ot_sans_duree', { n: calcul.sansDuree.length }));
+    return morceaux.join(', ');
+  }
+
+  /** 3ᵉ Pareto : les 10 équipements dont l'arrêt a le plus coûté ; total de la période (« non chiffré » quand des
+   *  pannes existent et qu'aucune n'est chiffrée : jamais un faux 0,00 €) et, si incomplet, « Partiel : … ». */
+  function grapheCoutArret(periode, filtres, calcul) {
+    const coutsHoraires = new Map(calcul.parEquipement.map((ligne) => [ligne.equipementId, ligne.coutHoraireCentimes]));
+    const lignes = Indicateurs.paretoCoutArret(periode, 10, filtres).map((ligne) => ({
+      equipement: repere(ligne.equipementId), libelle: repere(ligne.equipementId), heures: ligne.heures,
+      coutHoraire: coutsHoraires.get(ligne.equipementId) / 100, valeur: ligne.valeur, cumulPct: ligne.cumulPct }));
+    const sansPanne = calcul.complet && !calcul.parEquipement.length;
+    const total = calcul.parEquipement.length || calcul.complet ? formats.euros(calcul.total) : I18n.t('indicateurs.graphe_cout_arret.non_chiffre');
+    const manque = manqueCoutArret(calcul);
+    const devise = UI.symboleDevise();
+    const euros = (cle, libelle) => ({ cle, libelle, type: 'nombre', decimales: 2 });
+    return {
+      id: 'pareto-cout', titre: I18n.t('indicateurs.graphe_cout_arret.pareto_cout_arret'), sousTitre: I18n.t('indicateurs.graphe_cout_arret.cout_arret_10_equipements'),
+      option: Indicateurs.options.pareto(lignes, I18n.t('indicateurs.graphe_cout_arret.cout_arret'), formats.euros),
+      notes: [I18n.t('indicateurs.graphe_cout_arret.total_periode', { total })].concat(manque ? [I18n.t('indicateurs.graphe_cout_arret.partiel', { manque })] : []),
+      colonnes: [COLONNE_EQUIPEMENT, { cle: 'heures', libelle: I18n.t('indicateurs.graphe_cout_arret.heures_arret'), type: 'nombre', decimales: 2 },
+        euros('coutHoraire', I18n.t('indicateurs.graphe_cout_arret.cout_heure', { devise })), euros('valeur', I18n.t('indicateurs.graphe_cout_arret.cout_arret_devise', { devise })),
+        { cle: 'cumulPct', libelle: I18n.t('indicateurs.graphe_paretos.cumul'), type: 'nombre', decimales: 1 }],
+      lignes, hauteur: Indicateurs.options.hauteurBarres(lignes.length),
+      vide: lignes.length ? '' : I18n.t(sansPanne ? 'indicateurs.graphe_paretos.aucune_panne_periode' : 'indicateurs.graphe_cout_arret.aucun_cout_chiffre'),
+    };
+  }
+
+  /** Repère de l'équipement, en lien vers sa fiche (texte seul s'il est introuvable). */
+  function lienEquipement(equipementId) {
+    if (!Donnees.trouver('equipements', equipementId)) return equipementId;
+    return UI.html`<a href="#/equipement/${encodeURIComponent(equipementId)}">${repere(equipementId)}</a>`;
+  }
+
+  /** Lignes visibles d'une liste de la carte « Non chiffré » ; les suivantes sont repliées (toujours à l'écran). */
+  const LIGNES_VISIBLES = 5;
+
+  /** Tableau de la carte : titre, deux colonnes, les LIGNES_VISIBLES premières lignes puis « Voir les n autres ». */
+  function tableauNonChiffre(classe, titre, entetes, lignes) {
+    const tableau = (morceau) => UI.html`<div class="table-defile"><table class="table ${classe}">
+      <caption class="visuellement-cache">${titre}</caption>
+      <thead><tr>${entetes.map(([libelle, num]) => UI.html`<th scope="col"${num ? UI.brut(' class="num"') : ''}>${libelle}</th>`)}</tr></thead>
+      <tbody>${morceau}</tbody></table></div>`;
+    const suite = lignes.slice(LIGNES_VISIBLES);
+    return UI.html`<h3>${titre}</h3>${tableau(lignes.slice(0, LIGNES_VISIBLES))}
+      ${suite.length ? UI.html`<details class="vue-tableau indicateurs-suite"><summary>${I18n.t('indicateurs.carte_non_chiffre.voir_autres', { n: suite.length })}</summary>${tableau(suite)}</details>` : ''}`;
+  }
+
+  /** Carte « Non chiffré » : équipements sans coût horaire (heures d'arrêt, lien « Saisir le coût horaire » vers la
+   *  modification de la fiche) et OT sans durée (lien vers l'OT, raison), tous listés (au-delà de 5, repliés). Deux
+   *  colonnes, pour tenir à 375 px : le lien d'action et la raison vont sous le repère. */
+  function carteNonChiffre(calcul) {
+    const equipements = calcul.nonChiffres.map((ligne) => {
+      const saisir = Donnees.trouver('equipements', ligne.equipementId) ? UI.html`<br><a class="indicateurs-saisir-cout" href="#/equipement/${encodeURIComponent(ligne.equipementId)}/modifier"
+        aria-label="${I18n.t('indicateurs.carte_non_chiffre.saisir_cout_horaire_repere', { repere: repere(ligne.equipementId) })}">${I18n.t('indicateurs.carte_non_chiffre.saisir_cout_horaire')}</a>` : '';
+      return UI.html`<tr data-equipement="${ligne.equipementId}"><td>${lienEquipement(ligne.equipementId)}${saisir}</td><td class="num">${UI.heures(ligne.heures)}</td></tr>`;
+    });
+    const ots = calcul.sansDuree.map((ligne) => UI.html`<tr data-ot="${ligne.otId}"><td><a href="#/ot/${encodeURIComponent(ligne.otId)}">${ligne.otId}</a><br><small class="indicateurs-raison">${ligne.raison}</small></td><td>${lienEquipement(ligne.equipementId)}</td></tr>`);
+    let resume = I18n.t('indicateurs.carte_non_chiffre.rien_estime');
+    if (calcul.complet) resume = I18n.t(calcul.parEquipement.length ? 'indicateurs.carte_non_chiffre.tout_chiffre' : 'indicateurs.graphe_paretos.aucune_panne_periode');
+    return UI.element(UI.html`<article class="carte c6 indicateurs-non-chiffre" data-complet="${calcul.complet ? '1' : '0'}">
+      <div class="entete-carte"><h2>${I18n.t('indicateurs.carte_non_chiffre.non_chiffre')}</h2></div>
+      <p class="note">${resume}</p>
+      ${equipements.length ? tableauNonChiffre('indicateurs-non-chiffres', I18n.t('indicateurs.carte_non_chiffre.equipements_sans_cout_horaire'),
+        [[I18n.t('commun.champ.equipement')], [I18n.t('indicateurs.graphe_cout_arret.heures_arret'), true]], equipements) : ''}
+      ${ots.length ? tableauNonChiffre('indicateurs-sans-duree', I18n.t('indicateurs.carte_non_chiffre.ot_sans_duree'),
+        [[I18n.t('indicateurs.carte_non_chiffre.ot')], [I18n.t('commun.champ.equipement')]], ots) : ''}
+    </article>`);
   }
 
   function grapheHeures(periode, filtres) {
@@ -420,16 +504,22 @@ Object.assign(Indicateurs, (() => {
     };
   }
 
-  /** Les sept graphiques, lancés ensemble (ECharts est chargé une seule fois pour tous). */
-  function dessinerGraphiques(conteneur, periode, filtres, jour) {
+  /** Les graphiques, lancés ensemble (ECharts est chargé une seule fois pour tous) ; `coutArret` (null : profil sans
+   *  les coûts) ajoute le Pareto du coût de l'arrêt et, à côté, la carte « Non chiffré ». Indicateurs.graphique pose
+   *  sa carte avant tout chargement : l'ordre des cartes est celui des appels. */
+  function dessinerGraphiques(conteneur, periode, filtres, jour, coutArret) {
     const suffixe = '-' + periode.debut + '-au-' + periode.fin;
     const listeA = equipementsA(periode, filtres);
-    [].concat(grapheParetos(periode, filtres), [grapheHeures(periode, filtres),
-      grapheCriticiteA(listeA, filtres, 'mtbf', 'MTBF'), grapheCriticiteA(listeA, filtres, 'mttr', 'MTTR'),
-      grapheCauses(periode, filtres), grapheCharge(jour)])
-      .forEach((definition) => {
-        Indicateurs.graphique(conteneur, Object.assign({ classe: 'c6', nomFichier: 'indicateurs-' + definition.id + suffixe }, definition));
-      });
+    const dessiner = (definition) => {
+      Indicateurs.graphique(conteneur, Object.assign({ classe: 'c6', nomFichier: 'indicateurs-' + definition.id + suffixe }, definition));
+    };
+    grapheParetos(periode, filtres).forEach(dessiner);
+    if (coutArret) {
+      dessiner(grapheCoutArret(periode, filtres, coutArret));
+      conteneur.appendChild(carteNonChiffre(coutArret));
+    }
+    [grapheHeures(periode, filtres), grapheCriticiteA(listeA, filtres, 'mtbf', 'MTBF'), grapheCriticiteA(listeA, filtres, 'mttr', 'MTTR'),
+      grapheCauses(periode, filtres), grapheCharge(jour)].forEach(dessiner);
   }
 
   // ===========================================================================================
