@@ -1658,9 +1658,9 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   sans l'habilitation exigée valide à cette date → `ErreurValidation` dont `erreur.habilitation` = `{ otId,
   technicienId, date, manquantes }`, rien n'est écrit. `options` = `{ passerOutreHabilitation, motifDerogation }`
   (responsable seul, motif obligatoire) : le marqueur « dérogation habilitation : … » est alors ajouté à l'action du
-  journal de la même écriture. Le retour est `{ statut, avertissements: [] }` (toujours vide). **État à ce jour** : la
-  couche d'écriture est faite (T437) ; l'écran `#/planning` (glisser et « Planifier… ») ne gère pas encore la
-  fenêtre de dérogation (T439, pas encore intégrée) : il affiche le refus comme celui de RG3.
+  journal de la même écriture. Le retour est `{ statut, avertissements: [] }` (toujours vide). Écran (T439) : glisser
+  et « Planifier… » passent par `Ordres.avecDerogation` (refus → fenêtre « Habilitation exigée non valide » du
+  responsable ; Annuler n'écrit rien et redit le refus dans le bandeau ; technicien : lecture, aucune fenêtre).
 - Écran `#/planning` (`?semaine=AAAA-MM-JJ`, un lundi ; `?technicien=`) : grille lundi → dimanche
   (samedi et dimanche grisés), une ligne par technicien (« 38 h / 35 h », badge « surcharge » en
   texte), colonne « À planifier ». Glisser (API HTML5 drag and drop) une carte `Préparé` ou
