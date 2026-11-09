@@ -465,6 +465,7 @@ const App = (() => {
     tablesDitesAbimees.clear();
     abimesAvantProfil.clear();
     profilPose = false;
+    tablesLaissees = [];
     Donnees.initialiser(adaptateur, { poste, profil: '' });
     // Lot 7 (§22.4) : comptes exigés → connexion (ou mot de passe à choisir) AVANT toute lecture de table, sinon
     // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide). T298 : la page
@@ -511,10 +512,14 @@ const App = (() => {
     appliquerProfil(profilChoisi);
     profilPose = true;
     if (formatEnAttente && estResponsable()) alertesCoque.push(bandeauFormatEnAttente(formatEnAttente));
+    // T408 (règle de T201) : tables laissées par le passage au format, dites selon le profil, une fois celui-ci connu :
+    // au responsable son bandeau (bandeauFichiersLaisses) ; aux autres, sans jargon, avec les autres fichiers abîmés.
+    const laisseesDites = estResponsable() ? tablesLaissees : [];
+    if (laisseesDites.length) alertesCoque.push(bandeauFichiersLaisses(laisseesDites));
     // Fichiers abîmés (T197) : jamais réécrits ; on le dit tout de suite, avant qu'une écriture soit refusée. T406 : avec
     // ceux qu'une écriture du passage au format a trouvés (abimesAvantProfil : ligne de journal refusée).
-    const abimes = lectureSeule ? [] : Array.from(new Set(Donnees.tablesAbimees().concat(Array.from(abimesAvantProfil))))
-      .filter((t) => !tablesLaissees.includes(t) && !tablesDitesAbimees.has(t));
+    const abimes = lectureSeule ? [] : Array.from(new Set(Donnees.tablesAbimees().concat(Array.from(abimesAvantProfil),
+      tablesLaissees))).filter((t) => !laisseesDites.includes(t) && !tablesDitesAbimees.has(t));
     depuisAbimes = await lireDepuisAbimes(lectureSeule, abimes.length > 0);
     abimes.forEach((t) => tablesDitesAbimees.add(t));
     if (abimes.length) alertesCoque.push(bandeauFichiersAbimes(abimes));
@@ -610,7 +615,7 @@ const App = (() => {
   //   - dossier et démo : Donnees.migrerAuFormatCourant (sauvegarde « avant-format-vN » d'abord, sans effet si
   //     c'est déjà fait). Sauvegarde impossible : erreur signalée et bandeau dans la coque, rien n'est écrit,
   //     l'application reste utilisable et le passage sera retenté à la prochaine ouverture. Tables abîmées,
-  //     laissées telles quelles : bandeau.
+  //     laissées telles quelles : notées (tablesLaissees), bandeau posé après le choix du profil (T408).
   // Renvoie true si les fichiers sont au format courant (passage fait, ou rien à faire), false sinon.
   async function passerAuFormatCourant() {
     if (Donnees.lectureSeule()) return false;
@@ -621,8 +626,7 @@ const App = (() => {
         return formatEnAttente === null;
       }
       const resultat = await Donnees.migrerAuFormatCourant();
-      if (resultat.abimees.length) alertesCoque.push(bandeauFichiersLaisses(resultat.abimees));
-      tablesLaissees = resultat.abimees.slice();
+      tablesLaissees = resultat.abimees.slice();       // T408 : dites après le choix du profil (texte selon le rôle)
       return true;
     } catch (erreur) {
       // T204 : parametres.csv abîmé, passage refusé sans rien écrire (Donnees.migrerAuFormatCourant) ; le bandeau
@@ -645,7 +649,8 @@ const App = (() => {
   }
 
   // Tables laissées telles quelles par le passage au format courant (en-tête illisible, ou fichier abîmé qu'une
-  // réécriture ferait perdre en partie) : jamais réécrites.
+  // réécriture ferait perdre en partie) : jamais réécrites. Bandeau du responsable ; les autres profils ont celui de
+  // bandeauFichiersAbimes (T408, règle de T201).
   function bandeauFichiersLaisses(tables) {
     const fichiers = tables.map((nomTable) => (Schema.table(nomTable) || {}).fichier || nomTable + '.csv').join(', ');
     const titre = tables.length > 1 ? I18n.t('socle.bandeau_fichiers_laisses.fichiers_abimes_laisses_tels') : I18n.t('socle.bandeau_fichiers_laisses.fichier_abime_laisse_tel');

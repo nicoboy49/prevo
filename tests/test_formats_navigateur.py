@@ -23,7 +23,9 @@ toujours dans un dossier temporaire, puis dans l'OPFS du navigateur : jamais de 
                entete-tronque dans une base au format 2, ordres_travail.csv au format 2 avec une valeur au-delà
                de l'en-tête (CS140 : la réécriture la perdrait), controles_reglementaires.csv abîmé de même : le
                fichier abîmé n'est jamais réécrit, il est signalé (problème « erreur » et bandeau), le reste passe au
-               format 4 (contrôles abîmés : aucune réserve reprise) ;
+               format 4 (contrôles abîmés : aucune réserve reprise) ; bandeau selon le profil (règle de T201, T408) :
+               demandeur et technicien « Fichier abîmé : prévenez le responsable », sans jargon ; le responsable garde
+               le sien (« laissé tel quel »), et a celui des fichiers abîmés à l'ouverture suivante ;
                sauvegarde impossible : rien n'est écrit, bandeau, pas d'OT préventifs ; l'ouverture suivante passe ;
     format 4  : f4-v2.2.0 (T394, base au format 4) en dossier → rien à migrer ni à reprendre : aucune sauvegarde
                avant-format-v4, aucune ligne de journal, aucun fichier changé, réserves, garanties et contrats lus ;
@@ -141,6 +143,14 @@ ATTENDUS = {
 FICHIERS_ABIMES = "fichiers-abimes.json"
 JEUX_ABIMES = {"entete-tronque"}
 MOTIF_DEPUIS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+# Règle de T201 (décision du 04/11), appliquée au bandeau du passage par T408 : un fichier laissé tel quel est dit au
+# responsable avec son bandeau (fichier cité, « tel quel ») ; au technicien et au demandeur, sans jargon.
+BANDEAU_NON_RESPONSABLE = ("Fichier abîmé : prévenez le responsable. Tant qu'il n'est pas réparé, Prévo refuse les "
+                           "enregistrements qui le touchent, sans rien perdre.")
+JARGON = ("tel quel", "en-tête", "format", ".csv")
+TECHNICIEN = "TEC-0001"
+BANDEAUX_JS = """() => Array.from(document.querySelectorAll('#alertes-app > *'))
+  .map((e) => e.textContent.replace(/\\s+/g, ' ').trim())"""
 
 # ---------------------------------------------------------------------------
 # Dossier simulé (OPFS) : écriture des fichiers d'un jeu, instantané de tout le dossier
@@ -266,9 +276,10 @@ class CasFormats(CasNavigateur):
         return {chemin: base64.b64decode(valeur) for chemin, valeur in brut.items()}
 
     def ouvrir_dossier(self, statique, fichiers, profil="demandeur"):
-        """Application ouverte (état « prêt ») sur un dossier simulé qui contient `fichiers`."""
+        """Application ouverte (état « prêt ») sur un dossier simulé qui contient `fichiers` (technicien : TEC-0001)."""
         installer_dossier_simule(self.contexte, NOM_DOSSIER)
-        preregler_profil(self.contexte, profil, nom="Lucie Essai")
+        preregler_profil(self.contexte, profil, nom="Lucie Essai",
+                         technicien_id=TECHNICIEN if profil == "technicien" else "")
         self.page.goto(statique.url + "/index.html")
         self.page.wait_for_function("document.documentElement.dataset.etat === 'demarrage'")
         envoyes = {chemin: base64.b64encode(octets).decode("ascii") for chemin, octets in fichiers.items()}
@@ -491,10 +502,24 @@ class TestDossierPassage(CasFormats):
         self.verifier_passage("reserves-a-reprendre", origine=origine,
                               attendus=(TABLES_DU_FORMAT_4 | {RESERVES}, [PASSAGE_4], attendues))
 
+    def verifier_bandeau_laissee(self, profil, fichier):
+        """Bandeau « Fichier abîmé » de l'ouverture, selon le profil (règle de T201, T408) : un seul ; au responsable le
+        sien (fichier cité, « tel quel ») ; au technicien et au demandeur « prévenez le responsable », sans jargon."""
+        bandeaux = [b for b in self.page.evaluate(BANDEAUX_JS) if "abîmé" in b]
+        self.assertEqual(len(bandeaux), 1, bandeaux)
+        if profil == "responsable":
+            self.assertIn("Fichier abîmé laissé tel quel : %s." % fichier, bandeaux[0])
+            self.assertNotIn("prévenez le responsable", bandeaux[0])
+            return
+        self.assertIn(BANDEAU_NON_RESPONSABLE, bandeaux[0])
+        for mot in JARGON:
+            self.assertNotIn(mot, bandeaux[0].lower())
+
     def verifier_table_laissee(self, origine, nom_table, changes_attendus, journal_attendu, reserves_attendues):
-        """Ouverture d'une base dont `nom_table` est abîmée : elle n'est jamais réécrite, elle est signalée (problème
-        « erreur » et bandeau), le reste passe au format 4 (`changes_attendus` réécrits, `reserves_attendues` reprises :
-        [] → pas de reserves_controle.csv) ; une seconde ouverture n'écrit rien."""
+        """Ouverture par le demandeur d'une base dont `nom_table` est abîmée : elle n'est jamais réécrite, elle est
+        signalée (problème « erreur » ; bandeau sans jargon, T408), le reste passe au format 4 (`changes_attendus`
+        réécrits, `reserves_attendues` reprises : [] → pas de reserves_controle.csv) ; une seconde ouverture n'écrit
+        rien."""
         with ServeurStatique(RACINE) as statique:
             self.ouvrir_dossier(statique, origine)
             apres = self.instantane()
@@ -515,9 +540,7 @@ class TestDossierPassage(CasFormats):
             signale = self.page.evaluate("""(t) => Donnees.problemes().filter((p) => p.table === t
                 && p.gravite === 'erreur' && p.message.includes('le laisse tel quel')).length""", nom_table)
             self.assertEqual(signale, 1)
-            alertes = self.page.inner_text("#alertes-app")
-            self.assertIn(fichier, alertes)
-            self.assertIn("tel quel", alertes)
+            self.verifier_bandeau_laissee("demandeur", fichier)
             # Seconde ouverture : rien n'est écrit.
             self.rouvrir_dossier()
             self.assertEqual({c: o for c, o in self.instantane().items() if c != VERROU},
@@ -551,6 +574,35 @@ class TestDossierPassage(CasFormats):
         self.verifier_table_laissee(origine, "controles_reglementaires",
                                     {"equipements.csv", "ordres_travail.csv", "habilitations.csv"}, [PASSAGE_4], [])
         self.assertEqual(self.page.evaluate("Donnees.lignes('reserves_controle').length"), 0)
+
+    def test_entete_tronque_technicien_sans_jargon_puis_bandeau_du_responsable_a_sa_connexion(self):
+        """Règle de T201 (T408) : le technicien ouvre la base au format 3 dont le passage laisse ordres_travail.csv tel
+        quel : « Fichier abîmé : prévenez le responsable », sans jargon. À l'ouverture suivante, le responsable a le
+        bandeau « Fichier abîmé » du responsable (fichier cité, Contrôle de la base). Le fichier n'est jamais réécrit."""
+        origine = fichiers_du_jeu("entete-tronque")
+        with ServeurStatique(RACINE) as statique:
+            self.ouvrir_dossier(statique, origine, profil="technicien")
+            self.assertEqual(self.page.evaluate("App.profil.type"), "technicien")
+            self.assertEqual(version_schema(self.instantane()["parametres.csv"]), str(FORMAT_COURANT))
+            self.verifier_bandeau_laissee("technicien", "ordres_travail.csv")
+            self.page.evaluate("localStorage.setItem('prevo.profil', JSON.stringify({type: 'responsable', nom: '', "
+                               "technicienId: ''}))")
+            self.rouvrir_dossier()
+            self.assertEqual(self.page.evaluate("App.profil.type"), "responsable")
+            bandeaux = [b for b in self.page.evaluate(BANDEAUX_JS) if "abîmé" in b]
+            self.assertEqual(len(bandeaux), 1, bandeaux)
+            self.assertIn("Fichier abîmé : ordres_travail.csv, repéré aujourd'hui.", bandeaux[0])
+            self.assertIn("Paramètres › Contrôle de la base", bandeaux[0])
+            self.assertEqual(self.instantane()["ordres_travail.csv"], origine["ordres_travail.csv"])
+
+    def test_entete_tronque_le_responsable_garde_son_bandeau_au_passage(self):
+        """T408 : le responsable qui ouvre la même base garde le bandeau du passage (fichier cité, « tel quel »)."""
+        origine = fichiers_du_jeu("entete-tronque")
+        with ServeurStatique(RACINE) as statique:
+            self.ouvrir_dossier(statique, origine, profil="responsable")
+            self.assertEqual(version_schema(self.instantane()["parametres.csv"]), str(FORMAT_COURANT))
+            self.verifier_bandeau_laissee("responsable", "ordres_travail.csv")
+            self.assertEqual(self.instantane()["ordres_travail.csv"], origine["ordres_travail.csv"])
 
     def test_sauvegarde_impossible_rien_n_est_ecrit_puis_passage_a_l_ouverture_suivante(self):
         origine = fichiers_du_jeu("f2-v1.1.0")
