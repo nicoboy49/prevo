@@ -129,15 +129,21 @@ def octets_reserves_attendus(jeu):
 
 
 def base_cible():
-    """{chemin : octets} de la base qui reçoit l'import : la démo (format courant, une réserve), plus une garantie et
+    """{chemin : octets} de la base qui reçoit l'import : la démo (format courant, ses réserves), plus une garantie et
     un contrat fabriqués."""
     fichiers = fichiers_demo()
     for nom, ligne in (("garanties.csv", LIGNE_GARANTIE), ("contrats_prestataires.csv", LIGNE_CONTRAT)):
         octets = fichiers[nom]
         fichiers[nom] = (octets if octets.endswith(b"\r\n") else octets + b"\r\n") + ligne.encode("utf-8")
-    for table in TABLES_NOUVELLES:
+    assert reserves_de_la_demo() >= 1, "la démo a des réserves"
+    for table in VIDEES:
         assert len(lire_csv(fichiers[table + ".csv"])[1]) == 1, table
     return fichiers
+
+
+def reserves_de_la_demo():
+    """Nombre de réserves de la démo (plus d'une depuis T417 : réserves de RA-01 et d'AE-01), que l'import remplace."""
+    return len(lire_csv(fichiers_demo()["reserves_controle.csv"])[1])
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +245,7 @@ class CasFormat4(CasImport):
         self.assertEqual(info["formatTexte"], "Format des données : 3 ; elles seront mises au format %d (format de "
                                               "cette version) à l'import." % FORMAT_COURANT)
         # Les réserves reprises sont comptées et ne sont pas annoncées « vidées » ; garanties et contrats le sont.
-        self.assertEqual(info["actuel"]["reserves_controle"], 1)
+        self.assertEqual(info["actuel"]["reserves_controle"], reserves_de_la_demo())
         self.assertEqual(info["importe"]["reserves_controle"], len(RESERVES_DU_LISEZMOI[jeu]))
         self.assertEqual(sorted(info["videes"]), VIDEES)
         self.assertIn("2 tables absentes du ZIP seront vidées", info["tablesVidees"])

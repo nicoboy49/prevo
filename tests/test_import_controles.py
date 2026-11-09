@@ -289,8 +289,14 @@ class TestEquipe(CasControles):
         self.verifier_refus(self.ligne(apercu, 4), self.formulaire("techniciens", dict(self.fiche("techniciens", "TEC-0001"),
                                                                                       taux_horaire="-2"), "TEC-0001"))
 
+    def habilitation(self, technicien_id, intitule):
+        """Fiche de la démo cherchée par technicien et intitulé (ses numéros bougent quand la démo change, T444)."""
+        return self.page.evaluate("""([t, i]) => Object.assign({}, Donnees.lignes('habilitations')
+          .find((h) => h.technicien_id === t && h.intitule === i))""", [technicien_id, intitule])
+
     def test_habilitations_verifierHabilitation_creation_et_fiche_completee(self):
-        h0v, br = self.fiche("habilitations", "HAB-0005"), self.fiche("habilitations", "HAB-0008")
+        h0v, br = self.habilitation("TEC-0002", "H0V"), self.habilitation("TEC-0004", "BR")
+        self.assertTrue(h0v.get("id") and br.get("id"), "démo : H0V de Karim Benali et BR de Thomas Garnier")
         avant = datetime.date.fromisoformat(h0v["date_obtention"]) - datetime.timedelta(days=30)
         plus_tard = datetime.date.fromisoformat(br["date_echeance"]) + datetime.timedelta(days=365)
         apercu = self.apercu("habilitations", ["technicien", "intitule", "date_obtention", "date_echeance"], [
@@ -311,7 +317,7 @@ class TestEquipe(CasControles):
         self.assertNotEqual(self.formulaire("habilitations", seule), attendus, "la ligne seule donnerait une autre raison")
         self.assertTrue(self.formulaire("habilitations", {"technicien_id": "TEC-0004", "intitule": "BR",
                                                           "date_echeance": plus_tard.isoformat()}))
-        self.assertEqual([m["id"] for m in apercu["ecritures"]["habilitations"]["modifier"]], ["HAB-0008"])
+        self.assertEqual([m["id"] for m in apercu["ecritures"]["habilitations"]["modifier"]], [br["id"]])
 
 
 class TestCodes(CasControles):

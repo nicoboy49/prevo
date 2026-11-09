@@ -237,9 +237,9 @@ fichier ; références créées : localisation LOC-0008 « Ligne de rectificatio
 | --- | --- | --- | --- |
 | 2 | Julien Moreau / BR | identique | HAB-0001 (TEC-0001) : aucune date ne change |
 | 3 | Karim Benali / CACES R489 | mettre à jour | HAB-0004 (TEC-0002) : date d'obtention 2021-12-02 → 2026-10-15 ; échéance 2026-12-02 → 2031-10-15 (renouvellement) |
-| 4 | Garnier Thomas / BR | mettre à jour | HAB-0008 (TEC-0004, écrit « Nom Prénom ») : obtention 2023-06-01 → 2026-06-01 ; échéance 2026-05-31 → 2029-06-01 |
-| 5 | Sophie Lambert / B2V | créer | HAB-0011 (TEC-0003) |
-| 6 | Thomas Garnier / H1V | créer | HAB-0012 (TEC-0004) |
+| 4 | Garnier Thomas / BR | mettre à jour | HAB-0009 (TEC-0004, écrit « Nom Prénom ») : obtention 2023-06-01 → 2026-06-01 ; échéance 2026-05-31 → 2029-06-01 |
+| 5 | Sophie Lambert / B2V | créer | HAB-0012 (TEC-0003) |
+| 6 | Thomas Garnier / H1V | créer | HAB-0013 (TEC-0004) |
 | 7 | Inès Chabert / H0V | refusée | technicien « Inès Chabert » introuvable (elle n'existe qu'après l'import de techniciens.tsv) |
 | 8 | Paul Dumas / BR | refusée | technicien « Paul Dumas » introuvable (un technicien n'est jamais créé par cet import) |
 | 9 | Julien Moreau / ATEX niveau 1 | refusée | date « 31/02/2026 » illisible (jour inexistant) |
@@ -332,8 +332,8 @@ fichier ; références créées : localisation LOC-0008 « Ligne de rectificatio
 | --- | --- | --- | --- |
 | 2 | PT-01 | identique | CTR-0001 : aucune colonne ne change |
 | 3 | CH-01 | mettre à jour | CTR-0002 : dernier contrôle 2026-03-18 → 2026-09-18 ; prochain 2026-09-18 → 2027-03-18 ; observations (vide) → « Aucune observation. » |
-| 4 | PR-01 | créer | CTR-0007 (équipement EQ-0020) ; « ; » dans le texte de référence (champ entre guillemets) |
-| 5 | CU-01 | créer | CTR-0008 (équipement EQ-0016) |
+| 4 | PR-01 | créer | CTR-0008 (équipement EQ-0020) ; « ; » dans le texte de référence (champ entre guillemets) |
+| 5 | CU-01 | créer | CTR-0009 (équipement EQ-0016) |
 | 6 | XX-99 | refusée | équipement « XX-99 » introuvable |
 | 7 | GF-01 | refusée | périodicité « 12 mois » illisible (nombre entier attendu) : la fiche CTR-0005 n'est pas touchée |
 
