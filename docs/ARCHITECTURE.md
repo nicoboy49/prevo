@@ -3704,8 +3704,8 @@ ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa ligne
 | `POST /api/acces/appareils/<id>/revoquer` | non | non | non | oui |
 | `POST /api/acces/appareils/revoquer-tous` | non | non | non | oui |
 | `GET /api/csv/<table>` | tables du demandeur | tables du demandeur | toutes (colonnes retirées) | toutes |
-| `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `habilitations` | toutes |
-| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `habilitations` | toutes |
+| `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `reserves_controle`, `garanties`, `contrats_prestataires`, `habilitations` | toutes |
+| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `reserves_controle`, `garanties`, `contrats_prestataires`, `habilitations` | toutes |
 | `GET /api/documents/<nom>` | photos de demandes, documents des équipements (sauf documents réservés) | photos de demandes, documents des équipements (sauf documents réservés) | oui (sauf documents réservés) | oui |
 | `PUT /api/documents/<nom>` | photos de demandes | photos de demandes | oui | oui |
 | `POST /api/sauvegarde` | non | non | non | oui |
@@ -3728,7 +3728,8 @@ Précisions de T152 :
   partout » pour un autre compte reste réservé au responsable dans la route elle-même (§22.4).
 - **Technicien, lecture** (D126, CS122 « ni taux horaire ni prix ») : `techniciens` sans `taux_horaire`, `articles` et
   `achats` sans `prix_unitaire` (`COLONNES_CACHEES_PAR_ROLE`) ; `achats` en plus de la consigne, car une demande d'achat
-  y recopie le prix de l'article. Les colonnes sont retirées des octets renvoyés (CSV réécrit au format §3.1, en-tête
+  y recopie le prix de l'article ; `contrats_prestataires` sans `montant_annuel` (T453, D126 prolongé, question 6 de
+  la conception L4-L6). Les colonnes sont retirées des octets renvoyés (CSV réécrit au format §3.1, en-tête
   compris, nom de colonne reconnu comme à la lecture tolérante) ; `X-Version` est celle du fichier entier, pour que les
   écritures restent possibles.
 - **Technicien, écriture** — écart voulu au refus prévu d'abord : un `PUT` du technicien sur une table dont il ne voit
@@ -3737,7 +3738,10 @@ Précisions de T152 :
   Raison : la sortie d'une pièce réécrit `articles` pour la colonne `stock` (`Magasin.mettreAJourStocks`, dont l'échec
   serait rattrapé sans bruit et laisserait vieillir la colonne). Les prix restent intouchables par le technicien : un
   prix forgé est remplacé par celui du fichier. Un ajout (`POST …/ajout`) a ses colonnes cachées vidées. `PUT` et ajout
-  sont refusés sur `parametres`, `techniciens`, `fournisseurs` (l'ajout aussi, sinon il contournerait le refus du `PUT`).
+  sont refusés sur `parametres`, `techniciens`, `fournisseurs` (l'ajout aussi, sinon il contournerait le refus du `PUT`)
+  et, au format 4 (T453, décidé : question 6 de la conception L4-L6), sur `reserves_controle`, `garanties` et
+  `contrats_prestataires` (403 `acces.table_du_responsable`), qu'il lit : à l'écran, il ne les écrit pas (Contrôles,
+  Garanties et contrats, import : boutons au responsable). Le demandeur et l'appareil ne lisent aucune des trois.
 - **Demandeur, lecture** : liste fermée `TABLES_DU_DEMANDEUR` (D126 : aucune table de coût ni de techniciens) — les six
   du CDC, plus `compteurs` et `releves` pour la carte « Compteurs » de la fiche d'équipement ouverte par le QR. `wiki_pages`
   arrive sans ses lignes de `type` `technicien` ou `intervention` (D114 ; filtre de garde : le format 3 ne range pas ces

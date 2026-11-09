@@ -6444,10 +6444,15 @@ TABLES_DU_DEMANDEUR = ('localisations', 'equipements', 'demandes', 'compteurs', 
 TABLES_DU_RESPONSABLE_PROVISOIRES = ('habilitations',)
 DOCUMENTS_DU_RESPONSABLE_PROVISOIRES = (('habilitations', 'justificatif'), ('contrats_prestataires', 'document'))
 # Écritures : le demandeur crée des demandes (PUT de demandes.csv en ajout seulement) et la ligne de journal qui va
-# avec ; le technicien écrit tout sauf les tables du responsable, qu'il lit (techniciens sans taux horaire).
+# avec ; le technicien écrit tout sauf les tables du responsable, qu'il lit (techniciens sans taux horaire,
+# contrats_prestataires sans montant annuel). Format 4 (T453, DÉCIDÉ : QUESTIONS-L2-L6.md, L4-L6 Q6 ; hors des tuples
+# provisoires de T445 ci-dessus) : reserves_controle, garanties et contrats_prestataires s'écrivent par le responsable
+# seul (PUT et ajout : 403 au technicien, comme parametres ; aucun écran du technicien ne les écrit) ; le demandeur ne
+# les lit pas (absentes de TABLES_DU_DEMANDEUR).
 TABLES_DU_DEMANDEUR_EN_ECRITURE = ('demandes',)
 TABLES_DU_DEMANDEUR_EN_AJOUT = ('demandes', 'journal')
-TABLES_DU_RESPONSABLE_EN_ECRITURE = ('parametres', 'techniciens', 'fournisseurs') + TABLES_DU_RESPONSABLE_PROVISOIRES
+TABLES_DU_RESPONSABLE_EN_ECRITURE = ('parametres', 'techniciens', 'fournisseurs', 'reserves_controle', 'garanties',
+                                     'contrats_prestataires') + TABLES_DU_RESPONSABLE_PROVISOIRES
 TABLES_DU_TECHNICIEN_EN_ECRITURE = tuple(table for table in TABLES if table not in TABLES_DU_RESPONSABLE_EN_ECRITURE)
 # Documents du demandeur : les photos de demandes (nom donné par nomPhoto de js/modules/demandes-ecritures.js) et les
 # documents des équipements (noms de la colonne « document » d'equipements.csv). Le serveur ne sait pas qui a pris
@@ -6505,10 +6510,13 @@ ROLES_PAR_ROUTE = {
 }
 
 # Ce qu'un rôle ne reçoit pas d'une table, retiré des octets renvoyés par GET /api/csv/<table> (la version X-Version
-# reste celle du fichier entier). D126 : ni taux horaire ni prix pour le technicien ; à chacun de ses PUT, le serveur
-# remet ces colonnes depuis le fichier actuel (remettre_colonnes_cachees) : il ne peut ni les lire ni les changer.
+# reste celle du fichier entier). D126 : ni taux horaire ni prix pour le technicien, ni le montant annuel d'un contrat
+# de prestataire (T453, D126 prolongé, L4-L6 Q6) ; à chacun de ses PUT, le serveur remet ces colonnes depuis le fichier
+# actuel (remettre_colonnes_cachees) : il ne peut ni les lire ni les changer (contrats_prestataires : son PUT est en
+# plus refusé, table du responsable ; la colonne resterait protégée si ce refus était levé).
 COLONNES_CACHEES_PAR_ROLE = {
-    'technicien': {'techniciens': ('taux_horaire',), 'articles': ('prix_unitaire',), 'achats': ('prix_unitaire',)},
+    'technicien': {'techniciens': ('taux_horaire',), 'articles': ('prix_unitaire',), 'achats': ('prix_unitaire',),
+                   'contrats_prestataires': ('montant_annuel',)},
 }
 # Lignes retirées : (colonne, valeurs). D114 : ni page Technicien ni page Intervention pour le demandeur.
 LIGNES_CACHEES_PAR_ROLE = {

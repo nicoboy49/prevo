@@ -350,7 +350,10 @@ class TestUnSeulEndroit(unittest.TestCase):
         ecriture, document = ("PUT", "csv/<table>"), ("GET", "documents/<nom>")
         self.assertFalse(self.permis(actuel, ecriture, "habilitations"))
         self.assertFalse(self.permis(actuel, document, JUSTIFICATIF))
-        self.assertEqual(avant.TABLES_DU_RESPONSABLE_EN_ECRITURE, ("parametres", "techniciens", "fournisseurs"))
+        # Tables décidées du format 4 (T453) gardées : seul le tuple provisoire de T445 est retiré.
+        self.assertEqual(avant.TABLES_DU_RESPONSABLE_EN_ECRITURE, ("parametres", "techniciens", "fournisseurs",
+                                                                   "reserves_controle", "garanties",
+                                                                   "contrats_prestataires"))
         self.assertTrue(self.permis(avant, ecriture, "habilitations"))
         self.assertTrue(self.permis(avant, ("POST", "csv/<table>/ajout"), "habilitations"))
         self.assertTrue(self.permis(avant, document, JUSTIFICATIF))
