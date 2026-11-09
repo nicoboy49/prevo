@@ -50,12 +50,12 @@ Pour une mise en ligne, construisez depuis une **copie propre de l'étiquette** 
 la release ([RELEASE.md](RELEASE.md)) : un travail en cours du dossier de travail n'y entre pas.
 
 ```
-git worktree add ../prevo-v2.0.0 v2.0.0
-py ../prevo-v2.0.0/outils/construire_demo_web.py
+git worktree add ../prevo-v2.1.1 v2.1.1
+py ../prevo-v2.1.1/outils/construire_demo_web.py
 ```
 
-La démo est alors dans `../prevo-v2.0.0/dist/demo-web/` (à copier à l'étape 5) ; supprimez la copie
-ensuite par `git worktree remove ../prevo-v2.0.0`.
+La démo est alors dans `../prevo-v2.1.1/dist/demo-web/` (à copier à l'étape 5) ; supprimez la copie
+ensuite par `git worktree remove ../prevo-v2.1.1`.
 
 Vérification rapide sur le PC, avant d'envoyer quoi que ce soit :
 
