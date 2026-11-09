@@ -201,6 +201,7 @@ Object.assign(Demandes, (() => {
             <option value="${TYPE_DIFFERE}">${Schema.libelleValeur('ordres_travail', 'type', TYPE_DIFFERE)}</option>
           </select>
         </div>
+        <div class="di-zone-garantie"></div>
         <p class="note di-date-prevue"></p>
       </div>`);
     const choixPriorite = UI.$('select[name=priorite]', contenu);
@@ -210,17 +211,25 @@ Object.assign(Demandes, (() => {
     const erreurMotif = UI.$('.erreur-champ', blocMotif);
     const zoneDate = UI.$('.di-date-prevue', contenu);
     let typeTouche = false;
+    const zoneGarantie = UI.$('.di-zone-garantie', contenu);
+    // Rappel « sous garantie » (T459) : un correctif sur un équipement sous garantie ; jamais bloquant.
+    const rappelGarantie = () => {
+      const rappel = Garanties.rappelOt(demande.equipement_id, choixType.value);
+      zoneGarantie.textContent = '';
+      if (rappel) zoneGarantie.appendChild(rappel);
+    };
 
     function mettreAJour() {
       const choisie = choixPriorite.value;
       blocMotif.hidden = choisie === priorite;
       if (!typeTouche) choixType.value = typePropose(choisie);
+      rappelGarantie();
       const date = datePrevue(choisie);
       zoneDate.textContent = date ? I18n.t('demandes.decision_accepter.date_prevue_delai_priorite', { date: UI.dateFr(date), choisie: Schema.libelleValeur('ordres_travail', 'priorite', choisie) })
         : I18n.t('demandes.decision_accepter.date_prevue_prochain_arret');
     }
     choixPriorite.addEventListener('change', mettreAJour);
-    choixType.addEventListener('change', () => { typeTouche = true; });
+    choixType.addEventListener('change', () => { typeTouche = true; rappelGarantie(); });
     champMotif.addEventListener('input', () => { erreurMotif.hidden = true; champMotif.removeAttribute('aria-invalid'); });
     mettreAJour();
 

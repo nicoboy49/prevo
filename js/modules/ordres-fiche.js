@@ -63,6 +63,7 @@ Object.assign(Ordres, (() => {
         <div data-place="technicien_id"></div><div data-place="date_prevue"></div>
         <div class="large" data-place="habilitation_requise"></div>
         <div class="large ot-zone-habilitation"></div>
+        <div class="large ot-zone-garantie"></div>
         <div class="actions">
           <a class="btn btn-fantome" href="#/ot">${I18n.t('commun.bouton.annuler')}</a><span class="espace"></span>
           <button type="submit" class="btn ${urgence ? 'btn-danger' : 'btn-primaire'}">${UI.icone('valider')}${urgence ? I18n.t('ordres.nouveau.creer_ot_urgence') : I18n.t('ordres.nouveau.creer_ot')}</button>
@@ -83,18 +84,28 @@ Object.assign(Ordres, (() => {
     placer('date_prevue', champOt('date_prevue', datePrevueParDefaut(priorite), { aide: I18n.t('ordres.nouveau.defaut_creation_delai_priorite') }));
 
     formulaire.addEventListener('change', (evenement) => {
+      if (evenement.target.name === 'type') revoirGarantie();
       if (evenement.target.name !== 'priorite') return;
       UI.$('[name="date_prevue"]', formulaire).value = datePrevueParDefaut(evenement.target.value);
     });
     // RG8 en direct et champ « Habilitation exigée par l'OT » (ordres-habilitations.js, chargé après) : l'OT tel qu'il
     // serait créé ; écouteur posé après celui de la priorité, qui change la date prévue.
     let revoirHabilitation = () => {};
+    let revoirGarantie = () => {};      // rappel « sous garantie » (Garanties.rappelOt, T459) : un rappel, jamais un blocage
     const selecteur = UI.selecteurEquipement(UI.$('#ot-nouveau-equipement', formulaire), {
       equipements: Donnees.lignes('equipements'), localisations: Donnees.lignes('localisations'),
-      valeur: requete.get('equipement') || '', surChoix: () => revoirHabilitation(),
+      valeur: requete.get('equipement') || '', surChoix: () => { revoirHabilitation(); revoirGarantie(); },
     });
     revoirHabilitation = Ordres.interne.brancherZoneHabilitation(formulaire,
       (valeurs) => Object.assign({}, valeurs, { equipement_id: selecteur.valeur() }));
+    const zoneGarantie = UI.$('.ot-zone-garantie', formulaire);
+    revoirGarantie = () => {
+      const type = urgence ? 'correctif immédiat' : UI.lireFormulaire(formulaire).type;
+      const rappel = Garanties.rappelOt(selecteur.valeur(), type);
+      zoneGarantie.textContent = '';
+      if (rappel) zoneGarantie.appendChild(rappel);
+    };
+    revoirGarantie();
     formulaire.addEventListener('submit', (evenement) => {
       evenement.preventDefault();
       validerNouvelOt(formulaire, selecteur, urgence, (requete.get('reserve') || '').trim());
