@@ -71,6 +71,10 @@ const StockageDemo = (() => {
   // Décalage des dates (ARCHITECTURE.md §11)
   // ===========================================================================
 
+  // Colonnes date qui ne sont PAS décalées : une date de source, pas un événement de la démo (T424). Même règle que
+  // COLONNES_NON_DECALEES de serveur.py. { table: [colonnes] }.
+  const COLONNES_NON_DECALEES = { controles_reglementaires: ['catalogue_relu_le'] };
+
   // Décale tous les champs date et date_heure du nombre de SEMAINES ENTIÈRES écoulées entre
   // dateReference et aujourdhui (les jours de la semaine restent les mêmes ; les identifiants
   // gardent leur année d'origine). tables : { nomTable: texte CSV ou octets }.
@@ -92,6 +96,7 @@ const StockageDemo = (() => {
       }
       const champsDates = description.champs
         .filter((champ) => champ.type === 'date' || champ.type === 'date_heure')
+        .filter((champ) => !(COLONNES_NON_DECALEES[nomTable] || []).includes(champ.nom))
         .map((champ) => champ.nom);
       const lu = Donnees.csv.analyser(nomTable, tables[nomTable]);
       for (const ligne of lu.lignes) {

@@ -3363,15 +3363,23 @@ def lire_jeu_de_demo():
     return date_reference, textes
 
 
-def decaler_texte_csv(texte, jours):
+# Colonnes date que la démo ne décale pas (date de source, pas un événement : T424) ; même règle que
+# COLONNES_NON_DECALEES de js/stockage-demo.js.
+COLONNES_NON_DECALEES = {'controles_reglementaires': ('catalogue_relu_le',)}
+
+
+def decaler_texte_csv(texte, jours, table=None):
     """Octets d'un CSV du jeu de démo avec ses dates décalées de « jours » (comme StockageDemo.decalerDates : toute
     cellule qui commence par AAAA-MM-JJ, le reste de la cellule gardé ; test_installation_migration vérifie que ces
-    cellules sont exactement celles des colonnes date et date_heure du schéma). 0 jour : le texte tel quel."""
+    cellules sont exactement celles des colonnes date et date_heure du schéma, moins COLONNES_NON_DECALEES de « table »). 0 jour : le texte tel quel."""
     if jours == 0:
         return BOM_UTF8 + texte.encode('utf-8')
     entete, lignes = lire_csv_tolerant(texte.encode('utf-8'))
+    exclues = COLONNES_NON_DECALEES.get(table, ())
     for ligne in lignes:
         for position, cellule in enumerate(ligne):
+            if position < len(entete) and entete[position] in exclues:
+                continue
             if MOTIF_DEBUT_DE_DATE.match(cellule):
                 jour = datetime.date.fromisoformat(cellule[:10]) + datetime.timedelta(days=jours)
                 ligne[position] = jour.isoformat() + cellule[10:]
@@ -3403,7 +3411,7 @@ def installer_jeu_de_demo(config, brouillon, origine=('', '', '')):
     for table in TABLES:
         verifier_fichier_en_place(table, actuels[table])
     for table in TABLES:
-        ecrire_fichier_de_donnees(config, table, decaler_texte_csv(textes[table], jours), actuels[table],
+        ecrire_fichier_de_donnees(config, table, decaler_texte_csv(textes[table], jours, table), actuels[table],
                                   sauvegarde_du_jour=False)
     if moi is not None:
         nouveau = technicien_moi(config, moi.get('prenom', ''), moi.get('nom', ''))

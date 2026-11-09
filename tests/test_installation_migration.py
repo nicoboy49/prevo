@@ -102,7 +102,8 @@ def jeu_de_demo_decale(jours):
     resultat = {}
     for chemin in sorted(commun.DOSSIER_DEMO.glob("*.csv")):
         entete, lignes = lignes_csv(chemin.read_bytes())
-        positions = [entete.index(colonne) for colonne in types.get(chemin.stem, ()) if colonne in entete]
+        positions = [entete.index(colonne) for colonne in types.get(chemin.stem, ())
+                     if colonne in entete and colonne not in serveur.COLONNES_NON_DECALEES.get(chemin.stem, ())]
         for ligne in lignes:
             for position in positions:
                 cellule = ligne[position] if position < len(ligne) else ""
@@ -353,7 +354,7 @@ class TestJeuDeDemo(unittest.TestCase):
         for table, texte in textes.items():
             with self.subTest(table=table):
                 entete, avant = lignes_csv(serveur.BOM_UTF8 + texte.encode("utf-8"))
-                entete_apres, apres = lignes_csv(serveur.decaler_texte_csv(texte, 7))
+                entete_apres, apres = lignes_csv(serveur.decaler_texte_csv(texte, 7, table))
                 self.assertEqual(entete_apres, entete)
                 changees = {entete[i] for a, b in zip(avant, apres) for i in range(len(a)) if a[i] != b[i]}
                 dates_presentes = {entete[i] for a in avant for i in range(len(a)) if MOTIF_DEBUT_DE_DATE.match(a[i])}
@@ -361,8 +362,8 @@ class TestJeuDeDemo(unittest.TestCase):
                     self.assertEqual(dates_presentes, types[table])          # le serveur décale par la valeur : même jeu
                 else:
                     self.assertEqual(dates_presentes, set())
-                self.assertEqual(changees, dates_presentes)
-                self.assertEqual(serveur.decaler_texte_csv(texte, 0), serveur.BOM_UTF8 + texte.encode("utf-8"))
+                self.assertEqual(changees, dates_presentes - set(serveur.COLONNES_NON_DECALEES.get(table, ())))
+                self.assertEqual(serveur.decaler_texte_csv(texte, 0, table), serveur.BOM_UTF8 + texte.encode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
