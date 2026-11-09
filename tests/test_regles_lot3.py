@@ -418,12 +418,12 @@ class TestDemo(CasRegles):
         self.charger(self.tables)
 
     def test_roles_des_controles_donnent_leur_statut(self):
-        # 2.2 (T417, T412) : RA-01 (controle_observations) a sa réserve en retard ; AE-01 (controle_a_planifier,
-        # aussi controle_reserves) a une réserve ouverte à échéance à venir : « réserves à lever » passe avant
-        # « à planifier », qui reste en statut secondaire.
+        # 2.2 (T417, T412, T423) : RA-01 (controle_observations) a sa réserve en retard ; AE-01 (controle_reserves)
+        # a une réserve ouverte à échéance à venir : « réserves à lever » passe avant « à planifier », qui reste en
+        # statut secondaire ; controle_a_planifier (AE-04) n'a aucune réserve : « à planifier » est son statut principal.
         for role, statut, secondaires, reserves in (
                 ("controle_en_retard", "en retard", [], (0, 0)),
-                ("controle_a_planifier", "réserves à lever", ["à planifier"], (1, 0)),
+                ("controle_a_planifier", "à planifier", [], (0, 0)),
                 ("controle_observations", "réserves à lever", [], (1, 1)),
                 ("controle_reserves", "réserves à lever", ["à planifier"], (1, 0)),
                 ("controle_a_jour", "à jour", [], (0, 0))):

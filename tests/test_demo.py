@@ -236,9 +236,10 @@ def ajouter_mois(jour_, nombre):
     return date(annee, mois + 1, min(jour_.day, calendar.monthrange(annee, mois + 1)[1]))
 
 
-def statut_controle(controle, aujourdhui):
-    """Statut d'un contrôle réglementaire à une date (§15.7) : le premier vrai parmi « en retard »,
-    « observations à lever », « à planifier » (30 jours ou moins, ou date inconnue) et « à jour »."""
+def statut_controle(controle, aujourdhui, reserves):
+    """Statut d'un contrôle réglementaire à une date (§15.7, réserves comprises depuis T412) : le premier vrai parmi
+    « en retard », « réserves à lever » (une réserve du contrôle non levée), « à planifier » (30 jours ou moins, ou
+    date inconnue) et « à jour »."""
     if controle['prochaine_date']:
         prochaine = jour(controle['prochaine_date'])
     elif controle['derniere_date'] and controle['periodicite_mois']:
@@ -247,8 +248,8 @@ def statut_controle(controle, aujourdhui):
         prochaine = None
     if prochaine is not None and prochaine < aujourdhui:
         return 'en retard'
-    if controle['observations'].strip() and controle['observations_levees'] != '1':
-        return 'observations à lever'
+    if any(r['controle_id'] == controle['id'] and r['levee'] != '1' for r in reserves):
+        return 'réserves à lever'
     if prochaine is None or prochaine <= aujourdhui + timedelta(days=30):
         return 'à planifier'
     return 'à jour'
@@ -1090,7 +1091,7 @@ class TestContenuDemo(unittest.TestCase):
             self.assertEqual(reserve[champ], '')
         for c in controles:                      # alignés sur le catalogue validé (T417, D193)
             self.assertEqual((c['source_periodicite'], c['nature_source'], c['catalogue_relu_le']),
-                             ('catalogue', 'obligation', '2026-11-08'))
+                             ('catalogue', 'norme' if c['catalogue_id'] == 'C27' else 'obligation', '2026-11-08'))
         for ligne in self.t['equipements']:
             self.assertEqual(ligne['cout_arret_h'], '', 'equipements.cout_arret_h')
         for ligne in self.t['habilitations']:         # le justificatif reste vide : aucun document en démo
@@ -1478,14 +1479,15 @@ class TestDemoLot3(unittest.TestCase):
 
     def test_controles_dans_les_quatre_statuts_a_la_date_de_reference(self):
         controles = {c['id']: c for c in self.t['controles_reglementaires']}
-        statuts = {identifiant: statut_controle(c, JOUR_REFERENCE) for identifiant, c in controles.items()}
-        attendus = {'controle_en_retard': 'en retard', 'controle_observations': 'observations à lever',
+        statuts = {identifiant: statut_controle(c, JOUR_REFERENCE, self.t['reserves_controle'])
+                   for identifiant, c in controles.items()}
+        attendus = {'controle_en_retard': 'en retard', 'controle_observations': 'réserves à lever',
                     'controle_a_planifier': 'à planifier', 'controle_a_jour': 'à jour'}
         for role, statut in attendus.items():
             self.assertIn(self.s[role], controles, role)
             self.assertEqual(statuts[self.s[role]], statut, role)
         self.assertEqual(set(statuts.values()), set(attendus.values()))
-        # « à planifier » par sa date (connue, dans les 30 jours), pas faute de date
+        # « à planifier » par sa date (connue, dans les 30 jours), pas faute de date, sans réserve ouverte (CS170)
         prochaine = jour(controles[self.s['controle_a_planifier']]['prochaine_date'])
         self.assertTrue(0 <= (prochaine - JOUR_REFERENCE).days <= 30, prochaine)
         for controle in controles.values():          # prochaine date = dernière + périodicité (mois)
@@ -1535,6 +1537,9 @@ class TestDemoLot3(unittest.TestCase):
         self.assertEqual(controles[self.s['controle_reserves']]['derniere_date'], '2025-11-12')
         self.assertEqual((levee['levee'], levee['date_levee']), ('1', '2025-12-09'))
         self.assertTrue(levee['commentaire_levee'])
+        for reserve in reserves.values():            # CS175 : jamais « conforme » dans les réserves de la démo
+            self.assertNotRegex(reserve['texte'] + ' ' + reserve['commentaire_levee'], r'(?i)conformes?', reserve['id'])
+        self.assertFalse([r for r in reserves.values() if r['controle_id'] == self.s['controle_a_planifier']])
         ot = next(o for o in self.t['ordres_travail'] if o['id'] == levee['ot_id'])
         self.assertEqual((ot['type'], ot['statut'].startswith('Clôturé')), ('réglementaire', True))
         self.assertEqual((a_echeance['levee'], a_echeance['ot_id']), ('0', ''))

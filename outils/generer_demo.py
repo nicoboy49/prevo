@@ -115,8 +115,8 @@ du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncé
     causes_insuffisantes_symptome    S02 (bruit anormal)
   Lot 3 (ARCHITECTURE.md §15.12) : contrôles réglementaires (statut à la date de référence, §15.7)
     controle_en_retard               VGP du chariot CH-01 (6 mois) : prochaine date dépassée
-    controle_observations            inspection du réservoir RA-01 : observations non levées
-    controle_a_planifier             installations électriques (AE-01) : prochaine date dans moins de 30 jours
+    controle_observations            inspection du réservoir RA-01 : réserve du purgeur non levée (statut « réserves à lever »)
+    controle_a_planifier             extincteurs d'AE-04 (C27) : statut principal « à planifier » (prochaine date dans moins de 30 jours, aucune réserve ouverte)
     controle_a_jour                  VGP du pont roulant PT-01 : à jour
   2.2 (T417) : réserves des contrôles (D193, CONCEPTION-L2-L3 §3)
     controle_reserves                contrôle d'AE-01 (12/11/2025) : une réserve levée avec son OT, une ouverte à échéance à venir
@@ -1536,6 +1536,8 @@ CATALOGUE_CONTROLES = RACINE / 'docs' / 'catalogue' / 'controles-fr.json'   # ca
 # (repère, identifiant du catalogue, organisme, date du dernier contrôle, observations, observations levées ?).
 # Nature, référence et périodicité viennent du catalogue validé : PT-01 C01, CH-01 C03, AE-01 C12, RA-01 C14 (48 mois ;
 # 36 mois = première inspection), GF-01 C16 (5 à < 50 t éq. CO2, 12 mois), VE-02 C20 (arrêté du 8 octobre 1987).
+# AE-04 C27 (60 mois, dernière maintenance approfondie hors de l'historique : aucun OT) : le contrôle dont « à planifier »
+# est le statut principal (T423).
 CONTROLES_DEMO = [
     ('PT-01', 'C01', ORGANISME_1, '2026-02-10', '', 1),
     ('CH-01', 'C03', ORGANISME_1, '2026-03-18', '', 1),
@@ -1544,12 +1546,13 @@ CONTROLES_DEMO = [
      'Purgeur automatique du réservoir défectueux : à remplacer avant la prochaine inspection.', 0),
     ('GF-01', 'C16', 'Frigo-Contrôle Sud (démo)', '2026-03-24', '', 1),
     ('VE-02', 'C20', ORGANISME_1, '2026-06-02', '', 1),
+    ('AE-04', 'C27', 'Extinc-Services (démo)', '2021-11-05', '', 1),
 ]
 # Réserves relevées au contrôle d'AE-01 du 12/11/2025 (T417) : une levée (avec l'OT réglementaire du contrôle), une
 # ouverte dont l'échéance saisie est à venir. Dates fixes, aucun tirage.
 RESERVES_AE01 = [
     {'texte': "Différentiel 30 mA du tableau de l'atelier à remplacer.", 'levee': 1, 'date_levee': '2025-12-09',
-     'commentaire_levee': "Différentiel remplacé, essai de déclenchement conforme."},
+     'commentaire_levee': "Différentiel remplacé, essai de déclenchement satisfaisant."},
     {'texte': 'Schéma unifilaire du tableau général à mettre à jour.', 'levee': 0, 'echeance_levee': '2026-12-15'},
 ]
 
@@ -1562,7 +1565,7 @@ def ligne_catalogue(identifiant):
 # en mars 2026 pour rester en retard). L'OT réglementaire de cette VGP tire son hasard dans le
 # générateur du lot 3 : le reste du jeu reste identique.
 CONTROLES_RECALES_LOT3 = ('CH-01',)
-STATUTS_CONTROLE = ('en retard', 'observations à lever', 'à planifier', 'à jour')     # §15.7, dans l'ordre
+STATUTS_CONTROLE = ('en retard', 'réserves à lever', 'à planifier', 'à jour')     # §15.7, dans l'ordre
 
 # Opérations ponctuelles écrites à la main : titre, équipement, jours avant la date de référence, etc.
 AMELIORATIONS_DEMO = [
@@ -3992,9 +3995,10 @@ MOTIF_ACTION_STATUT = re.compile(r'statut (.+?) → (.+?)(?: : (.+))?')
 MOTIF_ID_JOURNAL = re.compile(r'J-(\d{12})\d{2}-[A-Z0-9]{4}')
 
 
-def statut_controle(controle, aujourdhui):
-    """Statut d'un contrôle réglementaire à une date (§15.7, comme Controles.etat) : le premier vrai parmi
-    « en retard », « observations à lever », « à planifier » (30 jours ou moins, ou date inconnue), « à jour »."""
+def statut_controle(controle, aujourdhui, reserves):
+    """Statut d'un contrôle réglementaire à une date (§15.7, comme Controles.etat depuis T412) : le premier vrai
+    parmi « en retard », « réserves à lever » (au moins une réserve du contrôle non levée, dans `reserves`, les
+    lignes de reserves_controle), « à planifier » (30 jours ou moins, ou date inconnue), « à jour »."""
     if controle['prochaine_date']:
         prochaine = jour_depuis_texte(controle['prochaine_date'])
     elif controle['derniere_date'] and controle['periodicite_mois']:
@@ -4003,8 +4007,8 @@ def statut_controle(controle, aujourdhui):
         prochaine = None
     if prochaine is not None and prochaine < aujourdhui:
         return 'en retard'
-    if controle['observations'].strip() and controle['observations_levees'] != '1':
-        return 'observations à lever'
+    if any(r['controle_id'].strip() == controle['id'].strip() and r['levee'] != '1' for r in reserves):
+        return 'réserves à lever'
     if prochaine is None or prochaine <= aujourdhui + timedelta(days=30):
         return 'à planifier'
     return 'à jour'
@@ -4108,7 +4112,7 @@ def verifier_demo_lot3(ctx):
         attendue = ajouter_mois(jour_depuis_texte(controle['derniere_date']), int(controle['periodicite_mois']))
         if controle['prochaine_date'] != texte_date(attendue):
             erreur('%s : prochaine date différente de dernière + périodicité' % controle['id'])
-        statuts.add(statut_controle(controle, ctx.ref))
+        statuts.add(statut_controle(controle, ctx.ref, base['reserves_controle']))
     if statuts != set(STATUTS_CONTROLE):
         erreur('Contrôles : statuts %s au lieu des quatre' % sorted(statuts))
     # --- 2. Planning des 4 semaines
@@ -4528,9 +4532,13 @@ def scenarios_du_jeu(ctx):
         scenarios[role + '_symptome'] = symptome
     # Lot 3 : un contrôle par statut à la date de référence (le premier dans l'ordre du fichier), la
     # seule surcharge du planning, les équipements du calcul à la main (liste triée).
+    # (statut principal comme l'appli, réserves comprises ; controle_observations : celui des observations non levées)
     for statut, role in zip(STATUTS_CONTROLE, ('controle_en_retard', 'controle_observations',
                                                'controle_a_planifier', 'controle_a_jour')):
-        scenarios[role] = [c['id'] for c in base['controles_reglementaires'] if statut_controle(c, ctx.ref) == statut][0]
+        scenarios[role] = [c['id'] for c in base['controles_reglementaires']
+                           if statut_controle(c, ctx.ref, base['reserves_controle']) == statut
+                           and (role != 'controle_observations'
+                                or (c['observations'].strip() and c['observations_levees'] != '1'))][0]
     reserves = {r['texte']: r for r in base['reserves_controle']}
     scenarios['reserve_en_retard'] = [r['id'] for r in base['reserves_controle']
                                       if r['controle_id'] == scenarios['controle_observations']][0]

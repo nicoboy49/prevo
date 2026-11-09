@@ -45,13 +45,15 @@ from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil,
 SCENARIOS = scenarios_demo()
 EN_RETARD = SCENARIOS["controle_en_retard"]
 A_PLANIFIER = SCENARIOS["controle_a_planifier"]
+AVEC_RESERVES = SCENARIOS["controle_reserves"]
 OBSERVATIONS = SCENARIOS["controle_observations"]
 A_JOUR = SCENARIOS["controle_a_jour"]
 TECHNICIEN = SCENARIOS["technicien_br_valide"]
-# Statut principal de chaque rôle à la date de référence du générateur. 2.2 (T417) : AE-01 (controle_a_planifier) a
-# une réserve ouverte, « réserves à lever » passe avant « à planifier » (statut secondaire) ; RA-01
+# Statut principal de chaque rôle à la date de référence du générateur. 2.2 (T417, T423) : AE-01 (controle_reserves)
+# a une réserve ouverte, « réserves à lever » passe avant « à planifier » (statut secondaire) ; AE-04
+# (controle_a_planifier) n'a aucune réserve : « à planifier » est son statut principal ; RA-01
 # (controle_observations) a sa réserve du purgeur, en retard. Le badge dit le nombre : « réserves à lever (1) ».
-ROLES = ((EN_RETARD, "en retard"), (A_PLANIFIER, "réserves à lever"), (OBSERVATIONS, "réserves à lever"),
+ROLES = ((EN_RETARD, "en retard"), (A_PLANIFIER, "à planifier"), (AVEC_RESERVES, "réserves à lever"), (OBSERVATIONS, "réserves à lever"),
          (A_JOUR, "à jour"))
 RESERVES_A_LEVER = "réserves à lever"
 
@@ -660,28 +662,28 @@ class TestDemoEtTelephone(CasControles):
             with self.subTest(controle=controle_id):
                 attendu = role + " (1)" if role == RESERVES_A_LEVER else role      # une réserve ouverte chacun
                 self.assertEqual(self.badges(controle_id)[0], attendu)
-        self.assertEqual(self.badges(A_PLANIFIER), ["réserves à lever (1)", "à planifier"])
-        self.aller("#/controles/" + A_PLANIFIER)
-        self.attendre_fiche(A_PLANIFIER)
+        self.assertEqual(self.badges(AVEC_RESERVES), ["réserves à lever (1)", "à planifier"])
+        self.aller("#/controles/" + AVEC_RESERVES)
+        self.attendre_fiche(AVEC_RESERVES)
         page.click("#controle-realise")
         page.wait_for_selector("dialog [name=date]")
         page.set_input_files("dialog input[type=file]", files=[{"name": "rapport.png", "mimeType": "image/png", "buffer": PNG}])
         page.fill("dialog [name=observations]", "Prise de terre à reprendre")
         self.valider_fenetre()
         self.attendre_toast("Contrôle réalisé enregistré")
-        ligne = page.evaluate("(id) => Object.assign({}, Donnees.trouver('controles_reglementaires', id))", A_PLANIFIER)
+        ligne = page.evaluate("(id) => Object.assign({}, Donnees.trouver('controles_reglementaires', id))", AVEC_RESERVES)
         self.assertEqual(ligne["derniere_date"], page.evaluate("Donnees.aujourdhui()"))
         self.assertEqual((ligne["observations"], ligne["observations_levees"]), ("Prise de terre à reprendre", "0"))
-        self.assertTrue(ligne["rapport"].startswith("controle-" + A_PLANIFIER))
+        self.assertTrue(ligne["rapport"].startswith("controle-" + AVEC_RESERVES))
         page.wait_for_selector("#controle-rapport")
         self.assertTrue(page.get_attribute("#controle-rapport", "href").startswith("blob:"))
         # La saisie devient une réserve (T413) ; la réserve d'avant reste ouverte : « réserves à lever (2) », plus
         # « à planifier » (prochaine date recalculée)
         self.assertEqual(page.evaluate("""(id) => Donnees.lignes('reserves_controle').filter((r) => r.controle_id === id
-            && r.texte === 'Prise de terre à reprendre').length""", A_PLANIFIER), 1)
+            && r.texte === 'Prise de terre à reprendre').length""", AVEC_RESERVES), 1)
         page.wait_for_function("(id) => { const b = document.querySelector(`.controles-fiche .controles-statuts[data-controle='${id}'] .badge`); "
-                               "return b && b.textContent.trim() === 'réserves à lever (2)'; }", arg=A_PLANIFIER)
-        self.assertEqual(self.badges(A_PLANIFIER, ".controles-fiche"), ["réserves à lever (2)"])
+                               "return b && b.textContent.trim() === 'réserves à lever (2)'; }", arg=AVEC_RESERVES)
+        self.assertEqual(self.badges(AVEC_RESERVES, ".controles-fiche"), ["réserves à lever (2)"])
         self.assertIn("2 réserves à lever", page.inner_text(".controles-fiche .controles-alerte-reserves"))
 
     def test_telephone_375px_sans_defilement_horizontal(self):
