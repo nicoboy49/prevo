@@ -186,8 +186,9 @@ class TestCompteurs(CasAccueil):
             # Les cinq indicateurs des lots 1 et 2 (les deux du lot 3 s'y ajoutent : test_accueil_lot3).
             for lien in ("#/di?statut=Nouvelle", "#/ot?filtre=retard", "#/ot?filtre=p1", LIEN_PREVENTIFS, LIEN_ARTICLES):
                 self.assertEqual(page.locator(INDICATEURS + '[href="%s"]' % lien).count(), 1, lien)
-            # 5 du lot 2, 2 du lot 3 (§15.9), 1 du lot 3 bis (§16.6 : suggestions de préventif)
-            self.assertEqual(page.locator(INDICATEURS).count(), 8)
+            # 5 du lot 2, 2 du lot 3 (§15.9), 1 du lot 3 bis (§16.6 : suggestions de préventif), 1 de la 2.2 (T421 :
+            # réserves en retard), 3 de la 2.2 (T485 : garanties et contrats)
+            self.assertEqual(page.locator(INDICATEURS).count(), 12)
             self.assertIn("Préventifs de la semaine", page.inner_text(INDICATEURS + '[href="%s"]' % LIEN_PREVENTIFS))
             self.assertIn("Articles à commander", page.inner_text(INDICATEURS + '[href="%s"]' % LIEN_ARTICLES))
 
