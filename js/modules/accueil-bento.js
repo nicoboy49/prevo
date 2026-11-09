@@ -11,7 +11,8 @@
 //     3. quatre compteurs : DI à traiter, OT en retard, P1 ouverts, préventifs de la semaine ;
 //     4. rapport du mois écoulé (Rapport.tuileAccueil ; absent → les compteurs s'étendent) ;
 //     5. « Demandes à traiter » (pas au téléphone) et « OT en retard » : 5 lignes au plus ;
-//     6. « à surveiller » : articles à commander, contrôles et habilitations, suggestions de préventif.
+//     6. « à surveiller » : articles à commander, contrôles et habilitations (contrôles sous 30 jours,
+//        habilitations à renouveler, réserves en retard depuis la 2.2), suggestions de préventif.
 //   Puis la carte « Connecter un téléphone » (mode serveur, pas au téléphone : accueil.js).
 //   Mode serveur : avertissement « Copie externe des sauvegardes » (D133, §22.11) quand la copie de la nuit a échoué
 //   ou n'a pas été faite depuis plus d'un jour, avec le nombre de jours ; avertissement Tailscale (D128, §22.8) quand
@@ -23,7 +24,7 @@
 Object.assign(Accueil, (() => {
 
   const { otOuvert, joursEntre, libelleEquipement, badgeImpact, alerteControle, carteBaseVide,
-    NOMBRE_LIGNES, ORIGINE_PREVENTIF } = Accueil.interne;
+    detailReservesEnRetard, NOMBRE_LIGNES, ORIGINE_PREVENTIF, LIEN_RESERVES_EN_RETARD } = Accueil.interne;
   const RANG_PRIORITE = { P1: 1, P2: 2, P3: 3, P4: 4 };
   const DATE_VIDE = '9999';                     // une date absente passe après toutes les autres
   const TONS_IMPACT = { 'sécurité': 'rouge', 'arrêt': 'ambre', 'dégradé': 'bleu' };
@@ -279,21 +280,25 @@ Object.assign(Accueil, (() => {
     </a>`;
   }
 
-  // « Contrôles et habilitations » (lot 3, §15.9) : une tuile, deux liens (les deux listes filtrées
-  // d'avant), le total dans la pastille.
+  // « Contrôles et habilitations » (lot 3, §15.9) : une tuile, trois liens (les deux listes filtrées
+  // d'avant, puis les réserves en retard depuis la 2.2, CS170), le total dans la pastille. Réserves en
+  // retard : détail en rouge (accueil.js, detailReservesEnRetard), aucune : détail neutre.
   function tuileConformite(compteurs, aujourdhui) {
     const controles = compteurs.controlesSous30j.length;
     const habilitations = compteurs.habilitationsARenouveler.length;
+    const reserves = compteurs.reservesEnRetard.length;
     const enRetard = compteurs.controlesSous30j.filter((c) => Controles.etat(c, aujourdhui).statut === 'en retard').length;
     const echues = compteurs.habilitationsARenouveler.filter((h) => h.etat.statut === 'échue').length;
     return UI.html`<div class="bento-tuile bento-surveiller bento-conformite">
-      <span class="bento-carre violet">${chiffre(controles + habilitations)}</span>
+      <span class="bento-carre violet">${chiffre(controles + habilitations + reserves)}</span>
       <div class="bento-surveiller-corps">
         <h2 class="lib">${I18n.t('accueil.tuile_conformite.controles_habilitations')}</h2>
         <a class="bento-sous-lien" href="#/controles?filtre=30j">${chiffre(controles)}<span class="bento-sous-texte"><span>${I18n.t('accueil.tuile_conformite.controles_sous_30', { n: controles })}</span>
           ${enRetard ? complement(I18n.t('accueil.tuile_conformite.dont_retard', { enRetard }), 'rouge') : complement(I18n.t('accueil.tuile_conformite.aucun_retard'))}</span>${UI.icone('chevron', 'bento-chevron')}</a>
         <a class="bento-sous-lien" href="#/equipe?filtre=a-renouveler">${chiffre(habilitations)}<span class="bento-sous-texte"><span>${I18n.t('accueil.tuile_conformite.habilitations_renouveler', { n: habilitations })}</span>
           ${echues ? complement(I18n.t('accueil.tuile_conformite.dont_echues', { n: echues }), 'ambre') : complement(I18n.t('accueil.tuile_conformite.aucune_echue'))}</span>${UI.icone('chevron', 'bento-chevron')}</a>
+        <a class="bento-sous-lien" href="${LIEN_RESERVES_EN_RETARD}" id="bento-reserves-en-retard">${chiffre(reserves)}<span class="bento-sous-texte"><span>${I18n.t('accueil.tuile_conformite.reserves_en_retard', { n: reserves })}</span>
+          ${complement(detailReservesEnRetard(compteurs.reservesEnRetard), reserves ? 'rouge' : '')}</span>${UI.icone('chevron', 'bento-chevron')}</a>
       </div>
     </div>`;
   }

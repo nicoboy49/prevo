@@ -6,9 +6,9 @@
    Technicien et demandeur (inchangés par la refonte du responsable)
    ========================================================================================= */
 
-/* Deux indicateurs pour le technicien (contrôles, habilitations) */
+/* Trois indicateurs pour le technicien (contrôles, habilitations, réserves en retard depuis la 2.2) */
 .instruments.accueil-instruments { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.instruments.accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; }
+.instruments.accueil-instruments-technicien { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 960px; }
 .instruments.accueil-instruments .lib { overflow-wrap: anywhere; }
 
 /* Technicien : ses préventifs de la semaine, puis ses autres OT, dans la même carte */
@@ -219,7 +219,7 @@ a.bento-tuile:hover { transform: translateY(-4px); border-color: var(--bord-bleu
 .bento-chevron { flex: none; width: 20px; height: 20px; color: var(--muted); }
 .bento-conformite { align-items: flex-start; }
 .bento-conformite h2.lib { margin-bottom: 2px; }
-/* Un lien par liste (contrôles, habilitations) : chiffre, libellé, puis le détail coloré dessous */
+/* Un lien par liste (contrôles, habilitations, réserves en retard) : chiffre, libellé, puis le détail coloré dessous */
 .bento-sous-lien {
   display: flex; align-items: center; gap: 10px; min-height: var(--tactile); margin: 0 -8px; padding: 4px 8px;
   border-radius: 12px; color: var(--texte-2); text-decoration: none; font-size: .875rem; line-height: 1.35;
@@ -261,7 +261,7 @@ a.bento-tuile:hover { transform: translateY(-4px); border-color: var(--bord-bleu
 /* --- tablette (641 à 1099 px) : synthèse, « en premier » et listes sur toute la largeur --- */
 @media (max-width: 1099.98px) {
   .instruments.accueil-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .instruments.accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .instruments.accueil-instruments-technicien { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .bento-synthese, .bento-premier, .bento-liste { grid-column: span 12; grid-row: auto; }
 }
 @media (min-width: 900px) and (max-width: 1099.98px) {

@@ -8,9 +8,10 @@
 //                 en retard, tuiles « à surveiller » (articles à commander ; contrôles sous 30 jours et
 //                 habilitations à renouveler, lot 3 ; suggestions de préventif, lot 3 bis, §16.6), une
 //                 alerte si « Contrôle de la base » signale des erreurs (accueil-bento.js).
-//   Technicien  : gros bouton « Signaler », les deux indicateurs du lot 3 (contrôles sous 30 jours,
-//                 habilitations à renouveler) et la liste de ses OT ouverts : d'abord ses préventifs
-//                 de la semaine (ou la mention qu'il n'en a pas), puis ses autres OT.
+//   Technicien  : gros bouton « Signaler », les trois indicateurs des contrôles et de l'équipe (contrôles
+//                 sous 30 jours, habilitations à renouveler, réserves en retard depuis la 2.2) et la liste
+//                 de ses OT ouverts : d'abord ses préventifs de la semaine (ou la mention qu'il n'en a pas),
+//                 puis ses autres OT.
 //   Demandeur   : gros bouton « Signaler un problème » et ses 5 dernières demandes (statut,
 //                 motif de refus).
 //   Tous, en mode serveur et sauf sur téléphone (D31) : carte « Connecter un téléphone » (QR code
@@ -26,7 +27,12 @@
 //   Contrôle sous 30 jours   = Controles.sous30Jours() (équipement suivi, prochaine date inconnue
 //                              ou dans les 30 jours, retards compris ; lot 3, §15.9) ;
 //   Habilitation à renouveler = Equipe.aRenouveler() (technicien actif, habilitation qui compte
-//                              échue ou à échéance dans les 60 jours ; lot 3, §15.9).
+//                              échue ou à échéance dans les 60 jours ; lot 3, §15.9) ;
+//   Réserve en retard        = Controles.reservesEnRetard() (réserve ouverte d'un contrôle d'équipement
+//                              suivi, échéance de levée passée ; sans échéance saisie, 30 jours après le
+//                              contrôle, D187 ; 2.2, CS170). Les observations reprises de la 2.1 n'ont pas
+//                              d'échéance saisie : presque toutes le sont au premier lancement, d'où le détail
+//                              « échéance par défaut passée (30 jours après le contrôle) ».
 
 const Accueil = (() => {
 
@@ -35,6 +41,7 @@ const Accueil = (() => {
   const NOMBRE_OT_TECHNICIEN = 15;     // un technicien voit tous ses OT ouverts, jusqu'à ce nombre
   const MILLISECONDES_PAR_JOUR = 24 * 60 * 60 * 1000;
   const ORIGINE_PREVENTIF = 'préventif';
+  const LIEN_RESERVES_EN_RETARD = '#/controles?filtre=reserves-en-retard';
 
   // Adresses du serveur lues une première fois puis gardées (évite un aller-retour à chaque affichage).
   let adressesEnMemoire = null;
@@ -73,8 +80,10 @@ const Accueil = (() => {
 
   /**
    * Les listes qui donnent les compteurs de l'accueil :
-   * { diATraiter, otEnRetard, p1Ouverts, preventifsSemaine } (lignes de demandes et d'OT) et
-   * articlesACommander (éléments de Magasin.aCommander() : { article, stock, pointCommande, … }).
+   * { diATraiter, otEnRetard, p1Ouverts, preventifsSemaine } (lignes de demandes et d'OT),
+   * articlesACommander (éléments de Magasin.aCommander() : { article, stock, pointCommande, … }),
+   * controlesSous30j, habilitationsARenouveler et reservesEnRetard (éléments de
+   * Controles.reservesEnRetard() : { reserve, controle, etat }, l'échéance la plus ancienne d'abord).
    */
   function calculerCompteurs() {
     const aujourdhui = Donnees.aujourdhui();
@@ -90,7 +99,24 @@ const Accueil = (() => {
       // (leurs fichiers sont chargés après celui-ci).
       controlesSous30j: Controles.sous30Jours(aujourdhui),
       habilitationsARenouveler: Equipe.aRenouveler(aujourdhui),
+      // 2.2 (CS170) : réserves des contrôles dont l'échéance de levée est passée (controles-reserves.js).
+      reservesEnRetard: Controles.reservesEnRetard(aujourdhui),
     };
+  }
+
+  /**
+   * Détail des réserves en retard (éléments de Controles.reservesEnRetard), sous leur nombre : aucune → « aucune
+   * échéance de levée passée » ; toutes à l'échéance saisie → « échéance de levée passée » ; toutes à l'échéance
+   * par défaut (réserves reprises de la 2.1 ou saisies sans échéance, D187) → « échéance par défaut passée
+   * (30 jours après le contrôle) » ; sinon « dont n à l'échéance par défaut (30 jours après le contrôle) ».
+   */
+  function detailReservesEnRetard(reserves) {
+    const parDefaut = reserves.filter((element) => element.etat.parDefaut).length;
+    const jours = Controles.interne.DELAI_LEVEE_PAR_DEFAUT_JOURS;
+    if (!reserves.length) return I18n.t('accueil.detail_reserves_en_retard.aucune_echeance_passee');
+    if (!parDefaut) return I18n.t('accueil.detail_reserves_en_retard.echeance_passee');
+    if (parDefaut === reserves.length) return I18n.t('accueil.detail_reserves_en_retard.echeance_par_defaut_passee', { jours });
+    return I18n.t('accueil.detail_reserves_en_retard.dont_echeance_par_defaut', { n: parDefaut, jours });
   }
 
   /** Nombre de jours entre deux dates ISO (AAAA-MM-JJ) : combien de jours après `debut` tombe `fin`. */
@@ -162,10 +188,11 @@ const Accueil = (() => {
     </a>`;
   }
 
-  // Lot 3 (§15.9) : contrôles réglementaires sous 30 jours et habilitations à renouveler. La couleur
-  // du trait suit l'état (rouge : un contrôle en retard ; ambre : une habilitation échue), toujours
-  // avec le texte qui le dit.
+  // Lot 3 (§15.9) : contrôles réglementaires sous 30 jours et habilitations à renouveler ; 2.2 (CS170) :
+  // réserves en retard. La couleur du trait suit l'état (rouge : un contrôle ou une réserve en retard ;
+  // ambre : une habilitation échue), toujours avec le texte qui le dit.
   function indicateursConformite(compteurs, aujourdhui) {
+    const reserves = compteurs.reservesEnRetard;
     const controlesEnRetard = compteurs.controlesSous30j
       .filter((controle) => Controles.etat(controle, aujourdhui).statut === 'en retard').length;
     const habilitationsEchues = compteurs.habilitationsARenouveler
@@ -174,7 +201,9 @@ const Accueil = (() => {
       compteurs.controlesSous30j.length, controlesEnRetard ? I18n.t('accueil.indicateurs_conformite.dont_retard', { controlesEnRetard }) : I18n.t('accueil.indicateurs_conformite.controles_reglementaires'))}
       ${indicateur('#/equipe?filtre=a-renouveler', habilitationsEchues ? 'ambre' : '', I18n.t('accueil.indicateurs_conformite.habilitations_renouveler'),
       compteurs.habilitationsARenouveler.length,
-      habilitationsEchues ? I18n.t('accueil.indicateurs_conformite.dont_echues', { n: habilitationsEchues }) : I18n.t('accueil.indicateurs_conformite.60_jours'))}`;
+      habilitationsEchues ? I18n.t('accueil.indicateurs_conformite.dont_echues', { n: habilitationsEchues }) : I18n.t('accueil.indicateurs_conformite.60_jours'))}
+      ${indicateur(LIEN_RESERVES_EN_RETARD, reserves.length ? 'rouge' : '', I18n.t('accueil.indicateurs_conformite.reserves_en_retard'),
+      reserves.length, detailReservesEnRetard(reserves))}`;
   }
 
   // Alerte du responsable : « Contrôle de la base » a trouvé des erreurs.
@@ -360,6 +389,6 @@ const Accueil = (() => {
     afficher, calculerCompteurs, otEnRetard, p1Ouvert, dimancheDe, preventifDeLaSemaine,
     // Pour accueil-bento.js seulement (pas une API : aucun autre module ni test ne s'en sert).
     interne: { otOuvert, joursEntre, pluriel, libelleEquipement, badgeImpact, alerteControle, carteBaseVide,
-      NOMBRE_LIGNES, ORIGINE_PREVENTIF },
+      detailReservesEnRetard, NOMBRE_LIGNES, ORIGINE_PREVENTIF, LIEN_RESERVES_EN_RETARD },
   };
 })();

@@ -13,6 +13,9 @@ pour les tests des mouvements. Familles (le nom du test le dit) :
                 le type ; rien → tuile masquée, la synthèse prend toute la largeur ;
     chiffres    chaque chiffre = la liste correspondante (Accueil.calculerCompteurs, Suggestions), listes
                 « Demandes à traiter » et « OT en retard », liens vers les listes filtrées ;
+    reserves    2.2 (T421, CS170) : troisième lien de « Contrôles et habilitations », réserves en retard (la
+                réserve de RA-01, échéance par défaut passée) vers #/controles?filtre=reserves-en-retard, détail
+                selon l'échéance (saisie, par défaut, mêlées, aucune) ; indicateur du technicien ;
     rapport     tuile du rapport : « Figer », « Plus tard », absente si le mois est figé → la ligne des
                 compteurs s'étend ;
     mouvements  coupés avec prefers-reduced-motion (ni animation ni transition, chiffres tout de suite) ;
@@ -36,7 +39,7 @@ import re
 import sys
 import unittest
 
-from commun import RACINE, CasNavigateur, attendre_pret, preregler_profil, url_fichier
+from commun import RACINE, CasNavigateur, attendre_pret, preregler_profil, scenarios_demo, url_fichier
 from test_poste import AUDIT_TEXTES_JS
 
 REFERENCE = "2026-10-19"
@@ -48,6 +51,7 @@ LIEN_DI, LIEN_RETARD, LIEN_P1 = "#/di?statut=Nouvelle", "#/ot?filtre=retard", "#
 LIEN_PREVENTIFS, LIEN_ARTICLES = "#/preventif?onglet=calendrier", "#/magasin?onglet=a-commander"
 LIEN_CONTROLES, LIEN_HABILITATIONS = "#/controles?filtre=30j", "#/equipe?filtre=a-renouveler"
 LIEN_SUGGESTIONS, LIEN_PLANNING = "#/preventif?onglet=suggestions", "#/planning"
+LIEN_RESERVES = "#/controles?filtre=reserves-en-retard"
 
 # Jetons du brief (valeurs écrites sans espaces pour la comparaison)
 JETONS = {
@@ -122,6 +126,7 @@ DONNEES_JS = """() => {
       .map((o) => ({ id: o.id, origine: o.origine, prevue: o.date_prevue })),
     articles: c.articlesACommander.length, controles: c.controlesSous30j.length,
     habilitations: c.habilitationsARenouveler.length,
+    reserves: c.reservesEnRetard.map((e) => ({ id: e.reserve.id, parDefaut: e.etat.parDefaut })),
     suggestions: Suggestions.ouvertes(Donnees.aujourdhui()).length,
   };
 }""" % json.dumps(STATUTS_FERMES)
@@ -522,7 +527,7 @@ class TestChiffres(CasBento):
         attendus = {LIEN_DI: len(d["di"]), LIEN_RETARD: len(d["retard"]), LIEN_P1: len(d["p1"]),
                     LIEN_PREVENTIFS: len(d["preventifs"]), LIEN_ARTICLES: d["articles"],
                     LIEN_CONTROLES: d["controles"], LIEN_HABILITATIONS: d["habilitations"],
-                    LIEN_SUGGESTIONS: d["suggestions"]}
+                    LIEN_RESERVES: len(d["reserves"]), LIEN_SUGGESTIONS: d["suggestions"]}
         for lien, nombre in attendus.items():
             with self.subTest(lien=lien):
                 self.assertEqual(self.tuile(page, lien).count(), 1)
@@ -530,12 +535,14 @@ class TestChiffres(CasBento):
         securite = sum(1 for x in d["di"] if x["impact"] == "sécurité")
         self.assertIn("dont %d sécurité" % securite, espaces(self.tuile(page, LIEN_DI).inner_text()))
         self.assertEqual(self.tuile(page, LIEN_DI).locator(".comp.rouge").count(), 1)
-        # « Contrôles et habilitations » : une tuile, deux liens, le total dans la grosse pastille
+        # « Contrôles et habilitations » : une tuile, trois liens (réserves en retard depuis la 2.2), le total
+        # dans la grosse pastille
         conformite = page.locator("#bento .bento-conformite")
         self.assertEqual(conformite.count(), 1)
-        self.assertEqual(int(conformite.locator(".bento-carre .chiffre").inner_text()), d["controles"] + d["habilitations"])
+        self.assertEqual(int(conformite.locator(".bento-carre .chiffre").inner_text()),
+                         d["controles"] + d["habilitations"] + len(d["reserves"]))
         self.assertEqual(conformite.locator("a").evaluate_all("l => l.map((a) => a.getAttribute('href'))"),
-                         [LIEN_CONTROLES, LIEN_HABILITATIONS])
+                         [LIEN_CONTROLES, LIEN_HABILITATIONS, LIEN_RESERVES])
         # 3 tuiles « à surveiller »
         self.assertEqual(page.locator("#bento .bento-surveiller").count(), 3)
         # Listes : 5 au plus, la DI de sécurité d'abord, les OT les plus en retard d'abord ; « Tout voir (N) »
@@ -557,7 +564,7 @@ class TestChiffres(CasBento):
         # ramène ensuite à « #/ot » après avoir pris le filtre)
         page.evaluate("""() => { window.__adresses = [];
             window.addEventListener('hashchange', (e) => window.__adresses.push(new URL(e.newURL).hash)); }""")
-        for lien in (LIEN_RETARD, LIEN_ARTICLES, LIEN_CONTROLES, LIEN_SUGGESTIONS):
+        for lien in (LIEN_RETARD, LIEN_ARTICLES, LIEN_CONTROLES, LIEN_RESERVES, LIEN_SUGGESTIONS):
             with self.subTest(clic=lien):
                 self.tuile(page, lien).click()
                 page.wait_for_function("lien => window.__adresses.includes(lien)", arg=lien)
@@ -590,6 +597,80 @@ class TestChiffres(CasBento):
         # Un autre écran retrouve son titre habituel
         page.evaluate("location.hash = '#/ot'")
         page.wait_for_function("document.getElementById('titre-mobile').textContent === 'Ordres de travail'")
+
+
+# ---------------------------------------------------------------------------
+# reserves
+# ---------------------------------------------------------------------------
+
+DETAIL_PAR_DEFAUT = "échéance par défaut passée (30 jours après le contrôle)"
+LEVER_TOUTES_JS = """async () => { for (const e of Controles.reservesEnRetard(Donnees.aujourdhui())) {
+    await Controles.leverReserve(e.reserve.id, { date: Donnees.aujourdhui(), commentaire: 'Remplacé (test).' }); } }"""
+
+
+class TestReserves(CasBento):
+
+    def ligne(self, page):
+        """Lien « réserves en retard » de la tuile « Contrôles et habilitations » : (chiffre, libellé, détail, ton)."""
+        lien = page.locator("#bento .bento-conformite a.bento-sous-lien[href='%s']" % LIEN_RESERVES)
+        self.assertEqual(lien.count(), 1)
+        detail = lien.locator(".comp")
+        return (int(lien.locator(".chiffre").inner_text()), espaces(lien.locator(".bento-sous-texte > span").first.inner_text()),
+                espaces(detail.inner_text()), "rouge" if "rouge" in (detail.get_attribute("class") or "").split() else "")
+
+    def total(self, page):
+        return int(page.locator("#bento .bento-conformite .bento-carre .chiffre").inner_text())
+
+    def test_reserves_en_retard_de_la_demo_puis_detail_selon_l_echeance(self):
+        scenarios = scenarios_demo()
+        page = self.ouvrir()
+        d = self.donnees(page)
+        # La démo : la réserve de RA-01 (relevée le 03/04/2025, ouverte, sans échéance saisie) et elle seule
+        self.assertEqual(d["reserves"], [{"id": scenarios["reserve_en_retard"], "parDefaut": True}])
+        self.assertEqual(page.evaluate("(id) => Donnees.trouver('equipements', Donnees.trouver('controles_reglementaires', "
+                                       "Donnees.trouver('reserves_controle', id).controle_id).equipement_id).repere",
+                                       scenarios["reserve_en_retard"]), "RA-01")
+        self.assertEqual(self.ligne(page), (1, "réserve en retard", DETAIL_PAR_DEFAUT, "rouge"))
+        avant = self.total(page)
+        # Échéance saisie, passée : le détail ne parle plus de l'échéance par défaut
+        self.modifier_puis_reafficher(page, "async () => Controles.modifierReserve(%s, { echeance_levee: '2026-10-01' })"
+                                      % json.dumps(scenarios["reserve_en_retard"]))
+        self.assertEqual(self.ligne(page), (1, "réserve en retard", "échéance de levée passée", "rouge"))
+        # Une réserve de plus, sans échéance saisie, relevée il y a plus de 30 jours : les deux sortes mêlées
+        self.modifier_puis_reafficher(page, """async () => Controles.ajouterReserves(
+            Donnees.trouver('reserves_controle', %s).controle_id, { date_controle: '2026-01-05', texte: 'Manomètre à remplacer.' })"""
+                                      % json.dumps(scenarios["reserve_en_retard"]))
+        self.assertEqual(self.ligne(page),
+                         (2, "réserves en retard", "dont 1 à l'échéance par défaut (30 jours après le contrôle)", "rouge"))
+        self.assertEqual(self.total(page), avant + 1)
+        # Toutes levées : zéro, détail neutre ; le lien reste
+        self.modifier_puis_reafficher(page, LEVER_TOUTES_JS)
+        self.assertEqual(self.ligne(page), (0, "réserve en retard", "aucune échéance de levée passée", ""))
+        self.assertEqual(self.total(page), avant - 1)
+        self.assertEqual(self.donnees(page)["reserves"], [])
+
+    def test_reserves_lien_vers_la_liste_filtree(self):
+        page = self.ouvrir()
+        page.click("#bento .bento-conformite a[href='%s']" % LIEN_RESERVES)
+        page.wait_for_function("() => !document.getElementById('bento')")
+        page.wait_for_function("() => document.querySelector('#controles-statut') && "
+                               "document.querySelector('#controles-statut').value === 'reserves-en-retard'")
+        # La liste ne montre que les contrôles qui ont une réserve en retard : celui de RA-01 (pas celui de CH-01,
+        # en retard lui-même mais sans réserve)
+        liste = page.inner_text("#contenu .controles-liste")
+        self.assertIn("RA-01", liste)
+        self.assertNotIn("CH-01", liste)
+
+    def test_reserves_indicateur_du_technicien(self):
+        page = self.ouvrir(profil="technicien", technicien_id="TEC-0002")
+        indicateurs = page.locator("#contenu .accueil-instruments-technicien > a")
+        self.assertEqual(indicateurs.evaluate_all("l => l.map((a) => a.getAttribute('href'))"),
+                         [LIEN_CONTROLES, LIEN_HABILITATIONS, LIEN_RESERVES])
+        reserves = indicateurs.nth(2)
+        self.assertEqual(espaces(reserves.locator(".lib").inner_text()), "Réserves en retard")
+        self.assertEqual(int(reserves.locator(".chiffre").inner_text()), 1)
+        self.assertEqual(espaces(reserves.locator(".comp").inner_text()), DETAIL_PAR_DEFAUT)
+        self.assertIn("rouge", reserves.get_attribute("class").split())
 
 
 # ---------------------------------------------------------------------------
@@ -896,7 +977,8 @@ class TestAutres(CasBento):
                 if profil == "technicien":
                     grille = page.eval_on_selector(".accueil-instruments-technicien", """e => ({ colonnes: getComputedStyle(e).gridTemplateColumns.split(' ').length,
                         largeur: getComputedStyle(e).maxWidth, trait: getComputedStyle(e.querySelector('a')).borderTopWidth })""")
-                    self.assertEqual(grille, {"colonnes": 2, "largeur": "640px", "trait": "2px"})
+                    # Trois indicateurs depuis la 2.2 (réserves en retard, T421) : trois colonnes
+                    self.assertEqual(grille, {"colonnes": 3, "largeur": "960px", "trait": "2px"})
 
     def test_couleurs_seulement_dans_les_variables(self):
         motif_css = re.compile(r"#[0-9A-Fa-f]{3,8}\b|rgba?\(|hsla?\(")

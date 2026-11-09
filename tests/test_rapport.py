@@ -14,6 +14,10 @@ vérifications sur le disque (donnees/documents/, parametres.csv, journal.csv). 
     revisions   « Recalculer » écrit -r2 sans toucher au premier ; un fichier du même nom déjà présent
                 sur le disque n'est jamais écrasé (révision suivante) ;
     courriel    lien mailto: sans pièce jointe, objet et corps du résumé ;
+    reserves    2.2 (T421, CS170) : fait marquant « n réserves de contrôle en retard au … (échéance de levée passée…) » et
+                décision « Lever les n réserves en retard : texte court (repère) » (calcul Python ; la démo : RA-01) ;
+                trois faits au plus, les réserves passent avant la répétition des pannes, rien ne change sans
+                réserve en retard ; langue choisie pour le rapport (D156) ;
     onglet      Rapport.afficherOnglet liste les rapports et recalcule ;
     demo        mode démo : rapport en mémoire (documentsEnMemoire, donc dans l'export ZIP).
 
@@ -22,6 +26,7 @@ Lancer depuis la racine du projet :
 """
 import csv
 import datetime
+import html
 import io
 import re
 import shutil
@@ -32,6 +37,7 @@ import urllib.parse
 from pathlib import Path
 
 from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
+from test_accueil_lot3 import brut, reserves_en_retard
 
 NOMS_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
              "novembre", "décembre"]
@@ -85,6 +91,31 @@ def ecrire_parametre(dossier, cle, valeur):
 
 def parametre(dossier, cle):
     return next((ligne["valeur"] for ligne in lire_csv(dossier, "parametres.csv") if ligne["cle"] == cle), None)
+
+
+LONGUEUR_TEXTE_RESERVE = 60     # rapport-contenu.js : texte d'une réserve citée par une décision
+
+
+def texte_court(texte):
+    """Texte d'une réserve citée par la décision « Lever les réserves en retard » (même règle que rapport-contenu.js) :
+    sur une ligne, coupé à 60 caractères au dernier blanc de la seconde moitié, puis « … »."""
+    ligne = re.sub(r"\s+", " ", texte.strip())
+    if len(ligne) <= LONGUEUR_TEXTE_RESERVE:
+        return ligne
+    coupe = ligne[:LONGUEUR_TEXTE_RESERVE]
+    if coupe.rfind(" ") >= LONGUEUR_TEXTE_RESERVE / 2:
+        coupe = coupe[:coupe.rfind(" ")]
+    return re.sub(r"[\s,;:.]+$", "", coupe) + "…"
+
+
+def fait_reserves_attendu(nombre, par_defaut, date):
+    """Fait marquant des réserves en retard (français), d'après leur nombre et celles à l'échéance par défaut."""
+    debut = "%d réserve%s de contrôle en retard au %s (échéance de levée passée" % (nombre, "s" if nombre > 1 else "", date)
+    if not par_defaut:
+        return debut + ")."
+    if par_defaut == nombre:
+        return debut + " ; échéance par défaut : 30 jours après le contrôle)."
+    return debut + " ; dont %d à l'échéance par défaut : 30 jours après le contrôle)." % par_defaut
 
 
 class CasRapport(CasNavigateur):
@@ -211,10 +242,37 @@ class TestContenu(CasRapport):
     def test_seuil_reparer_ou_remplacer_a_examiner_jamais_a_remplacer(self):
         ecrire_parametre(self.serveur.dossier, "seuil_remplacement_pct", "1")
         self.ouvrir()
-        contenu = self.figer_depuis_l_accueil()
+        contenu = html.unescape(self.figer_depuis_l_accueil())
         self.assertIn("À examiner", contenu)
         self.assertIn("de sa valeur de remplacement", contenu)
+        # Le texte des réserves citées (2.2, T421) est une donnée saisie (« … à remplacer avant la prochaine
+        # inspection ») : la règle D44 porte sur les mots de Prévo, on le retire avant de chercher
+        for reserve in lire_csv(self.serveur.dossier, "reserves_controle.csv"):
+            contenu = contenu.replace(texte_court(brut(reserve["texte"])), "").replace(brut(reserve["texte"]), "")
         self.assertNotIn("à remplacer", contenu.lower())
+
+    def test_reserves_en_retard_fait_marquant_et_decision(self):
+        # 2.2 (T421, CS170) : les réserves en retard (calcul Python sur les CSV du serveur ; la démo : celle de RA-01,
+        # sans échéance saisie) sont citées par un fait marquant et une décision, dans le document figé
+        self.ouvrir()
+        aujourdhui = datetime.date.fromisoformat(self.page.evaluate("Donnees.aujourdhui()"))
+        reserves = reserves_en_retard(self.serveur.dossier, aujourdhui)
+        self.assertTrue(reserves, "la démo doit avoir une réserve en retard")
+        contenu = html.unescape(self.figer_depuis_l_accueil())
+        par_defaut = sum(1 for _, defaut in reserves if defaut)
+        self.assertIn("<li>%s</li>" % fait_reserves_attendu(len(reserves), par_defaut, aujourdhui.strftime("%d/%m/%Y")), contenu)
+        lignes = {ligne["id"]: ligne for ligne in lire_csv(self.serveur.dossier, "reserves_controle.csv")}
+        controles = {ligne["id"]: ligne for ligne in lire_csv(self.serveur.dossier, "controles_reglementaires.csv")}
+        reperes = {ligne["id"]: ligne["repere"] for ligne in lire_csv(self.serveur.dossier, "equipements.csv")}
+        citees = " ; ".join("%s (%s)" % (texte_court(brut(lignes[identifiant]["texte"])),
+                                         brut(reperes[controles[lignes[identifiant]["controle_id"]]["equipement_id"]]))
+                            for identifiant, _ in reserves[:3])
+        debut = "Lever la réserve en retard : " if len(reserves) == 1 else "Lever les %d réserves en retard : " % len(reserves)
+        self.assertIn("<li>%s%s.</li>" % (debut, citees), contenu)
+        self.assertIn("(RA-01)", citees)
+        # Trois faits et trois décisions au plus, comme avant la 2.2
+        self.assertLessEqual(len(re.findall(r"<li>", contenu.split("Faits marquants")[1].split("</ul>")[0])), 3)
+        self.assertLessEqual(len(re.findall(r"<li>", contenu.split("Décisions à prendre")[1].split("</ol>")[0])), 3)
 
     def test_lien_courriel_sans_piece_jointe(self):
         self.ouvrir()
@@ -269,6 +327,48 @@ class TestRevisions(CasRapport):
         self.assertEqual((self.documents / NOM).read_text(encoding="utf-8"), "ANCIEN RAPPORT")
         self.assertIn("Rapport mensuel de maintenance", self.rapport(NOM).read_text(encoding="utf-8"))
         self.assertTrue(self.attendre(lambda: parametre(self.serveur.dossier, "rapports_mensuels") == self.rapport(NOM).name))
+
+
+class TestRapportReservesDemo(CasNavigateur):
+    """Mode démo, horloge à la date de référence (2026-10-19 : dates non décalées), rapport de septembre 2026."""
+
+    FAITS_JS = "() => Rapport.donnees('2026-09', Donnees.aujourdhui()).faits"
+    DECISIONS_JS = "() => Rapport.donnees('2026-09', Donnees.aujourdhui()).decisions"
+
+    def test_trois_faits_au_plus_les_reserves_passent_avant_la_repetition_des_pannes(self):
+        self.contexte.clock.set_fixed_time("2026-10-19T09:00:00")
+        preregler_profil(self.contexte, "responsable", "Responsable")
+        self.page.goto(url_fichier("index.html"))
+        self.page.click("#btn-demo")
+        attendre_pret(self.page)
+        self.assertEqual(self.page.evaluate("Donnees.aujourdhui()"), "2026-10-19")
+        avec = self.page.evaluate(self.FAITS_JS)
+        decisions_avec = self.page.evaluate(self.DECISIONS_JS)
+        # Le fait des réserves, en français (langue de l'installation), et dans la langue choisie pour le rapport (D156)
+        reserve = fait_reserves_attendu(1, 1, "19/10/2026")
+        self.assertEqual(avec[-1], reserve)
+        anglais = self.page.evaluate("""async () => { await I18n.chargerLangue('en');
+            return Rapport.donnees('2026-09', Donnees.aujourdhui(), '', 'en').faits; }""")
+        self.assertEqual(anglais[-1], "1 inspection finding overdue on 19/10/2026 (clearing due date passed; "
+                                      "default due date: 30 days after the inspection).")
+        # La réserve levée : le rapport est celui d'avant la 2.2 (ici arrêt, pannes, contrôles en retard)
+        self.page.evaluate("""async () => { for (const e of Controles.reservesEnRetard(Donnees.aujourdhui())) {
+            await Controles.leverReserve(e.reserve.id, { date: Donnees.aujourdhui(), commentaire: 'Purgeur remplacé (test).' }); } }""")
+        sans = self.page.evaluate(self.FAITS_JS)
+        decisions_sans = self.page.evaluate(self.DECISIONS_JS)
+        self.assertEqual(len(sans), 3)
+        self.assertTrue(sans[0].startswith("Plus long arrêt"), sans)
+        self.assertIn("pannes dans le mois", sans[1])
+        self.assertIn("en retard au 19/10/2026", sans[2])
+        self.assertNotIn(reserve, sans)
+        # Avec la réserve : trois faits au plus ; la répétition des pannes sort, l'ordre des autres reste
+        self.assertEqual(avec, [sans[0], sans[2], reserve])
+        # Décisions : « Lever la réserve en retard » après les contrôles à planifier, trois au plus
+        lever = "Lever la réserve en retard : Purgeur automatique du réservoir défectueux : à remplacer… (RA-01)."
+        self.assertNotIn(lever, decisions_sans)
+        self.assertEqual(len(decisions_avec), min(3, len(decisions_sans) + 1))
+        self.assertEqual(decisions_avec.index(lever), 1 if decisions_sans[0].startswith("Planifier") else 0)
+        self.assertEqual([d for d in decisions_avec if d != lever], decisions_sans[:len(decisions_avec) - 1])
 
 
 class TestRapportDemo(CasNavigateur):

@@ -126,22 +126,53 @@ const Rapport = (() => {
     ];
   }
 
+  /** Nombre de faits marquants et de décisions du rapport (une page A4). */
+  const NOMBRE_FAITS = 3;
+  // Rang d'un fait marquant : au-delà de NOMBRE_FAITS, les rangs les plus grands sortent ; ceux qui restent gardent
+  // l'ordre d'écriture. Les retards réglementaires (contrôles, réserves) passent avant la répétition des pannes :
+  // sans réserve en retard, il n'y a jamais plus de trois faits et le rapport est celui d'avant la 2.2 (T421).
+  const RANG_FAIT = { arret: 1, retard: 2, reserves: 3, pannes: 4 };
+  /** Longueur du texte d'une réserve citée par une décision (coupé à un blanc, puis « … »). */
+  const LONGUEUR_TEXTE_RESERVE = 60;
+
+  /** Contrôles en retard (équipement suivi) à la date `aujourdhui`. */
+  function controlesEnRetard(aujourdhui) {
+    return Donnees.lignes('controles_reglementaires').filter((controle) => Controles.interne.equipementSuivi(controle) && Controles.etat(controle, aujourdhui).statut === 'en retard');
+  }
+
+  /**
+   * Fait marquant des réserves en retard (Controles.reservesEnRetard, CS170) : « 3 réserves de contrôle en retard au
+   * 31/10/2026 (échéance de levée passée). » ; quand certaines n'ont pas d'échéance saisie (réserves reprises de la
+   * 2.1, D183, ou saisies sans échéance), la phrase dit que leur échéance est celle par défaut (30 jours après le
+   * contrôle, D187) : elle explique pourquoi elles sont presque toutes en retard au premier lancement de la 2.2.
+   */
+  function faitReservesEnRetard(reserves, aujourdhui) {
+    const parDefaut = reserves.filter((element) => element.etat.parDefaut).length;
+    const valeurs = { n: reserves.length, aujourdhui: UI.dateFr(aujourdhui), parDefaut, jours: Controles.interne.DELAI_LEVEE_PAR_DEFAUT_JOURS };
+    if (!parDefaut) return I18n.t('rapport.faits_marquants.reserves_retard', valeurs);
+    if (parDefaut === reserves.length) return I18n.t('rapport.faits_marquants.reserves_retard_par_defaut', valeurs);
+    return I18n.t('rapport.faits_marquants.reserves_retard_dont_par_defaut', valeurs);
+  }
+
   function faitsMarquants(periode, global, aujourdhui) {
-    const faits = [];
+    const faits = [];                         // { rang, texte }, dans l'ordre d'écriture
     const pannes = Indicateurs.pannes(periode).filter((panne) => panne.duree !== null);
     if (pannes.length) {
       const longue = pannes.reduce((a, b) => (b.duree > a.duree ? b : a));
-      faits.push(I18n.t('rapport.faits_marquants.plus_long_arret', { repere: repere(longue.ot.equipement_id), duree: UI.heures(longue.duree), otId: longue.ot.id }));
+      faits.push({ rang: RANG_FAIT.arret, texte: I18n.t('rapport.faits_marquants.plus_long_arret', { repere: repere(longue.ot.equipement_id), duree: UI.heures(longue.duree), otId: longue.ot.id }) });
     }
     const plusSouvent = Indicateurs.paretoPannes(periode, 1)[0];
     if (plusSouvent && plusSouvent.valeur >= 2) {
-      faits.push(I18n.t('rapport.faits_marquants.pannes_mois', { repere: repere(plusSouvent.equipementId), n: plusSouvent.valeur }));
+      faits.push({ rang: RANG_FAIT.pannes, texte: I18n.t('rapport.faits_marquants.pannes_mois', { repere: repere(plusSouvent.equipementId), n: plusSouvent.valeur }) });
     }
-    const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.interne.equipementSuivi(controle) && Controles.etat(controle, aujourdhui).statut === 'en retard');
-    if (enRetard.length) faits.push(I18n.t('rapport.faits_marquants.controle_reglementaire_retard', { n: enRetard.length, aujourdhui: UI.dateFr(aujourdhui) }));
-    else if (global.otEnRetard.valeur) faits.push(I18n.t('rapport.faits_marquants.ot_retard', { otEnRetardValeur: global.otEnRetard.valeur, aujourdhui: UI.dateFr(aujourdhui) }));
-    if (!faits.length) faits.push(I18n.t('rapport.faits_marquants.aucune_panne_arret_production'));
-    return faits.slice(0, 3);
+    const enRetard = controlesEnRetard(aujourdhui);
+    if (enRetard.length) faits.push({ rang: RANG_FAIT.retard, texte: I18n.t('rapport.faits_marquants.controle_reglementaire_retard', { n: enRetard.length, aujourdhui: UI.dateFr(aujourdhui) }) });
+    else if (global.otEnRetard.valeur) faits.push({ rang: RANG_FAIT.retard, texte: I18n.t('rapport.faits_marquants.ot_retard', { otEnRetardValeur: global.otEnRetard.valeur, aujourdhui: UI.dateFr(aujourdhui) }) });
+    const reserves = Controles.reservesEnRetard(aujourdhui);
+    if (reserves.length) faits.push({ rang: RANG_FAIT.reserves, texte: faitReservesEnRetard(reserves, aujourdhui) });
+    if (!faits.length) return [I18n.t('rapport.faits_marquants.aucune_panne_arret_production')];
+    const gardes = faits.slice().sort((a, b) => a.rang - b.rang).slice(0, NOMBRE_FAITS);
+    return faits.filter((fait) => gardes.includes(fait)).map((fait) => fait.texte);
   }
 
   /** Décision « réparer ou remplacer ? » (D44) : équipement au plus fort ratio coût 12 mois /
@@ -166,13 +197,30 @@ const Rapport = (() => {
     sansValeur, seuil };
   }
 
+  /** Texte d'une réserve sur une ligne, coupé à LONGUEUR_TEXTE_RESERVE caractères (au dernier blanc s'il y en a un
+   *  dans la seconde moitié), suivi de « … » quand il est coupé. */
+  function texteCourtReserve(reserve) {
+    const caracteres = Array.from(texte(reserve.texte).replace(/\s+/g, ' '));
+    if (caracteres.length <= LONGUEUR_TEXTE_RESERVE) return caracteres.join('');
+    let coupe = caracteres.slice(0, LONGUEUR_TEXTE_RESERVE).join('');
+    const blanc = coupe.lastIndexOf(' ');
+    if (blanc >= LONGUEUR_TEXTE_RESERVE / 2) coupe = coupe.slice(0, blanc);
+    return coupe.replace(/[\s,;:.]+$/, '') + I18n.t('rapport.donnees.texte');
+  }
+
   function decisions(mois, aujourdhui, remplacement) {
     const liste = [];
     if (remplacement.decision) liste.push(remplacement.decision);
-    const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.interne.equipementSuivi(controle) && Controles.etat(controle, aujourdhui).statut === 'en retard');
+    const enRetard = controlesEnRetard(aujourdhui);
     if (enRetard.length) {
-      const controlesEnRetard = enRetard.slice(0, 3).map((controle) => texte(controle.nature) + ' (' + repere(controle.equipement_id) + ')').join(' ; ');
-      liste.push(I18n.t('rapport.decisions.planifier_controles', { n: enRetard.length, liste: controlesEnRetard }));
+      const controles = enRetard.slice(0, 3).map((controle) => texte(controle.nature) + ' (' + repere(controle.equipement_id) + ')').join(' ; ');
+      liste.push(I18n.t('rapport.decisions.planifier_controles', { n: enRetard.length, liste: controles }));
+    }
+    // 2.2 (CS170) : « Lever les 3 réserves en retard : <texte court> (<repère>) ; … », les plus anciennes d'abord.
+    const reserves = Controles.reservesEnRetard(aujourdhui);
+    if (reserves.length) {
+      const reservesCitees = reserves.slice(0, 3).map((element) => texteCourtReserve(element.reserve) + ' (' + repere(element.controle.equipement_id) + ')').join(' ; ');
+      liste.push(I18n.t('rapport.decisions.lever_reserves', { n: reserves.length, liste: reservesCitees }));
     }
     const aCommander = Magasin.aCommander();
     if (aCommander.length) {
@@ -180,7 +228,7 @@ const Rapport = (() => {
       liste.push(critiques ? I18n.t('rapport.decisions.commander_articles_dont_critiques', { n: aCommander.length, critiques })
         : I18n.t('rapport.decisions.commander_articles', { n: aCommander.length }));
     }
-    return liste.slice(0, 3);
+    return liste.slice(0, NOMBRE_FAITS);
   }
 
   /**
