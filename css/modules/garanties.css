@@ -2,7 +2,7 @@
    « Garanties et contrats », fiches, formulaires, carte et badge de la fiche équipement, rappel à la création d'un OT.
    Créée vide par T450 (squelette du L4), remplie par T455 à T457. Uniquement des variables de la charte
    (css/style.css) : aucune couleur codée en dur.
-   Sommaire : 1 formulaires (T455). */
+   Sommaire : 1 formulaires (T455) · 2 écran, liste et fiches (T456). */
 
 /* =========================================================================================
    1. Formulaires d'une garantie et d'un contrat (garanties-formulaires.js, T455)
@@ -36,4 +36,60 @@
 
 @media (max-width: 640px) {
   .garanties-ligne-fournisseur .btn, .garanties-ajout-equipement > .btn { flex: 1 1 100%; }
+}
+
+/* =========================================================================================
+   2. Écran « Garanties et contrats » : compteurs, onglets, liste, fiches (garanties-ecrans.js, T456)
+   ========================================================================================= */
+
+.garanties-ecran h1, .garanties-fiche h1 { overflow-wrap: anywhere; }
+.entete-page .garanties-principe { margin-top: .3rem; }
+.garanties-compteurs > a .comp { text-decoration: underline; text-underline-offset: 2px; }
+.garanties-compteurs .lib { overflow-wrap: anywhere; }
+.garanties-onglets .panneau-onglet { padding-top: .9rem; }
+.garanties-nombre { margin: 0 0 .6rem; }
+.garanties-liste { padding: 8px 10px; }
+.garanties-liste .table th, .garanties-liste .table td { padding-left: .5rem; padding-right: .5rem; vertical-align: top; }
+.garanties-col-statut { min-width: 15rem; }
+.garanties-col-objet { min-width: 12rem; }
+.garanties-col-equipement { min-width: 9rem; }
+/* Première colonne : l'objet d'un contrat et la désignation d'un équipement vont à la ligne (le repère, non) */
+.garanties-liste .table td.garanties-col-objet, .garanties-liste .table td.garanties-col-equipement { white-space: normal; }
+.garanties-liste .table td.garanties-col-equipement .garanties-lien { white-space: nowrap; }
+.garanties-lien { font-weight: 600; overflow-wrap: anywhere; }
+/* Petite ligne sous le badge : la raison du statut (« se termine dans 45 jours, le 31/03/2027 ») */
+.garanties-sous-ligne { display: block; font-size: .875rem; color: var(--muted); margin-top: .15rem; overflow-wrap: anywhere; }
+.garanties-statut { display: inline-flex; }
+.carte-tete .garanties-statut { margin-left: auto; }
+.carte-tete .garanties-statut .badge { margin-left: 0; }
+.carte-tete b { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.garanties-total { margin: .8rem 0 0; font-weight: 700; color: var(--texte); overflow-wrap: anywhere; }
+/* Fiches */
+.garanties-badges { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; margin: .2rem 0 0; }
+.garanties-raison { color: var(--texte-2); overflow-wrap: anywhere; }
+.garanties-fiche .carte + .carte { margin-top: 1rem; }
+.garanties-fournisseur { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.garanties-fournisseur a { overflow-wrap: anywhere; }
+.garanties-document { display: inline-flex; align-items: center; gap: .35rem; font-weight: 700; }
+.garanties-nom-document { display: block; font-size: .875rem; overflow-wrap: anywhere; }
+.garanties-texte-long { white-space: pre-line; }
+.garanties-equipements-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.garanties-bandeau .alerte-texte { display: flex; flex-direction: column; gap: .6rem; align-items: flex-start; }
+.garanties-bandeau .alerte-texte p { margin: 0; }
+.garanties-journal { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.garanties-journal li { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: .1rem 1rem; padding: .55rem 0; border-bottom: 1px solid var(--trait); }
+.garanties-journal li:last-child { border-bottom: 0; }
+.garanties-journal .muted { grid-column: 2; margin: 0; font-size: .875rem; }
+.garanties-quand { color: var(--texte-2); font-size: .9375rem; }
+.garanties-action { overflow-wrap: anywhere; }
+.garanties-fenetre p { margin: 0; }
+
+@media (max-width: 640px) {
+  .garanties-ecran .entete-page .actions .btn, .garanties-fiche .actions .btn { flex: 1 1 100%; }
+  .garanties-bandeau .alerte-texte { align-items: stretch; }
+  .garanties-liste { padding: 0; background: none; border: 0; }
+  .garanties-filtres select { flex: 1 1 140px; min-width: 0; }
+  .garanties-fournisseur a, .garanties-document, .garanties-equipements-liste a { min-height: 48px; display: inline-flex; align-items: center; }
+  .garanties-journal li { grid-template-columns: minmax(0, 1fr); }
+  .garanties-journal .muted { grid-column: 1; }
 }
