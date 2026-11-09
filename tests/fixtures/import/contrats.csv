@@ -1,0 +1,11 @@
+﻿Prestataire;Objet;Équipements;Début;Fin;Préavis;Tacite reconduction;Montant annuel HT;Périmètre
+Fluidalpes Services;Maintenance préventive des compresseurs;CP-01, CP-01.SEC;03/12/2025;01/01/2027;2;oui;4800;Deux visites par an, pièces d'usure comprises.
+Électro-Alpes Distribution;Vérification annuelle des installations électriques;;18/11/2024;30/06/2027;3;oui;1300;
+Froid Industriel du Dauphiné;Maintenance du groupe froid;GF-01;01/01/2026;31/12/2026;3;oui;2 350,50;Visite trimestrielle et dépannage sous 24 h.
+Garnitech Pompes;Dépannage des pompes;"PO-01;PO-02;PO-03";01/03/2026;28/02/2027;1;non;;
+Lubrifix Industrie;Graissage des convoyeurs;CV-01, CV-09;01/01/2026;31/12/2026;2;oui;600;
+;Nettoyage des filtres de la centrale;VE-01;01/01/2026;31/12/2026;1;non;450;
+Mécaroule Distribution;Fourniture de roulements;;01/01/2026;31/12/2026;trois;oui;900;
+Lubrifix Industrie;Lubrification des chaînes de convoyage;;22/05/2026;26/06/2027;3;non;-200;Tournée mensuelle, huile fournie.
+FROID INDUSTRIEL DU DAUPHINÉ;Maintenance du groupe froid;GF-01;01/01/2026;31/12/2026;3;oui;2350;
+Hydraulique du Guiers;Entretien du groupe hydraulique;PR-01.GH;01/01/2026;31/12/2025;2;oui;1500;

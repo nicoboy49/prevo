@@ -36,6 +36,8 @@ personnes et d'entreprises inventés, adresses en `.example`, comme le jeu de d�
 | controles.csv | CSV UTF-8 BOM « ; » | `controles` | 6 | 2 | 1 | 1 | 2 | — |
 | gammes.xlsx | classeur .xlsx | `gammes` | 9 | 6 | 0 | 0 | 3 | — |
 | historique.csv | CSV UTF-8 « , » | `historique` | 18 | 13 | 0 | 0 | 2 | 1 doublon sûr, 2 doublon supposé |
+| garanties.csv | CSV UTF-8 BOM « ; » | `garanties` | 10 | 3 | 1 | 1 | 5 | — |
+| contrats.csv | CSV UTF-8 BOM « ; » | `contrats` | 10 | 2 | 1 | 1 | 6 | — |
 
 ## equipements.xlsx, equipements.ods, equipements.xls — liste du parc d'un atelier
 
@@ -442,6 +444,80 @@ même valeur ; absent → correctif différé (signalé). Origine « manuel » p
 | 18 | 4601 | CV-02 | doublon supposé | — | — | — | — | — | — | — | même équipement CV-02 (EQ-0023), même date de création 2025-09-25 12:54 et même titre que l'OT existant OT-2025-0002 : montrée avec « Importer quand même » (non cochée) |
 | 19 | 4514 | CV-02 | doublon sûr | — | — | — | — | — | — | — | même ancien numéro « 4514 » que la ligne 6, plus haut dans le même fichier : doublon sûr, ignorée |
 
+## garanties.csv — garanties des équipements (2.2)
+
+- **Type de données** : `garanties`.
+- **Format** : CSV UTF-8 **avec BOM**, séparateur « ; », CRLF, dates JJ/MM/AAAA.
+- **En-tête** : ligne 1 ; colonnes « Repère », « Fournisseur », « Date de début », « Échéance », « Ce qui est couvert ».
+
+| Colonne | Champ attendu | Statut attendu |
+| --- | --- | --- |
+| Repère | `equipement` (par repère, doit exister ; clé naturelle avec la fin) | sûre (synonyme) |
+| Fournisseur | `fournisseur` (par nom, créé s'il manque) | sûre (libellé) |
+| Date de début | `date_debut` | sûre (synonyme) |
+| Échéance | `date_fin` (clé naturelle avec l'équipement) | sûre (synonyme) |
+| Ce qui est couvert | `conditions` | sûre (synonyme) |
+
+**Pièges** :
+- clé naturelle équipement + date de fin : une deuxième garantie du même équipement (PO-01, autre fin) est une création, pas une mise à jour ;
+- « ; » dans les conditions (ligne 2, champ entre guillemets) ;
+- fournisseur inconnu créé une fois (D88 a), mais pas celui d'une ligne refusée (lignes 8 et 9) ;
+- fournisseur et date de début vides (facultatifs) ; fin avant le début (formulaire) ; échéance vide ; date impossible ; équipement inconnu ; doublon dans le fichier.
+
+**Attendu** (base de démo) : 10 lignes de données : 3 créer, 1 mettre à jour, 1 identique, 5 refusée. Référence créée : fournisseur FOU-0006 « Froid Industriel du Dauphiné » (les fournisseurs des lignes refusées ne sont pas créés).
+
+| Ligne | Clé | Action attendue | Détail |
+| --- | --- | --- | --- |
+| 2 | CP-01 / 2027-03-28 | identique | GAR-0001 : aucune colonne ne change ; « ; » dans les conditions (champ entre guillemets) |
+| 3 | PO-02 / 2026-11-18 | mettre à jour | GAR-0002 : conditions « Garniture mécanique et roulements : pièces seules, main-d'œuvre à notre charge. » → « Garniture mécanique, roulements et main-d'œuvre. » |
+| 4 | GF-01 / 2028-08-31 | créer | GAR-0004 (équipement EQ-0007) ; fournisseur FOU-0006 « Froid Industriel du Dauphiné » créé |
+| 5 | CU-01 / 2027-06-30 | créer | GAR-0005 (équipement EQ-0016) ; sans fournisseur ni date de début (facultatifs) |
+| 6 | PO-01 / 2028-07-01 | créer | GAR-0006 (équipement EQ-0004) : une autre date de fin que GAR-0003 (fin 2026-07-01), donc une autre garantie |
+| 7 | XX-99 / 2027-12-31 | refusée | équipement « XX-99 » introuvable |
+| 8 | PR-01 / (vide) | refusée | échéance vide (fin de garantie : obligatoire, clé naturelle avec l'équipement) ; « Hydraulique du Guiers » n'est pas créé |
+| 9 | SC-01 / 2026-03-01 | refusée | fin avant le début (contrôle du formulaire, Garanties.verifierGarantie) ; « Scies et Lames du Grésivaudan » n'est pas créé |
+| 10 | PT-01 / 31/02/2027 | refusée | échéance « 31/02/2027 » illisible (jour inexistant) |
+| 11 | GF-01 / 2028-08-31 | refusée | doublon dans le fichier (même équipement et même date de fin que la ligne 4) |
+
+## contrats.csv — contrats de prestataires (2.2)
+
+- **Type de données** : `contrats`.
+- **Format** : CSV UTF-8 **avec BOM**, séparateur « ; », CRLF, dates JJ/MM/AAAA, décimales à virgule.
+- **En-tête** : ligne 1 ; colonnes « Prestataire », « Objet », « Équipements », « Début », « Fin », « Préavis », « Tacite reconduction », « Montant annuel HT », « Périmètre ».
+
+| Colonne | Champ attendu | Statut attendu |
+| --- | --- | --- |
+| Prestataire | `prestataire` (par nom, créé s'il manque ; clé naturelle avec l'objet) | sûre (libellé) |
+| Objet | `objet` | sûre (libellé) |
+| Équipements | `equipements_concernes` → `equipement_ids` (repères → identifiants séparés par « ; ») | sûre (synonyme) |
+| Début | `date_debut` | sûre (libellé) |
+| Fin | `date_fin` | sûre (libellé) |
+| Préavis | `preavis_mois` | sûre (synonyme) |
+| Tacite reconduction | `reconduction_tacite` | sûre (synonyme) |
+| Montant annuel HT | `montant_annuel` (devise réglée, hors taxes, D190) | sûre (libellé) |
+| Périmètre | `perimetre` | sûre (libellé) |
+
+**Pièges** :
+- équipements concernés en repères séparés par des virgules (« CP-01, CP-01.SEC ») ou par « ; » (ligne 5, champ entre guillemets) ; un repère inconnu (« CV-09 », ligne 6) refuse sa ligne, les autres s'importent ;
+- prestataire inconnu créé une fois, écrit aussi en majuscules (doublon ligne 4) ; celui d'une ligne refusée n'est pas créé ;
+- montant « 2 350,50 » (espace, virgule) ; montant vide (facultatif) ; montant négatif sur une fiche existante (refusée, la fiche ne change pas) ; préavis « trois » ; prestataire vide ;
+- contrat existant identique et contrat existant mis à jour (fin et montant ; cellules vides : rien d'effacé).
+
+**Attendu** (base de démo) : 10 lignes de données : 2 créer, 1 mettre à jour, 1 identique, 6 refusée. Référence créée : fournisseur FOU-0006 « Froid Industriel du Dauphiné » (prestataire).
+
+| Ligne | Clé | Action attendue | Détail |
+| --- | --- | --- | --- |
+| 2 | Fluidalpes Services / compresseurs | identique | CTP-0001 : aucune colonne ne change ; équipements « CP-01, CP-01.SEC » = EQ-0001;EQ-0002 |
+| 3 | Électro-Alpes Distribution / électricité | mettre à jour | CTP-0002 : fin 2026-06-30 → 2027-06-30 ; montant 1250 → 1300 (cellules vides : rien d'effacé) |
+| 4 | Froid Industriel du Dauphiné / groupe froid | créer | CTP-0005 (équipement EQ-0007) ; prestataire FOU-0006 « Froid Industriel du Dauphiné » créé ; montant « 2 350,50 » → 2350.5 ; préavis de 3 mois : date limite de résiliation 2026-09-30 (CS173) |
+| 5 | Garnitech Pompes / pompes | créer | CTP-0006 ; repères séparés par « ; » (champ entre guillemets) → EQ-0004;EQ-0005;EQ-0006 ; sans montant (facultatif) |
+| 6 | Lubrifix Industrie / convoyeurs | refusée | équipement « CV-09 » introuvable (un repère inconnu refuse la ligne, les autres s'importent) |
+| 7 | (vide) / filtres | refusée | prestataire vide (obligatoire, clé naturelle avec l'objet) |
+| 8 | Mécaroule Distribution / roulements | refusée | préavis « trois » illisible (nombre entier attendu) |
+| 9 | Lubrifix Industrie / chaînes | refusée | montant « -200 » négatif (contrôle du formulaire, Garanties.verifierContrat) : la fiche CTP-0004 n'est pas touchée |
+| 10 | Froid Industriel du Dauphiné / groupe froid | refusée | doublon dans le fichier (même prestataire, écrit en majuscules, et même objet que la ligne 4) |
+| 11 | Hydraulique du Guiers / hydraulique | refusée | fin avant le début (contrôle du formulaire) ; prestataire « Hydraulique du Guiers » pas créé |
+
 ## Fichiers piégés (CS89 : message clair, rien de lu ni d'écrit, l'onglet ne se bloque pas)
 
 | Fichier | Contenu | Attendu |
@@ -500,7 +576,8 @@ dans cet ordre : `codes.csv`, `techniciens.tsv`, `fournisseurs.tsv`, `equipement
 toutes les machines de la démo citées par les autres fichiers (avec leurs chemins de localisation complets), les
 techniciens et les codes de la démo sont dans leurs fichiers : sur une base vide, les références se résolvent alors
 par les fiches créées plus tôt, sauf les pièges voulus (« XX-99 », « Pierre Martel », « Paul Dumas », lignes en
-erreur). Différences attendues avec la démo : tout ce qui était « identique » ou « mis à jour » est **créé** ;
+erreur). `garanties.csv` et `contrats.csv` (2.2) ne font pas partie de cette reprise : leurs attentes
+valent pour la démo seulement (ils citent des équipements que la liste du parc ne contient pas). Différences attendues avec la démo : tout ce qui était « identique » ou « mis à jour » est **créé** ;
 « 007 » existe après la liste du parc (son compteur, sa gamme et l'habilitation d'Inès Chabert après
 `techniciens.tsv` deviennent des créations) ; la ligne 18 de l'historique n'a plus d'OT existant en face
 (elle est créée) ; « CP-01.PUR » trouve sa machine mère CP-01 plus haut dans le fichier. Le calcul Python

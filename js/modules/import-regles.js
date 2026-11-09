@@ -270,6 +270,17 @@ const Import = (() => {
   }
   /** Équipement de la base par son repère (l'actif d'abord), ou null. */
   const trouverEquipement = (repere, contexte) => indexDe(contexte || nouveauContexte(), 'equipements', CLE_REPERE).get(cleTexte(repere)) || null;
+  /** Repères séparés par des virgules (ou « ; », retours à la ligne) → identifiants séparés par « ; », dans l'ordre,
+   *  doublons retirés (contrats, T487) ; un repère introuvable ajoute son erreur à la ligne. */
+  function identifiantsDesReperes(contexte, valeur, erreurs) {
+    const ids = [];
+    texte(valeur).split(/[,;\r\n]/).map(texte).filter(Boolean).forEach((repere) => {
+      const equipement = trouverEquipement(repere, contexte);
+      if (!equipement) erreurs.push(I18n.t('import.premiere_passe.equipement_introuvable_prevo', { equipement: repere }));
+      else if (!ids.includes(equipement.id)) ids.push(equipement.id);
+    });
+    return ids.join(';');
+  }
   /** Technicien par « Prénom Nom », « Nom Prénom » ou, à défaut, par son seul nom → { id, ligne } ou { erreur }. */
   function trouverTechnicien(nom) {
     const [cherche, tous] = [cleTexte(nom), Donnees.lignes('techniciens')];
@@ -288,6 +299,7 @@ const Import = (() => {
   // Texte montré pour une valeur (référence : chemin, repère, nom ou libellé de la fiche visée).
   function afficher(contexte, champ, valeur) {
     if (champ && champ.type === 'choix' && champ.table) return Schema.libelleValeur(champ.table, champ.champ, valeur);   // D155
+    if (champ && champ.liste) return texte(valeur).split(';').filter(Boolean).map((id) => texte((Donnees.trouver(champ.liste, id) || {}).repere) || id).join(', ');
     if (!champ || !champ.ref || champ.ref === 'codes_defaillance') return valeur;
     const ligne = valeur && (typeof valeur === 'object' ? valeur : Donnees.trouver(champ.ref, valeur));
     if (!ligne) return valeur ? String(valeur) : '';
@@ -352,6 +364,13 @@ const Import = (() => {
     const technicien = !erreurs.length && v.technicien !== undefined ? trouverTechnicien(v.technicien) : {};
     if (technicien.id) brouillon.technicien_id = technicien.id;
     else if (technicien.erreur) erreurs.push(technicien.erreur);
+    // Contrat (T487) : équipements concernés par leurs repères (tous dans Prévo) ; prestataire par son nom, créé s'il
+    // manque (D88 a) : il fait partie de la clé, il est donc cherché dès cette passe.
+    if (!erreurs.length && v.equipements_concernes !== undefined) {
+      const ids = identifiantsDesReperes(contexte, v.equipements_concernes, erreurs);
+      if (!erreurs.length && ids) ligne._cibles.push({ champ: champDe(description, 'equipements_concernes'), colonne: 'equipement_ids', valeur: brouillon.equipement_ids = ids });
+    }
+    if (!erreurs.length && v.prestataire !== undefined) brouillon.fournisseur_id = fournisseurNomme(contexte, v.prestataire);
     if (!erreurs.length && v.compteur !== undefined) {
       const compteur = Donnees.lignes('compteurs').find((c) => c.equipement_id === brouillon.equipement_id && cleTexte(c.libelle) === cleTexte(v.compteur));
       if (compteur) ligne._cibles.push({ champ: champDe(description, 'compteur'), colonne: 'compteur_id', valeur: brouillon.compteur_id = compteur.id });
@@ -452,9 +471,14 @@ const Import = (() => {
       }
     }
   }
+  // Fournisseur d'un article ou d'une garantie, par son nom : créé s'il manque (D88 a).
+  function poserFournisseur(contexte, ligne) {
+    const nom = ligne.valeurs.fournisseur;
+    if (nom !== undefined) poserReference(ligne, champDe(contexte.description, 'fournisseur'), 'fournisseur_id', fournisseurNomme(contexte, nom));
+  }
   function secondeArticle(contexte, ligne) {
-    const [v, quantite] = [ligne.valeurs, ligne.valeurs.stock_initial];
-    if (v.fournisseur !== undefined) poserReference(ligne, champDe(contexte.description, 'fournisseur'), 'fournisseur_id', fournisseurNomme(contexte, v.fournisseur));
+    const quantite = ligne.valeurs.stock_initial;
+    poserFournisseur(contexte, ligne);
     if (quantite !== undefined && ligne._objet) ligne._objet.stock = quantite;
     else if (quantite !== undefined) {
       ligne._cibles.push({ champ: champDe(contexte.description, 'stock_initial'), colonne: 'stock', valeur: quantite, avant: nombreCanonique(String(Donnees.stockArticle(ligne._existante.id))) });
@@ -499,7 +523,8 @@ const Import = (() => {
     decider(contexte, ligne, ajouts.length + modifications.length > 0);
     if (ligne.action === 'mettre_a_jour') modifications.forEach(({ connue, attendue }) => ligne._modifier.push({ table: 'gamme_operations', id: connue.id, changes: { valeur_attendue: attendue } }));
   }
-  const SECONDES_PASSES = { localisations: secondeLocalisation, equipements: secondeEquipement, articles: secondeArticle, gammes: secondeGamme };
+  const SECONDES_PASSES = { localisations: secondeLocalisation, equipements: secondeEquipement, articles: secondeArticle, gammes: secondeGamme,
+    garanties: (contexte, ligne) => { poserFournisseur(contexte, ligne); decider(contexte, ligne); } };
   /** Fabrique d'identifiants suivants (Donnees.nouvelId), qui tient compte des créations déjà prévues (année de dateIso si annuels). */
   function fabriqueIdentifiants() {
     const derniers = new Map();

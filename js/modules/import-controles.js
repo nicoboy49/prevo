@@ -8,7 +8,8 @@
 // Parc.verifierEquipement ; articles et fournisseurs → Magasin.interne.verifierArticle / verifierFournisseur ;
 // techniciens → Equipe.verifierTechnicien ; habilitations → Equipe.interne.verifierHabilitation ; codes →
 // Parametres.verifierCode (modification : erreurs du libellé seules, comme l'écran) ; contrôles réglementaires →
-// Controles.verifierControle (jour : « maintenant » de l'import) ; gammes → Preventif.verifierGamme. Rien pour les
+// Controles.verifierControle (jour : « maintenant » de l'import) ; garanties et contrats → Garanties.verifierGarantie et
+// Garanties.verifierContrat (T487) ; gammes → Preventif.verifierGamme. Rien pour les
 // compteurs (aucun formulaire de création dans Prévo) ni pour l'historique (Import.preparerHistorique : un OT clôturé
 // importé ne passe par aucun formulaire de création ; Ordres.verifierCloture est la règle de clôture RG4, que D92
 // n'impose pas aux interventions reprises).
@@ -36,8 +37,17 @@ Object.assign(Import, (() => {
     habilitations: (v) => Equipe.interne.verifierHabilitation(v),
     codes: (v, lignes, id) => Parametres.verifierCode(v, lignes('codes_defaillance'), id).filter((e) => !id || e.nom === 'libelle'),
     controles: (v, lignes, id, jour) => Controles.verifierControle(v, jour),
+    garanties: (v, lignes, id, jour, estProvisoire) => sansFournisseurProvisoire(v, estProvisoire,
+      typeof Garanties !== 'undefined' ? Garanties.verifierGarantie(v) : []),
+    contrats: (v, lignes, id, jour, estProvisoire) => sansFournisseurProvisoire(v, estProvisoire,
+      typeof Garanties !== 'undefined' ? Garanties.verifierContrat(v) : []),
     gammes: (v) => Preventif.verifierGamme(v),
   };
+  // Fournisseur ou prestataire que l'import crée : pas encore dans la base, l'import en garantit l'existence (T487 ; le
+  // prestataire d'un contrat est obligatoire, il ne peut donc pas être retiré des valeurs comme celui d'un article).
+  function sansFournisseurProvisoire(v, estProvisoire, erreurs) {
+    return erreurs.filter((erreur) => !(erreur.nom === 'fournisseur_id' && estProvisoire(v.fournisseur_id)));
+  }
   // Valeurs comparées par les contrôles d'unicité, en texte comparable (plus large que celui des formulaires : toutes
   // les fiches candidates sont données, le formulaire tranche).
   const CLES = {

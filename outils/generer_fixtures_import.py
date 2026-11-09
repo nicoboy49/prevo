@@ -235,7 +235,7 @@ class Identifiants:
         "fournisseurs": ("FOU-", 4), "mouvements_stock": ("MVT-", 6), "techniciens": ("TEC-", 4),
         "habilitations": ("HAB-", 4), "codes_defaillance": ("CD-", 4), "compteurs": ("CPT-", 4),
         "controles_reglementaires": ("CTR-", 4), "gammes": ("GAM-", 4), "gamme_operations": ("GOP-", 6),
-        "ot_temps": ("OTT-", 6),
+        "ot_temps": ("OTT-", 6), "garanties": ("GAR-", 4), "contrats_prestataires": ("CTP-", 4),
     }
 
     def __init__(self, demo):
@@ -1113,7 +1113,151 @@ def controles(demo, ids):
     return Tableau("controles", "controles", ENTETES_CONTROLES, lignes)
 
 
-ENTETES_GAMMES = ["Équipement", "Libellé", "Périodicité (jours)", "Temps prévu (heures)", "Dernière réalisation",
+# Garanties et contrats de prestataires (2.2, T487) : fournisseur ou prestataire par son nom, créé s'il manque (D88 a),
+# mais seulement si une ligne gardée le cite ; contrôles du formulaire (Garanties.verifierGarantie, verifierContrat).
+NOUVEAU_GARANT = "Froid Industriel du Dauphiné"
+GARANT_REFUSE = "Scies et Lames du Grésivaudan"
+PRESTATAIRE_REFUSE = "Hydraulique du Guiers"
+ENTETES_GARANTIES = ["Repère", "Fournisseur", "Date de début", "Échéance", "Ce qui est couvert"]
+
+
+def garanties(demo, ids):
+    lignes = []
+    for nom in (NOUVEAU_GARANT, GARANT_REFUSE, PRESTATAIRE_REFUSE):
+        demo.absent("fournisseurs", nom=nom)
+
+    def cellules(garantie, repere, **remplacements):
+        valeurs = [repere, demo.par_id("fournisseurs", garantie["fournisseur_id"])["nom"],
+                   francais_date(garantie["date_debut"]), francais_date(garantie["date_fin"]), garantie["conditions"]]
+        for index, valeur in remplacements.items():
+            valeurs[int(index[1:])] = valeur
+        return valeurs
+
+    cp01 = demo.equipement("CP-01")
+    gar_cp = demo.unique("garanties", equipement_id=cp01["id"])
+    exiger(";" in gar_cp["conditions"], "garantie de CP-01 : « ; » attendu dans les conditions")
+    lignes.append(Ligne(cellules(gar_cp, "CP-01"), IDENTIQUE, "%s : aucune colonne ne change ; « ; » dans les conditions "
+                        "(champ entre guillemets)" % gar_cp["id"], cle="CP-01 / " + gar_cp["date_fin"]))
+    po02 = demo.equipement("PO-02")
+    gar_po = demo.unique("garanties", equipement_id=po02["id"])
+    conditions = "Garniture mécanique, roulements et main-d'œuvre."
+    exiger(gar_po["conditions"] != conditions, "garantie de PO-02 : conditions différentes attendues")
+    lignes.append(Ligne(cellules(gar_po, "PO-02", c4=conditions), MAJ, "%s : conditions « %s » → « %s »"
+                        % (gar_po["id"], gar_po["conditions"], conditions), cle="PO-02 / " + gar_po["date_fin"]))
+    gf01 = demo.equipement("GF-01")
+    demo.absent("garanties", equipement_id=gf01["id"])
+    nouvelle = ids.nouveau("garanties")
+    fournisseur = ids.nouveau("fournisseurs")
+    lignes.append(Ligne(["GF-01", NOUVEAU_GARANT, "01/09/2026", "31/08/2028", "Compresseur frigorifique : pièces et "
+                         "main-d'œuvre, deux ans."], CREER, "%s (équipement %s) ; fournisseur %s « %s » créé"
+                        % (nouvelle, gf01["id"], fournisseur, NOUVEAU_GARANT), cle="GF-01 / 2028-08-31"))
+    premiere = len(lignes) - 1
+    cu01 = demo.equipement("CU-01")
+    demo.absent("garanties", equipement_id=cu01["id"])
+    lignes.append(Ligne(["CU-01", "", "", "30/06/2027", "Garantie constructeur : pièces seules."], CREER,
+                        "%s (équipement %s) ; sans fournisseur ni date de début (facultatifs)"
+                        % (ids.nouveau("garanties"), cu01["id"]), cle="CU-01 / 2027-06-30"))
+    po01 = demo.equipement("PO-01")
+    echue = demo.unique("garanties", equipement_id=po01["id"])
+    exiger(echue["date_fin"] < "2028-07-01", "garantie de PO-01 : fin avant 2028-07-01 attendue")
+    lignes.append(Ligne(["PO-01", demo.par_id("fournisseurs", echue["fournisseur_id"])["nom"], "02/07/2026", "01/07/2028",
+                         "Pompe remplacée : nouvelle garantie de deux ans."], CREER,
+                        "%s (équipement %s) : une autre date de fin que %s (fin %s), donc une autre garantie"
+                        % (ids.nouveau("garanties"), po01["id"], echue["id"], echue["date_fin"]), cle="PO-01 / 2028-07-01"))
+    lignes.append(Ligne(["XX-99", "Fluidalpes Services", "01/01/2026", "31/12/2027", "Pièces seules."], REFUSEE,
+                        "équipement « XX-99 » introuvable", cle="XX-99 / 2027-12-31"))
+    lignes.append(Ligne(["PR-01", PRESTATAIRE_REFUSE, "01/01/2026", "", "Groupe hydraulique."], REFUSEE,
+                        "échéance vide (fin de garantie : obligatoire, clé naturelle avec l'équipement) ; « %s » "
+                        "n'est pas créé" % PRESTATAIRE_REFUSE, cle="PR-01 / (vide)"))
+    lignes.append(Ligne(["SC-01", GARANT_REFUSE, "01/03/2027", "01/03/2026", "Lame et volants."], REFUSEE,
+                        "fin avant le début (contrôle du formulaire, Garanties.verifierGarantie) ; « %s » n'est pas "
+                        "créé" % GARANT_REFUSE, cle="SC-01 / 2026-03-01"))
+    lignes.append(Ligne(["PT-01", "Fluidalpes Services", "", "31/02/2027", "Palan et chemin de roulement."], REFUSEE,
+                        "échéance « 31/02/2027 » illisible (jour inexistant)", cle="PT-01 / 31/02/2027"))
+    doublon = len(lignes)
+    lignes.append(Ligne(["GF-01", NOUVEAU_GARANT, "01/09/2026", "31/08/2028", "Compresseur seul."], REFUSEE, None,
+                        cle="GF-01 / 2028-08-31"))
+    tableau = Tableau("garanties", "garanties", ENTETES_GARANTIES, lignes)
+    lignes[doublon].detail = "doublon dans le fichier (même équipement et même date de fin que la ligne %d)" % tableau.numero(premiere)
+    tableau.resume = "référence créée : fournisseur %s « %s » (les fournisseurs des lignes refusées ne sont pas créés)" % (
+        fournisseur, NOUVEAU_GARANT)
+    return tableau
+
+
+ENTETES_CONTRATS = ["Prestataire", "Objet", "Équipements", "Début", "Fin", "Préavis", "Tacite reconduction",
+                    "Montant annuel HT", "Périmètre"]
+
+
+def contrats(demo, ids):
+    lignes = []
+
+    def reperes(contrat):
+        return ", ".join(demo.par_id("equipements", i)["repere"] for i in contrat["equipement_ids"].split(";") if i)
+
+    def cellules(contrat, **remplacements):
+        valeurs = [demo.par_id("fournisseurs", contrat["fournisseur_id"])["nom"], contrat["objet"], reperes(contrat),
+                   francais_date(contrat["date_debut"]), francais_date(contrat["date_fin"]), contrat["preavis_mois"],
+                   "oui" if contrat["reconduction_tacite"] == "1" else "non", contrat["montant_annuel"], contrat["perimetre"]]
+        for index, valeur in remplacements.items():
+            valeurs[int(index[1:])] = valeur
+        return valeurs
+
+    compresseurs = demo.unique("contrats_prestataires", objet="Maintenance préventive des compresseurs")
+    exiger(compresseurs["equipement_ids"].count(";") == 1, "contrat des compresseurs : deux équipements attendus")
+    lignes.append(Ligne(cellules(compresseurs), IDENTIQUE, "%s : aucune colonne ne change ; équipements « %s » = %s"
+                        % (compresseurs["id"], reperes(compresseurs), compresseurs["equipement_ids"]),
+                        cle="Fluidalpes Services / compresseurs"))
+    electricite = demo.unique("contrats_prestataires", objet="Vérification annuelle des installations électriques")
+    exiger((electricite["date_fin"], electricite["montant_annuel"], electricite["equipement_ids"]) == ("2026-06-30", "1250", ""),
+           "contrat d'électricité : fin 2026-06-30, montant 1250, sans équipement attendus")
+    lignes.append(Ligne(cellules(electricite, c4="30/06/2027", c7="1300", c8=""), MAJ,
+                        "%s : fin 2026-06-30 → 2027-06-30 ; montant 1250 → 1300 (cellules vides : rien d'effacé)"
+                        % electricite["id"], cle="Électro-Alpes Distribution / électricité"))
+    demo.absent("contrats_prestataires", objet="Maintenance du groupe froid")
+    groupe_froid = ids.nouveau("contrats_prestataires")
+    prestataire = ids.nouveau("fournisseurs")
+    gf01 = demo.equipement("GF-01")
+    lignes.append(Ligne([NOUVEAU_GARANT, "Maintenance du groupe froid", "GF-01", "01/01/2026", "31/12/2026", "3", "oui",
+                         "2 350,50", "Visite trimestrielle et dépannage sous 24 h."], CREER,
+                        "%s (équipement %s) ; prestataire %s « %s » créé ; montant « 2 350,50 » → 2350.5 ; préavis de "
+                        "3 mois : date limite de résiliation 2026-09-30 (CS173)" % (groupe_froid, gf01["id"], prestataire,
+                                                                               NOUVEAU_GARANT),
+                        cle=NOUVEAU_GARANT + " / groupe froid"))
+    premiere = len(lignes) - 1
+    pompes = [demo.equipement(r)["id"] for r in ("PO-01", "PO-02", "PO-03")]
+    lignes.append(Ligne(["Garnitech Pompes", "Dépannage des pompes", "PO-01;PO-02;PO-03", "01/03/2026", "28/02/2027", "1",
+                         "non", "", ""], CREER,
+                        "%s ; repères séparés par « ; » (champ entre guillemets) → %s ; sans montant (facultatif)"
+                        % (ids.nouveau("contrats_prestataires"), ";".join(pompes)), cle="Garnitech Pompes / pompes"))
+    demo.equipement("CV-01")
+    demo.absent("equipements", repere="CV-09")
+    lignes.append(Ligne(["Lubrifix Industrie", "Graissage des convoyeurs", "CV-01, CV-09", "01/01/2026", "31/12/2026", "2",
+                         "oui", "600", ""], REFUSEE, "équipement « CV-09 » introuvable (un repère inconnu refuse la ligne,"
+                        " les autres s'importent)", cle="Lubrifix Industrie / convoyeurs"))
+    lignes.append(Ligne(["", "Nettoyage des filtres de la centrale", "VE-01", "01/01/2026", "31/12/2026", "1", "non", "450",
+                         ""], REFUSEE, "prestataire vide (obligatoire, clé naturelle avec l'objet)", cle="(vide) / filtres"))
+    lignes.append(Ligne(["Mécaroule Distribution", "Fourniture de roulements", "", "01/01/2026", "31/12/2026", "trois",
+                         "oui", "900", ""], REFUSEE, "préavis « trois » illisible (nombre entier attendu)",
+                        cle="Mécaroule Distribution / roulements"))
+    chaines = demo.unique("contrats_prestataires", objet="Lubrification des chaînes de convoyage")
+    exiger(chaines["montant_annuel"] == "", "contrat des chaînes : sans montant attendu")
+    lignes.append(Ligne(cellules(chaines, c7="-200"), REFUSEE, "montant « -200 » négatif (contrôle du formulaire, "
+                        "Garanties.verifierContrat) : la fiche %s n'est pas touchée" % chaines["id"],
+                        cle="Lubrifix Industrie / chaînes"))
+    doublon = len(lignes)
+    lignes.append(Ligne([NOUVEAU_GARANT.upper(), "Maintenance du groupe froid", "GF-01", "01/01/2026", "31/12/2026", "3",
+                         "oui", "2350", ""], REFUSEE, None, cle=NOUVEAU_GARANT + " / groupe froid"))
+    lignes.append(Ligne([PRESTATAIRE_REFUSE, "Entretien du groupe hydraulique", "PR-01.GH", "01/01/2026", "31/12/2025",
+                         "2", "oui", "1500", ""], REFUSEE, "fin avant le début (contrôle du formulaire) ; prestataire "
+                        "« %s » pas créé" % PRESTATAIRE_REFUSE, cle=PRESTATAIRE_REFUSE + " / hydraulique"))
+    tableau = Tableau("contrats", "contrats", ENTETES_CONTRATS, lignes)
+    lignes[doublon].detail = ("doublon dans le fichier (même prestataire, écrit en majuscules, et même objet que la ligne %d)"
+                              % tableau.numero(premiere))
+    tableau.resume = "référence créée : fournisseur %s « %s » (prestataire)" % (prestataire, NOUVEAU_GARANT)
+    return tableau
+
+
+ENTETES_GAMMES =["Équipement", "Libellé", "Périodicité (jours)", "Temps prévu (heures)", "Dernière réalisation",
                   "Opération", "Valeur attendue"]
 
 
@@ -1573,9 +1717,9 @@ def numero_historique(tableau, numero, rang=0):
 
 
 def lisezmoi(tableaux, demo):
-    eq, art, fou, tec, hab, cod, cpt, ctr, gam, his = (tableaux[n] for n in (
+    eq, art, fou, tec, hab, cod, cpt, ctr, gam, his, gar, con = (tableaux[n] for n in (
         "equipements", "articles", "fournisseurs", "techniciens", "habilitations", "codes", "compteurs",
-        "controles", "gammes", "historique"))
+        "controles", "gammes", "historique", "garanties", "contrats"))
     vue = []
     for nom, tableau, format_texte in (
             ("equipements.xlsx / .ods / .xls", eq, "classeur (3 formats)"),
@@ -1587,7 +1731,9 @@ def lisezmoi(tableaux, demo):
             ("compteurs.csv", cpt, "CSV Windows-1252 « ; »"),
             ("controles.csv", ctr, "CSV UTF-8 BOM « ; »"),
             ("gammes.xlsx", gam, "classeur .xlsx"),
-            ("historique.csv", his, "CSV UTF-8 « , »")):
+            ("historique.csv", his, "CSV UTF-8 « , »"),
+            ("garanties.csv", gar, "CSV UTF-8 BOM « ; »"),
+            ("contrats.csv", con, "CSV UTF-8 BOM « ; »")):
         tot = tableau.totaux()
         autres = ", ".join("%d %s" % (tot[a], a) for a in (DOUBLON_SUR, DOUBLON_SUPPOSE) if tot[a]) or "—"
         vue.append([nom, format_texte, "`%s`" % tableau.type_donnees, len(tableau.lignes), tot[CREER], tot[MAJ],
@@ -1722,6 +1868,45 @@ personnes et d'entreprises inventés, adresses en `.example`, comme le jeu de d�
                         "nombre décimal 0.75 ; « ≤ » dans une valeur attendue ;",
                         "gamme d'un équipement inconnu (« 007 ») sur deux lignes ; libellé de gamme vide."]),
         section_historique(his),
+        section_simple("garanties.csv — garanties des équipements (2.2)", gar,
+                       "CSV UTF-8 **avec BOM**, séparateur « ; », CRLF, dates JJ/MM/AAAA.",
+                       [["Repère", "`equipement` (par repère, doit exister ; clé naturelle avec la fin)", "sûre (synonyme)"],
+                        ["Fournisseur", "`fournisseur` (par nom, créé s'il manque)", "sûre (libellé)"],
+                        ["Date de début", "`date_debut`", "sûre (synonyme)"],
+                        ["Échéance", "`date_fin` (clé naturelle avec l'équipement)", "sûre (synonyme)"],
+                        ["Ce qui est couvert", "`conditions`", "sûre (synonyme)"]],
+                       ["clé naturelle équipement + date de fin : une deuxième garantie du même équipement (PO-01, "
+                        "autre fin) est une création, pas une mise à jour ;",
+                        "« ; » dans les conditions (ligne %d, champ entre guillemets) ;" % gar.numero(0),
+                        "fournisseur inconnu créé une fois (D88 a), mais pas celui d'une ligne refusée (lignes %d et %d) ;"
+                        % (numero_cle(gar, "PR-01 / (vide)"), numero_cle(gar, "SC-01 / 2026-03-01")),
+                        "fournisseur et date de début vides (facultatifs) ; fin avant le début (formulaire) ; échéance "
+                        "vide ; date impossible ; équipement inconnu ; doublon dans le fichier."],
+                       apres=gar.resume[0].upper() + gar.resume[1:] + "."),
+        section_simple("contrats.csv — contrats de prestataires (2.2)", con,
+                       "CSV UTF-8 **avec BOM**, séparateur « ; », CRLF, dates JJ/MM/AAAA, décimales à virgule.",
+                       [["Prestataire", "`prestataire` (par nom, créé s'il manque ; clé naturelle avec l'objet)",
+                         "sûre (libellé)"],
+                        ["Objet", "`objet`", "sûre (libellé)"],
+                        ["Équipements", "`equipements_concernes` → `equipement_ids` (repères → identifiants séparés "
+                         "par « ; »)", "sûre (synonyme)"],
+                        ["Début", "`date_debut`", "sûre (libellé)"],
+                        ["Fin", "`date_fin`", "sûre (libellé)"],
+                        ["Préavis", "`preavis_mois`", "sûre (synonyme)"],
+                        ["Tacite reconduction", "`reconduction_tacite`", "sûre (synonyme)"],
+                        ["Montant annuel HT", "`montant_annuel` (devise réglée, hors taxes, D190)", "sûre (libellé)"],
+                        ["Périmètre", "`perimetre`", "sûre (libellé)"]],
+                       ["équipements concernés en repères séparés par des virgules (« CP-01, CP-01.SEC ») ou par « ; » "
+                        "(ligne %d, champ entre guillemets) ; un repère inconnu (« CV-09 », ligne %d) refuse sa ligne, les "
+                        "autres s'importent ;" % (numero_cle(con, "Garnitech Pompes / pompes"),
+                                                  numero_cle(con, "Lubrifix Industrie / convoyeurs")),
+                        "prestataire inconnu créé une fois, écrit aussi en majuscules (doublon ligne %d) ; celui d'une "
+                        "ligne refusée n'est pas créé ;" % numero_cle(con, NOUVEAU_GARANT + " / groupe froid"),
+                        "montant « 2 350,50 » (espace, virgule) ; montant vide (facultatif) ; montant négatif sur une "
+                        "fiche existante (refusée, la fiche ne change pas) ; préavis « trois » ; prestataire vide ;",
+                        "contrat existant identique et contrat existant mis à jour (fin et montant ; cellules vides : rien "
+                        "d'effacé)."],
+                       apres=con.resume[0].upper() + con.resume[1:] + "."),
         """## Fichiers piégés (CS89 : message clair, rien de lu ni d'écrit, l'onglet ne se bloque pas)
 
 | Fichier | Contenu | Attendu |
@@ -1780,7 +1965,8 @@ dans cet ordre : `codes.csv`, `techniciens.tsv`, `fournisseurs.tsv`, `equipement
 toutes les machines de la démo citées par les autres fichiers (avec leurs chemins de localisation complets), les
 techniciens et les codes de la démo sont dans leurs fichiers : sur une base vide, les références se résolvent alors
 par les fiches créées plus tôt, sauf les pièges voulus (« XX-99 », « Pierre Martel », « Paul Dumas », lignes en
-erreur). Différences attendues avec la démo : tout ce qui était « identique » ou « mis à jour » est **créé** ;
+erreur). `garanties.csv` et `contrats.csv` (2.2) ne font pas partie de cette reprise : leurs attentes
+valent pour la démo seulement (ils citent des équipements que la liste du parc ne contient pas). Différences attendues avec la démo : tout ce qui était « identique » ou « mis à jour » est **créé** ;
 « 007 » existe après la liste du parc (son compteur, sa gamme et l'habilitation d'Inès Chabert après
 `techniciens.tsv` deviennent des créations) ; la ligne %(l4601)d de l'historique n'a plus d'OT existant en face
 (elle est créée) ; « CP-01.PUR » trouve sa machine mère CP-01 plus haut dans le fichier. Le calcul Python
@@ -1802,7 +1988,7 @@ def generer(sortie, avec_xls=True, dossier_demo=DOSSIER_DEMO):
     for nom, construire in (("equipements", equipements), ("articles", articles), ("fournisseurs", fournisseurs),
                             ("techniciens", techniciens), ("habilitations", habilitations), ("codes", codes),
                             ("compteurs", compteurs), ("controles", controles), ("gammes", gammes),
-                            ("historique", historique)):
+                            ("historique", historique), ("garanties", garanties), ("contrats", contrats)):
         tableaux[nom] = construire(demo, Identifiants(demo))
 
     eq = tableaux["equipements"]
@@ -1819,6 +2005,8 @@ def generer(sortie, avec_xls=True, dossier_demo=DOSSIER_DEMO):
         "controles.csv": csv_tableau(tableaux["controles"], ";", "utf-8", bom=True),
         "gammes.xlsx": ecrire_xlsx([("Gammes", tableaux["gammes"].grille())]),
         "historique.csv": csv_tableau(tableaux["historique"], ",", "utf-8"),
+        "garanties.csv": csv_tableau(tableaux["garanties"], ";", "utf-8", bom=True),
+        "contrats.csv": csv_tableau(tableaux["contrats"], ";", "utf-8", bom=True),
         "trop_de_lignes.csv": lignes_essai(LIGNES_DONNEES_MAX + 1),
         "limite_de_lignes.csv": lignes_essai(LIGNES_DONNEES_MAX),
         "chiffre.xlsx": ecrire_chiffre(),

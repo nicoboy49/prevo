@@ -1,0 +1,11 @@
+﻿Repère;Fournisseur;Date de début;Échéance;Ce qui est couvert
+CP-01;Fluidalpes Services;02/04/2026;28/03/2027;"Pièces et main-d'œuvre sur le bloc vis remplacé ; déplacement inclus. Appeler le fournisseur avant toute intervention sur le bloc."
+PO-02;Garnitech Pompes;18/11/2024;18/11/2026;Garniture mécanique, roulements et main-d'œuvre.
+GF-01;Froid Industriel du Dauphiné;01/09/2026;31/08/2028;Compresseur frigorifique : pièces et main-d'œuvre, deux ans.
+CU-01;;;30/06/2027;Garantie constructeur : pièces seules.
+PO-01;Garnitech Pompes;02/07/2026;01/07/2028;Pompe remplacée : nouvelle garantie de deux ans.
+XX-99;Fluidalpes Services;01/01/2026;31/12/2027;Pièces seules.
+PR-01;Hydraulique du Guiers;01/01/2026;;Groupe hydraulique.
+SC-01;Scies et Lames du Grésivaudan;01/03/2027;01/03/2026;Lame et volants.
+PT-01;Fluidalpes Services;;31/02/2027;Palan et chemin de roulement.
+GF-01;Froid Industriel du Dauphiné;01/09/2026;31/08/2028;Compresseur seul.

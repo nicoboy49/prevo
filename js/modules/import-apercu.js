@@ -30,6 +30,7 @@ Object.assign(Import.assistant, (() => {
     fournisseurs: ['nom'], techniciens: ['prenom', 'nom'], habilitations: ['technicien', 'intitule'],
     codes: ['code', 'famille', 'libelle'], compteurs: ['equipement', 'libelle'], controles: ['equipement', 'nature'],
     gammes: ['equipement', 'libelle', 'operations'], historique: ['ancien_numero', 'equipement', 'titre'],
+    garanties: ['equipement', 'date_fin', 'fournisseur'], contrats: ['prestataire', 'objet'],
   };
   // Nature d'une référence créée par l'import (lue à l'affichage).
   const REFERENCES = { get localisations() { return I18n.t('import.reference.localisation'); }, get fournisseurs() { return I18n.t('import.reference.fournisseur'); } };
@@ -38,6 +39,7 @@ Object.assign(Import.assistant, (() => {
     localisations: 'localisations', equipements: 'equipements', articles: 'articles', fournisseurs: 'fournisseurs',
     techniciens: 'techniciens', habilitations: 'habilitations', codes: 'codes_defaillance', compteurs: 'compteurs',
     controles: 'controles_reglementaires', gammes: 'gammes', historique: 'ordres_travail',
+    garanties: 'garanties', contrats: 'contrats_prestataires',
   };
   const PAS_AFFICHAGE = 200;
 
@@ -221,9 +223,11 @@ Object.assign(Import.assistant, (() => {
 
   function fiche(ligne) {
     const etat = A.etat();
-    // Famille d'un code : valeur stockée de la liste, affichée par son libellé (D155).
+    // Famille d'un code : valeur stockée de la liste, affichée par son libellé (D155) ; date (fin d'une garantie) : JJ/MM/AAAA.
+    const estDate = (cle) => ((Import.TYPES[etat.type] || { champs: [] }).champs.find((c) => c.cle === cle) || {}).type === 'date';
     const valeurs = (FICHE[etat.type] || []).map((cle) => (etat.type === 'codes' && cle === 'famille'
-      ? Schema.libelleValeur('codes_defaillance', 'famille', texte(ligne.valeurs && ligne.valeurs.famille)) : texte(ligne.valeurs && ligne.valeurs[cle]))).filter(Boolean)
+      ? Schema.libelleValeur('codes_defaillance', 'famille', texte(ligne.valeurs && ligne.valeurs.famille))
+      : (estDate(cle) ? UI.dateFr : texte)(texte(ligne.valeurs && ligne.valeurs[cle])))).filter(Boolean)
       .map((valeur) => (valeur.length > 60 ? I18n.t('import.texte_coupe', { debut: valeur.slice(0, 59) }) : valeur));
     const cible = ligne.cible && !ligne.doublon && ligne.action !== 'refusee' ? ligne.cible : '';
     return UI.html`${valeurs.length ? UI.html`<b>${valeurs[0]}</b>${valeurs.slice(1).map((v) => UI.html`<span class="import-fiche-suite">${v}</span>`)}` : '—'}

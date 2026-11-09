@@ -45,7 +45,7 @@ FICHIERS = (
     "LISEZMOI.md", "equipements.xlsx", "equipements.ods", "equipements.xls", "articles.csv", "fournisseurs.tsv",
     "techniciens.tsv", "habilitations.csv", "codes.csv", "compteurs.csv", "controles.csv", "gammes.xlsx",
     "historique.csv", "trop_de_lignes.csv", "limite_de_lignes.csv", "chiffre.xlsx", "vide.csv",
-    "lignes_vides.csv", "sans_entete.csv", "cellules_repetees.ods",
+    "lignes_vides.csv", "sans_entete.csv", "cellules_repetees.ods", "garanties.csv", "contrats.csv",
 )
 TITRE_PARC = "Liste du parc — atelier"
 ENTETES_PARC = ["Désignation", "Code machine", "Fabricant", "Mise en service", "Emplacement", "N° de série",
@@ -544,6 +544,28 @@ class TestTextes(unittest.TestCase):
         self.assertIn("GARNIER Thomas", intervenants)
         self.assertEqual({l["Machine"] for l in donnees} - {e["repere"] for e in lire_demo("equipements")},
                          {"XX-99"})
+
+    def test_garanties_et_contrats(self):
+        # 2.2 (T487) : CSV UTF-8 avec BOM ; repères inconnus « XX-99 » (garantie) et « CV-09 » (contrat) ; équipements
+        # concernés séparés par des virgules ou par « ; » (cellule entre guillemets) ; fournisseur nouveau.
+        reperes_demo = {e["repere"] for e in lire_demo("equipements")}
+        fournisseurs = {f["nom"] for f in lire_demo("fournisseurs")}
+        for nom in ("garanties.csv", "contrats.csv"):
+            self.assertTrue((DOSSIER / nom).read_bytes().startswith(BOM), nom)
+            self.assertIn(b'\r\n', (DOSSIER / nom).read_bytes(), "fins de ligne CRLF")
+        garanties = lire_csv("garanties.csv", "utf-8", ";")
+        self.assertEqual(garanties[0], ["Repère", "Fournisseur", "Date de début", "Échéance", "Ce qui est couvert"])
+        self.assertEqual({l[0] for l in garanties[1:]} - reperes_demo, {"XX-99"})
+        self.assertIn("31/02/2027", [l[3] for l in garanties])
+        self.assertIn("Froid Industriel du Dauphiné", {l[1] for l in garanties} - fournisseurs)
+        contrats = lire_csv("contrats.csv", "utf-8", ";")
+        self.assertEqual(contrats[0][:3], ["Prestataire", "Objet", "Équipements"])
+        cites = [r.strip() for l in contrats[1:] for r in l[2].replace(";", ",").split(",") if r.strip()]
+        self.assertEqual(set(cites) - reperes_demo, {"CV-09"})
+        self.assertIn("CP-01, CP-01.SEC", [l[2] for l in contrats])
+        self.assertIn(b'"PO-01;PO-02;PO-03"', (DOSSIER / "contrats.csv").read_bytes(), "« ; » entre guillemets")
+        self.assertIn("trois", [l[5] for l in contrats])
+        self.assertIn("2 350,50", [l[7] for l in contrats])
 
     def test_plafonds_de_lignes(self):
         trop = lignes_non_vides("trop_de_lignes.csv")

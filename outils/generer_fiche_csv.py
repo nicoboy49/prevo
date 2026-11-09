@@ -506,6 +506,9 @@ REMARQUES_IMPORT = {
     "parent": "repère d'un équipement de Prévo ou du même fichier",
     "stock_initial": "devient un mouvement « inventaire » ; le stock affiché est celui du fichier",
     "fournisseur": "nom du fournisseur ; créé s'il manque",
+    "prestataire": "nom du prestataire (un fournisseur) ; créé s'il manque",
+    "equipements_concernes": ("repères d'équipements de Prévo séparés par des virgules (ou « ; »), écrits en identifiants"
+                              " séparés par « ; » ; un repère inconnu refuse la ligne"),
     ("habilitations", "technicien"): "« Prénom Nom », « Nom Prénom » ou nom seul s'il est unique ; doit exister",
     "equipement": "repère d'un équipement de Prévo",
     "compteur": "libellé d'un compteur du même équipement",

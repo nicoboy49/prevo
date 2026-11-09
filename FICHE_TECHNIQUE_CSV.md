@@ -596,6 +596,8 @@ L'écran « Importer des données » (responsable, depuis Paramètres) reprend d
 | Codes de défaillance | `codes_defaillance.csv` | Famille + Code |
 | Compteurs | `compteurs.csv` | Équipement + Libellé |
 | Contrôles réglementaires | `controles_reglementaires.csv` | Équipement + Nature du contrôle |
+| Garanties | `fournisseurs.csv`, `garanties.csv` | Équipement + Fin de garantie |
+| Contrats de prestataires | `fournisseurs.csv`, `contrats_prestataires.csv` | Prestataire + Objet du contrat |
 | Gammes de préventif | `gammes.csv`, `gamme_operations.csv` | Équipement + Libellé |
 | Historique des interventions | `ordres_travail.csv`, `ot_temps.csv` | Ancien n° d'OT ; sans lui, même équipement, même date de création (à la minute) et même titre : doublon supposé, montré dans l'aperçu |
 
@@ -632,6 +634,7 @@ Le parc : un équipement par ligne, reconnu par son repère ; localisation par s
 | Consignation | `equipements.csv` : `consignation` |  | procédure de consignation, consignation énergies |  |
 | Actif | `equipements.csv` : `actif` |  | en activité |  |
 | Valeur de remplacement (€ HT) | `equipements.csv` : `valeur_remplacement` |  | valeur de remplacement, valeur à neuf, prix de remplacement |  |
+| Coût d'une heure d'arrêt (€/h) | `equipements.csv` : `cout_arret_h` |  | coût d'arrêt, coût horaire d'arrêt, coût de l'arrêt, coût de l'arrêt (€/h), coût d'arrêt horaire, coût de l'heure d'arrêt, perte de production horaire |  |
 
 ### 4.3 Articles (pièces détachées)
 
@@ -726,7 +729,36 @@ Un contrôle par ligne : équipement (repère, déjà dans Prévo) et nature du 
 | Observations | `controles_reglementaires.csv` : `observations` |  | remarques, réserves |  |
 | Observations levées | `controles_reglementaires.csv` : `observations_levees` |  | réserves levées, levée |  |
 
-### 4.10 Gammes de préventif
+### 4.10 Garanties
+
+Une garantie par ligne, reconnue par son équipement (repère, déjà dans Prévo) et sa date de fin ; fournisseur par son nom (créé s'il manque).
+
+| Titre de la colonne | Écrit dans | Obligatoire | Autres titres reconnus | Remarques |
+| --- | --- | --- | --- | --- |
+| Équipement | `garanties.csv` : `equipement_id` | oui, clé | équipement (repère), repère, repère équipement, machine, code machine, tag | repère d'un équipement de Prévo |
+| Fin de garantie | `garanties.csv` : `date_fin` | oui, clé | fin de garantie, garantie jusqu'au, échéance, échéance de garantie, date de fin, fin, expire le, valable jusqu'au |  |
+| Début de garantie | `garanties.csv` : `date_debut` |  | début de garantie, début, date de début, garantie depuis, date d'achat |  |
+| Fournisseur | `garanties.csv` : `fournisseur_id` |  | nom du fournisseur, garant, vendeur | nom du fournisseur ; créé s'il manque |
+| Conditions | `garanties.csv` : `conditions` |  | conditions de garantie, couverture, ce qui est couvert |  |
+
+### 4.11 Contrats de prestataires
+
+Un contrat par ligne, reconnu par son prestataire et son objet ; prestataire par son nom (créé s'il manque) ; équipements concernés par leurs repères (déjà dans Prévo), séparés par des virgules.
+
+| Titre de la colonne | Écrit dans | Obligatoire | Autres titres reconnus | Remarques |
+| --- | --- | --- | --- | --- |
+| Prestataire | `contrats_prestataires.csv` : `fournisseur_id` | oui, clé | nom du prestataire, fournisseur, société, entreprise, sous-traitant, titulaire, titulaire du contrat | nom du prestataire (un fournisseur) ; créé s'il manque |
+| Objet du contrat | `contrats_prestataires.csv` : `objet` | oui, clé | objet, intitulé, intitulé du contrat, libellé, contrat, prestation, nature de la prestation |  |
+| Équipements concernés | `contrats_prestataires.csv` : `equipement_ids` |  | équipements, repères, machines, équipements couverts, repères des équipements, parc concerné | repères d'équipements de Prévo séparés par des virgules (ou « ; »), écrits en identifiants séparés par « ; » ; un repère inconnu refuse la ligne |
+| Périmètre | `contrats_prestataires.csv` : `perimetre` |  | périmètre, étendue, description, zone couverte |  |
+| Début | `contrats_prestataires.csv` : `date_debut` |  | début, date de début, début du contrat, prise d'effet, date d'effet, signé le |  |
+| Fin | `contrats_prestataires.csv` : `date_fin` | oui | fin, date de fin, fin du contrat, échéance, échéance du contrat, expire le, terme, fin de la période |  |
+| Préavis de résiliation (mois) | `contrats_prestataires.csv` : `preavis_mois` |  | préavis, préavis (mois), préavis de résiliation, délai de préavis, préavis en mois |  |
+| Reconduction tacite | `contrats_prestataires.csv` : `reconduction_tacite` |  | tacite reconduction, reconduction, renouvellement automatique, reconduction automatique |  |
+| Durée d'une reconduction (mois) | `contrats_prestataires.csv` : `reconduction_mois` |  | durée de reconduction, reconduction (mois), durée du renouvellement, renouvellement (mois) |  |
+| Montant annuel (€ HT) | `contrats_prestataires.csv` : `montant_annuel` |  | montant annuel ht, montant annuel, montant, montant ht, coût annuel, prix annuel, redevance annuelle |  |
+
+### 4.12 Gammes de préventif
 
 Une gamme par équipement et libellé ; opérations : une ligne par opération (gamme répétée) ou une colonne d'opérations séparées par « ; ».
 
@@ -749,7 +781,7 @@ Une gamme par équipement et libellé ; opérations : une ligne par opération (
 | Opérations | `gamme_operations.csv` |  | opération, tâche, tâches, liste des opérations, travail à faire | une ligne par opération (gamme répétée) ou opérations séparées par « ; » |
 | Valeur attendue | `gamme_operations.csv` |  | valeurs attendues, critère, attendu | dans l'ordre des opérations, séparées par « ; » |
 
-### 4.11 Historique des interventions
+### 4.13 Historique des interventions
 
 Les interventions passées d'une autre GMAO : chacune devient un OT clôturé ; l'ancien numéro est gardé dans le compte rendu.
 

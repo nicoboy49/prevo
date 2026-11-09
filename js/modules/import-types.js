@@ -51,7 +51,8 @@
       V('parent', () => I18n.t('import.champ.parent'), 'texte', 'CU-01', 'parent|repère parent|repère du parent|ensemble|machine mère', reference('equipements', 'equipements', 'parent_id', { protege: true })),
       S('equipements', { marque: 'Aerovis', modele: 'AV 30 D', num_serie: '0012345', date_mes: '15/03/2021', criticite: ['B', 'classe de criticité'],
         statut: 'en service', heures_fonct_jour: '8', habilitation_requise: 'B1V', consignation: 'Couper le sectionneur et le cadenasser.',
-        actif: ['oui', 'en activité'], valeur_remplacement: '12500' })]),
+        actif: ['oui', 'en activité'], valeur_remplacement: '12500',
+        cout_arret_h: ['850', "coût d'arrêt|coût horaire d'arrêt|coût de l'arrêt|coût de l'arrêt (€/h)|coût d'arrêt horaire|coût de l'heure d'arrêt|perte de production horaire"] })]),
     articles: type('articles', () => I18n.t('import.type.articles'), () => I18n.t('import.type_aide.articles'), ['fournisseurs', 'articles', 'mouvements_stock'], [
       S('articles', { reference: ['ROU-099', '', NATUREL], designation: 'Roulement à billes 6308-2RS', fabricant: 'Rouloran', ref_fabricant: '6308-2RS', emplacement: 'A1-09', unite: 'u' }),
       V('stock_initial', () => I18n.t('import.champ.stock_initial'), 'decimal', '10', 'stock|quantité en stock|qté stock|stock actuel|quantité|qté', { table: 'mouvements_stock' }),
@@ -76,6 +77,28 @@
         organisme: ['Bureau Alpin de Contrôle (démo)', 'organisme|prestataire|bureau de contrôle'],
         derniere_date: ['15/01/2026', 'dernier contrôle|fait le|réalisé le'], prochaine_date: ['15/01/2027', 'prochain contrôle|échéance|à faire le'],
         observations: ['Aucune', 'remarques|réserves'], observations_levees: ['oui', 'réserves levées|levée'] })]),
+    // Garanties et contrats (2.2, T487) : équipement par son repère (déjà dans Prévo) ; fournisseur ou prestataire par son
+    // nom (créé s'il manque, D88 a) ; équipements concernés d'un contrat : repères séparés par des virgules (ou « ; »),
+    // écrits en identifiants séparés par « ; » (equipement_ids, un repère inconnu refuse la ligne) ; montant annuel
+    // facultatif, dans la devise réglée, hors taxes (D190). Contrôles : Garanties.verifierGarantie et verifierContrat.
+    garanties: type('garanties', () => I18n.t('import.type.garanties'), () => I18n.t('import.type_aide.garanties'), ['fournisseurs', 'garanties'], [equipementDe('garanties'),
+      S('garanties', { date_fin: ['31/03/2028', "fin de garantie|garantie jusqu'au|échéance|échéance de garantie|date de fin|fin|expire le|valable jusqu'au", CLE],
+        date_debut: ['01/04/2026', "début de garantie|début|date de début|garantie depuis|date d'achat"] }),
+      V('fournisseur', () => I18n.t('import.champ.fournisseur'), 'texte', 'Fluidalpes Services', 'nom du fournisseur|garant|vendeur', reference('garanties', 'fournisseurs', 'fournisseur_id')),
+      S('garanties', { conditions: ["Pièces et main-d'œuvre, déplacement inclus.", 'conditions de garantie|couverture|ce qui est couvert'] })]),
+    contrats: type('contrats', () => I18n.t('import.type.contrats'), () => I18n.t('import.type_aide.contrats'), ['fournisseurs', 'contrats_prestataires'], [
+      V('prestataire', () => I18n.t('import.champ.prestataire'), 'texte', 'Fluidalpes Services', 'nom du prestataire|fournisseur|société|entreprise|sous-traitant|titulaire|titulaire du contrat',
+        reference('contrats_prestataires', 'fournisseurs', 'fournisseur_id', CLE)),
+      S('contrats_prestataires', { objet: ['Maintenance du groupe froid', 'objet|intitulé|intitulé du contrat|libellé|contrat|prestation|nature de la prestation', CLE] }),
+      V('equipements_concernes', () => I18n.t('import.champ.equipements_concernes'), 'texte', 'GF-01, CP-01', 'équipements|repères|machines|équipements couverts|repères des équipements|parc concerné',
+        { table: 'contrats_prestataires', ecrit: 'equipement_ids', liste: 'equipements', protege: true }),
+      S('contrats_prestataires', { perimetre: ["Deux visites par an, pièces d'usure comprises.", 'périmètre|étendue|description|zone couverte'],
+        date_debut: ['01/01/2026', "début|date de début|début du contrat|prise d'effet|date d'effet|signé le"],
+        date_fin: ['31/12/2026', 'fin|date de fin|fin du contrat|échéance|échéance du contrat|expire le|terme|fin de la période'],
+        preavis_mois: ['3', 'préavis|préavis (mois)|préavis de résiliation|délai de préavis|préavis en mois'],
+        reconduction_tacite: ['oui', 'tacite reconduction|reconduction|renouvellement automatique|reconduction automatique'],
+        reconduction_mois: ['12', 'durée de reconduction|reconduction (mois)|durée du renouvellement|renouvellement (mois)'],
+        montant_annuel: ['4800', 'montant annuel ht|montant annuel|montant|montant ht|coût annuel|prix annuel|redevance annuelle'] })]),
     gammes: type('gammes', () => I18n.t('import.type.gammes'), () => I18n.t('import.type_aide.gammes'), ['gammes', 'gamme_operations'], [equipementDe('gammes'),
       S('gammes', { libelle: ['Graissage annuel du compresseur', 'gamme|nom de la gamme|intitulé', CLE], declencheur: ['date', 'type de déclenchement'],
         periodicite_jours: ['365', 'périodicité|périodicité jours|fréquence|fréquence jours'] }),
@@ -105,6 +128,9 @@
       S('ordres_travail', { cout_soustraitance: ['0', 'sous-traitance|coût sous-traitance|coût externe'] })]),
   };
   const paire = (ref, nom) => (l) => texte(l[ref]) + '|' + cleTexte(l[nom]);
+  // Prestataire d'un contrat : identifiant (base, ou fournisseur trouvé par son nom), ou fiche que l'import crée
+  // (objet, distinguée par son nom : deux lignes du même prestataire nouveau ont la même clé).
+  const prestataire = (valeur) => (valeur && typeof valeur === 'object' ? '+' + cleTexte(valeur.nom) : texte(valeur));
   // Table principale et clé naturelle de chaque type (même fonction pour la base et pour le fichier).
   const REGLES = {
     localisations: { table: 'localisations' }, equipements: { table: 'equipements', cle: CLE_REPERE },
@@ -112,6 +138,8 @@
     techniciens: { table: 'techniciens', cle: (l) => cleTexte(l.nom) + '|' + cleTexte(l.prenom) },
     habilitations: { table: 'habilitations', cle: paire('technicien_id', 'intitule') }, codes: { table: 'codes_defaillance', cle: paire('famille', 'code') },
     compteurs: { table: 'compteurs', cle: paire('equipement_id', 'libelle') }, controles: { table: 'controles_reglementaires', cle: paire('equipement_id', 'nature') },
+    garanties: { table: 'garanties', cle: paire('equipement_id', 'date_fin') },
+    contrats: { table: 'contrats_prestataires', cle: (l) => prestataire(l.fournisseur_id) + '|' + cleTexte(l.objet) },
     gammes: { table: 'gammes', cle: paire('equipement_id', 'libelle') }, historique: { table: 'ordres_travail' },
   };
   // ===== Fin des types ===========================================================================

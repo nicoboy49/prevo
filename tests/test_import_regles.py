@@ -7,7 +7,7 @@ INDÉPENDANT écrit ici (CalculPython) : actions, raisons (par mots-clés), vale
 changements avant → après, lignes à créer complètes (défauts du schéma), modifications, références
 créées et identifiants.
 
-Couvert : Import.TYPES (dix référentiels + historique déclaré, exemples), Import.comparable,
+Couvert : Import.TYPES (douze référentiels, dont garanties et contrats depuis T487, + historique déclaré, exemples), Import.comparable,
 Import.correspondance (synonymes, accents, casse, colonne ambiguë « à confirmer », inconnue « non
 utilisée », échantillon, mémoire du poste et sa lecture protégée), Import.preparer (dates JJ/MM/AAAA et
 ISO, décimaux à virgule, booléens, listes fermées D86, repères « 007 », D84 a, « identique », doublons
@@ -44,7 +44,7 @@ SCRIPTS = [
 ]
 MAINTENANT = "2026-10-21 09:30"
 TYPES_ATTENDUS = ["localisations", "equipements", "articles", "fournisseurs", "techniciens", "habilitations",
-                  "codes", "compteurs", "controles", "gammes", "historique"]
+                  "codes", "compteurs", "controles", "garanties", "contrats", "gammes", "historique"]   # T487 : garanties, contrats
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +193,8 @@ TABLE = {"localisations": "localisations", "equipements": "equipements", "articl
 TABLES_TYPE = {"localisations": ["localisations"], "equipements": ["localisations", "equipements"],
                "articles": ["fournisseurs", "articles", "mouvements_stock"], "fournisseurs": ["fournisseurs"],
                "techniciens": ["techniciens"], "habilitations": ["habilitations"], "codes": ["codes_defaillance"],
-               "compteurs": ["compteurs"], "controles": ["controles_reglementaires"], "gammes": ["gammes", "gamme_operations"]}
+               "compteurs": ["compteurs"], "controles": ["controles_reglementaires"], "gammes": ["gammes", "gamme_operations"],
+               "garanties": ["fournisseurs", "garanties"], "contrats": ["fournisseurs", "contrats_prestataires"]}
 CLES = {
     "equipements": lambda b: cle(b.get("repere", "")),
     "articles": lambda b: cle(b.get("reference", "")),
