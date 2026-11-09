@@ -236,6 +236,7 @@ class Identifiants:
         "habilitations": ("HAB-", 4), "codes_defaillance": ("CD-", 4), "compteurs": ("CPT-", 4),
         "controles_reglementaires": ("CTR-", 4), "gammes": ("GAM-", 4), "gamme_operations": ("GOP-", 6),
         "ot_temps": ("OTT-", 6), "garanties": ("GAR-", 4), "contrats_prestataires": ("CTP-", 4),
+        "reserves_controle": ("RES-", 5),
     }
 
     def __init__(self, demo):
@@ -1064,6 +1065,8 @@ def compteurs(demo, ids):
 
 ENTETES_CONTROLES = ["Équipement", "Nature du contrôle", "Texte de référence", "Périodicité (mois)",
                      "Organisme de contrôle", "Date du dernier contrôle", "Date du prochain contrôle", "Observations"]
+# Observations du chariot (2.2, T489) : une réserve par ligne non vide (D183).
+OBSERVATIONS_CHARIOT = ("Chaîne de levage : maillons usés à remplacer.", "Patin de fourche gauche fissuré.")
 
 
 def controles(demo, ids):
@@ -1084,10 +1087,14 @@ def controles(demo, ids):
     vgp_chariot = demo.unique("controles_reglementaires", equipement_id=ch01["id"])
     exiger((vgp_chariot["derniere_date"], vgp_chariot["prochaine_date"], vgp_chariot["observations"])
            == ("2026-03-18", "2026-09-18", ""), "VGP du chariot : dates 2026-03-18 / 2026-09-18 attendues")
+    demo.absent("reserves_controle", controle_id=vgp_chariot["id"])
+    reserves_chariot = [ids.nouveau("reserves_controle") for _ in OBSERVATIONS_CHARIOT]
     lignes.append(Ligne(cellules_existant(vgp_chariot, "CH-01", c5="18/09/2026", c6="18/03/2027",
-                                          c7="Aucune observation."), MAJ,
-                        "%s : dernier contrôle 2026-03-18 → 2026-09-18 ; prochain 2026-09-18 → 2027-03-18 ; "
-                        "observations (vide) → « Aucune observation. »" % vgp_chariot["id"], cle="CH-01"))
+                                          c7="\n".join(OBSERVATIONS_CHARIOT)), MAJ,
+                        "%s : dernier contrôle 2026-03-18 → 2026-09-18 ; prochain 2026-09-18 → 2027-03-18 ; observations "
+                        "sur deux lignes (champ entre guillemets) → deux réserves %s créées, datées du 2026-09-18 (D183) ; "
+                        "la colonne observations du contrôle n'est pas écrite" % (vgp_chariot["id"], " et ".join(reserves_chariot)),
+                        cle="CH-01"))
     pr01 = demo.equipement("PR-01")
     cu01 = demo.equipement("CU-01")
     nature_presse = "Vérification générale périodique de la presse"
@@ -1097,8 +1104,9 @@ def controles(demo, ids):
     lignes.append(Ligne(["PR-01", nature_presse, "Arrêté du 1er mars 2004 (VGP) ; notice du constructeur", "3",
                          "Bureau Alpin de Contrôle (démo)", "05/07/2026", "05/10/2026",
                          "Carter de protection arrière à refixer."], CREER,
-                        "%s (équipement %s) ; « ; » dans le texte de référence (champ entre guillemets)"
-                        % (ids.nouveau("controles_reglementaires"), pr01["id"]), cle="PR-01"))
+                        "%s (équipement %s) ; « ; » dans le texte de référence (champ entre guillemets) ; réserve %s "
+                        "« Carter de protection arrière à refixer. » créée, datée du 2026-07-05"
+                        % (ids.nouveau("controles_reglementaires"), pr01["id"], ids.nouveau("reserves_controle")), cle="PR-01"))
     lignes.append(Ligne(["CU-01", nature_cu, "Notice du constructeur", "12", "Maintenance interne",
                          "14/01/2026", "14/01/2027", ""], CREER,
                         "%s (équipement %s)" % (ids.nouveau("controles_reglementaires"), cu01["id"]), cle="CU-01"))
@@ -1254,6 +1262,95 @@ def contrats(demo, ids):
     lignes[doublon].detail = ("doublon dans le fichier (même prestataire, écrit en majuscules, et même objet que la ligne %d)"
                               % tableau.numero(premiere))
     tableau.resume = "référence créée : fournisseur %s « %s » (prestataire)" % (prestataire, NOUVEAU_GARANT)
+    return tableau
+
+
+# Réserves des contrôles (2.2, T489, CS170) : contrôle désigné par le repère et la nature (déjà dans Prévo) ; clé
+# naturelle contrôle + date du contrôle + texte ; règles des réserves du L2 (ajout, levée, correction) ; levée sans
+# date : date vide, commentaire de la reprise (D183).
+ENTETES_RESERVES = ["Repère", "Nature du contrôle", "Date du contrôle", "Réserve", "Gravité", "Échéance", "Levée",
+                    "Levée le", "Commentaire"]
+COMMENTAIRE_LEVEE_REPRISE = "levée avant la 2.2, date inconnue"     # = Formats.COMMENTAIRE_LEVEE_REPRISE (D183)
+
+
+def reserves(demo, ids):
+    lignes = []
+
+    def controle(repere):
+        return demo.unique("controles_reglementaires", equipement_id=demo.equipement(repere)["id"])
+
+    def reserve(texte):
+        return demo.unique("reserves_controle", texte=texte)
+
+    ae01, ra01, gf01, pt01 = controle("AE-01"), controle("RA-01"), controle("GF-01"), controle("PT-01")
+    ve02, ae04, ch01 = controle("VE-02"), controle("AE-04"), controle("CH-01")
+    schema = reserve("Schéma unifilaire du tableau général à mettre à jour.")
+    exiger((schema["controle_id"], schema["levee"], schema["gravite"], schema["echeance_levee"]) == (ae01["id"], "0", "", "2026-12-15"),
+           "réserve du schéma unifilaire : ouverte, sans gravité, échéance 2026-12-15 attendues")
+    lignes.append(Ligne(["AE-01", ae01["nature"], francais_date(schema["date_controle"]), schema["texte"], "",
+                         francais_date(schema["echeance_levee"]), "", "", ""], IDENTIQUE,
+                        "%s : aucune colonne ne change" % schema["id"], cle="AE-01 / schéma unifilaire"))
+    purgeur = reserve(ra01["observations"])
+    exiger((purgeur["controle_id"], purgeur["levee"], purgeur["gravite"]) == (ra01["id"], "0", ""),
+           "réserve du purgeur : ouverte, sans gravité attendue")
+    lignes.append(Ligne(["RA-01", ra01["nature"], francais_date(purgeur["date_controle"]), purgeur["texte"], "majeure", "",
+                         "oui", "", ""], MAJ,
+                        "%s : gravité (vide) → majeure ; levée 0 → 1, sans date (date de levée vide) ; commentaire de levée "
+                        "(vide) → « %s » (D183)" % (purgeur["id"], COMMENTAIRE_LEVEE_REPRISE), cle="RA-01 / purgeur"))
+    demo.absent("reserves_controle", controle_id=gf01["id"])
+    demo.absent("reserves_controle", controle_id=pt01["id"])
+    exiger((gf01["derniere_date"], pt01["derniere_date"]) == ("2026-03-24", "2026-02-10"),
+           "contrôles de GF-01 et PT-01 : derniers contrôles 2026-03-24 et 2026-02-10 attendus")
+    raccord = "Raccord du détendeur à resserrer."
+    lignes.append(Ligne(["GF-01", gf01["nature"], "24/03/2026", raccord, "mineure", "24/04/2026", "", "", ""], CREER,
+                        "%s (contrôle %s), ouverte, échéance 2026-04-24" % (ids.nouveau("reserves_controle"), gf01["id"]),
+                        cle="GF-01 / raccord"))
+    premiere = len(lignes) - 1
+    lignes.append(Ligne(["GF-01", gf01["nature"], "24/03/2026", "Étiquetage du circuit (fluide, charge) à compléter.", "", "",
+                         "oui", "10/04/2026", "Étiquette posée par le frigoriste."], CREER,
+                        "%s (contrôle %s), levée le 2026-04-10 avec son commentaire" % (ids.nouveau("reserves_controle"),
+                                                                                        gf01["id"]),
+                        cle="GF-01 / étiquetage"))
+    lignes.append(Ligne(["PT-01", pt01["nature"], "10/02/2026", "Fin de course de montée à régler.", "critique", "", "oui",
+                         "", ""], CREER,
+                        "%s (contrôle %s), levée sans date : date de levée vide, commentaire « %s » (D183)"
+                        % (ids.nouveau("reserves_controle"), pt01["id"], COMMENTAIRE_LEVEE_REPRISE), cle="PT-01 / fin de course"))
+    demo.absent("controles_reglementaires", equipement_id=demo.equipement("CH-01")["id"], nature="Vérification des freins")
+    lignes.append(Ligne(["CH-01", "Vérification des freins", "18/03/2026", "Frein de parc à régler.", "", "", "", "", ""],
+                        REFUSEE, "contrôle « Vérification des freins » introuvable pour CH-01 (un contrôle inconnu refuse la ligne)",
+                        cle="CH-01 / freins"))
+    lignes.append(Ligne(["XX-99", ae01["nature"], "12/11/2025", "Prise de terre à vérifier.", "", "", "", "", ""], REFUSEE,
+                        "équipement « XX-99 » introuvable", cle="XX-99"))
+    exiger(ve02["derniere_date"] == "2026-06-02", "contrôle de VE-02 : dernier contrôle 2026-06-02 attendu")
+    lignes.append(Ligne(["VE-02", ve02["nature"], "02/06/2026", "Débit d'aspiration du poste 3 insuffisant.", "", "", "",
+                         "15/06/2026", ""], REFUSEE,
+                        "levée datée sans commentaire (règle de la levée : commentaire obligatoire)", cle="VE-02 / débit"))
+    lignes.append(Ligne(["GF-01", gf01["nature"], "15/12/2026", "Contrôle d'étanchéité à refaire.", "", "", "", "", ""], REFUSEE,
+                        "date du contrôle 2026-12-15 dans le futur (règle de l'ajout ; démo au 2026-10-19)",
+                        cle="GF-01 / futur"))
+    exiger(ae04["derniere_date"] == "2021-11-05", "contrôle de AE-04 : dernier contrôle 2021-11-05 attendu")
+    lignes.append(Ligne(["AE-04", ae04["nature"], "05/11/2021", "Extincteur n° 4 : pression basse.", "mineure", "01/11/2021",
+                         "", "", ""], REFUSEE, "échéance de levée avant la date du contrôle (règle de l'ajout)",
+                        cle="AE-04 / extincteur"))
+    differentiel = reserve("Différentiel 30 mA du tableau de l'atelier à remplacer.")
+    exiger((differentiel["levee"], differentiel["gravite"]) == ("1", ""), "réserve du différentiel : levée, sans gravité attendue")
+    lignes.append(Ligne(["AE-01", ae01["nature"], francais_date(differentiel["date_controle"]), differentiel["texte"], "majeure",
+                         "", "", "", ""], REFUSEE,
+                        "%s déjà levée : elle ne se modifie plus (la levée est un fait) ; la fiche n'est pas touchée"
+                        % differentiel["id"], cle="AE-01 / différentiel"))
+    lignes.append(Ligne(["CH-01", ch01["nature"], "18/03/2026", "Avertisseur de recul inaudible.", "", "", "non", "20/03/2026",
+                         "Avertisseur remplacé."], REFUSEE,
+                        "« non » dans Levée avec une date de levée : contradiction", cle="CH-01 / avertisseur"))
+    doublon = len(lignes)
+    lignes.append(Ligne(["GF-01", gf01["nature"], "24/03/2026", raccord.upper(), "", "", "", "", ""], REFUSEE, None,
+                        cle="GF-01 / raccord"))
+    lignes.append(Ligne(["VE-02", ve02["nature"], "02/06/2026", "Gaine d'extraction percée.", "grave", "", "", "", ""], REFUSEE,
+                        "gravité « grave » hors de la liste (mineure, majeure, critique)", cle="VE-02 / gaine"))
+    lignes.append(Ligne(["PT-01", pt01["nature"], "", "Câble du palan : un toron cassé.", "", "", "", "", ""], REFUSEE,
+                        "date du contrôle vide (règle de l'ajout : date du contrôle obligatoire)", cle="PT-01 / câble"))
+    tableau = Tableau("reserves", "reserves", ENTETES_RESERVES, lignes)
+    lignes[doublon].detail = ("doublon dans le fichier (même contrôle, même date et même texte, écrit en majuscules, que la "
+                              "ligne %d)" % tableau.numero(premiere))
     return tableau
 
 
@@ -1717,9 +1814,9 @@ def numero_historique(tableau, numero, rang=0):
 
 
 def lisezmoi(tableaux, demo):
-    eq, art, fou, tec, hab, cod, cpt, ctr, gam, his, gar, con = (tableaux[n] for n in (
+    eq, art, fou, tec, hab, cod, cpt, ctr, gam, his, gar, con, res = (tableaux[n] for n in (
         "equipements", "articles", "fournisseurs", "techniciens", "habilitations", "codes", "compteurs",
-        "controles", "gammes", "historique", "garanties", "contrats"))
+        "controles", "gammes", "historique", "garanties", "contrats", "reserves"))
     vue = []
     for nom, tableau, format_texte in (
             ("equipements.xlsx / .ods / .xls", eq, "classeur (3 formats)"),
@@ -1733,7 +1830,8 @@ def lisezmoi(tableaux, demo):
             ("gammes.xlsx", gam, "classeur .xlsx"),
             ("historique.csv", his, "CSV UTF-8 « , »"),
             ("garanties.csv", gar, "CSV UTF-8 BOM « ; »"),
-            ("contrats.csv", con, "CSV UTF-8 BOM « ; »")):
+            ("contrats.csv", con, "CSV UTF-8 BOM « ; »"),
+            ("reserves.csv", res, "CSV UTF-8 BOM « ; »")):
         tot = tableau.totaux()
         autres = ", ".join("%d %s" % (tot[a], a) for a in (DOUBLON_SUR, DOUBLON_SUPPOSE) if tot[a]) or "—"
         vue.append([nom, format_texte, "`%s`" % tableau.type_donnees, len(tableau.lignes), tot[CREER], tot[MAJ],
@@ -1849,8 +1947,11 @@ personnes et d'entreprises inventés, adresses en `.example`, comme le jeu de d�
                         ["Organisme de contrôle", "`organisme`", "sûre (libellé)"],
                         ["Date du dernier contrôle", "`derniere_date`", "sûre (libellé)"],
                         ["Date du prochain contrôle", "`prochaine_date`", "sûre (libellé)"],
-                        ["Observations", "`observations`", "sûre (libellé)"]],
+                        ["Observations", "`observations` → réserves des contrôles (une par ligne non vide, D183 ; "
+                         "colonne `observations` du contrôle jamais écrite)", "sûre (nom du champ)"]],
                        ["« ; » dans un champ entre guillemets (ligne %d) ;" % numero_cle(ctr, "PR-01"),
+                        "observations sur deux lignes (ligne %d, champ entre guillemets) : deux réserves (2.2, T489) ;"
+                        % numero_cle(ctr, "CH-01"),
                         "périodicité « 12 mois » illisible sur une fiche existante (refusée, la fiche ne change pas) ;",
                         "équipement inconnu « XX-99 »."]),
         section_simple("gammes.xlsx — gammes de préventif, une ligne par opération", gam,
@@ -1907,6 +2008,29 @@ personnes et d'entreprises inventés, adresses en `.example`, comme le jeu de d�
                         "contrat existant identique et contrat existant mis à jour (fin et montant ; cellules vides : rien "
                         "d'effacé)."],
                        apres=con.resume[0].upper() + con.resume[1:] + "."),
+        section_simple("reserves.csv — réserves des contrôles (2.2)", res,
+                       "CSV UTF-8 **avec BOM**, séparateur « ; », CRLF, dates JJ/MM/AAAA.",
+                       [["Repère", "`equipement` (par repère, doit exister ; désigne le contrôle avec la nature)", "sûre (synonyme)"],
+                        ["Nature du contrôle", "`nature` → `controle_id` (contrôle de cet équipement, doit exister)",
+                         "sûre (libellé)"],
+                        ["Date du contrôle", "`date_controle` (clé naturelle avec le contrôle et le texte)", "sûre (libellé)"],
+                        ["Réserve", "`texte` (clé naturelle)", "sûre (libellé)"],
+                        ["Gravité", "`gravite` (mineure, majeure, critique)", "sûre (libellé)"],
+                        ["Échéance", "`echeance_levee`", "sûre (synonyme)"],
+                        ["Levée", "`levee`", "sûre (libellé)"],
+                        ["Levée le", "`date_levee`", "sûre (synonyme)"],
+                        ["Commentaire", "`commentaire_levee`", "sûre (synonyme)"]],
+                       ["trois réserves créées et rattachées à leur contrôle, désigné par le repère et la nature "
+                        "(lignes %d à %d) ; contrôle inconnu (ligne %d) : refusée ;" % (
+                            numero_cle(res, "GF-01 / raccord"), numero_cle(res, "PT-01 / fin de course"),
+                            numero_cle(res, "CH-01 / freins")),
+                        "levée sans date : date de levée vide, commentaire « %s » s'il manque (D183), sur une réserve "
+                        "existante (ligne %d) et sur une nouvelle (ligne %d) ;" % (
+                            COMMENTAIRE_LEVEE_REPRISE, numero_cle(res, "RA-01 / purgeur"),
+                            numero_cle(res, "PT-01 / fin de course")),
+                        "règles des réserves (L2) : date du contrôle vide ou future, échéance avant le contrôle, levée "
+                        "datée sans commentaire, réserve déjà levée modifiée ; « non » dans Levée avec une date ; "
+                        "gravité hors liste ; doublon écrit en majuscules."]),
         """## Fichiers piégés (CS89 : message clair, rien de lu ni d'écrit, l'onglet ne se bloque pas)
 
 | Fichier | Contenu | Attendu |
@@ -1965,7 +2089,7 @@ dans cet ordre : `codes.csv`, `techniciens.tsv`, `fournisseurs.tsv`, `equipement
 toutes les machines de la démo citées par les autres fichiers (avec leurs chemins de localisation complets), les
 techniciens et les codes de la démo sont dans leurs fichiers : sur une base vide, les références se résolvent alors
 par les fiches créées plus tôt, sauf les pièges voulus (« XX-99 », « Pierre Martel », « Paul Dumas », lignes en
-erreur). `garanties.csv` et `contrats.csv` (2.2) ne font pas partie de cette reprise : leurs attentes
+erreur). `garanties.csv`, `contrats.csv` et `reserves.csv` (2.2) ne font pas partie de cette reprise : leurs attentes
 valent pour la démo seulement (ils citent des équipements que la liste du parc ne contient pas). Différences attendues avec la démo : tout ce qui était « identique » ou « mis à jour » est **créé** ;
 « 007 » existe après la liste du parc (son compteur, sa gamme et l'habilitation d'Inès Chabert après
 `techniciens.tsv` deviennent des créations) ; la ligne %(l4601)d de l'historique n'a plus d'OT existant en face
@@ -1988,7 +2112,8 @@ def generer(sortie, avec_xls=True, dossier_demo=DOSSIER_DEMO):
     for nom, construire in (("equipements", equipements), ("articles", articles), ("fournisseurs", fournisseurs),
                             ("techniciens", techniciens), ("habilitations", habilitations), ("codes", codes),
                             ("compteurs", compteurs), ("controles", controles), ("gammes", gammes),
-                            ("historique", historique), ("garanties", garanties), ("contrats", contrats)):
+                            ("historique", historique), ("garanties", garanties), ("contrats", contrats),
+                            ("reserves", reserves)):
         tableaux[nom] = construire(demo, Identifiants(demo))
 
     eq = tableaux["equipements"]
@@ -2007,6 +2132,7 @@ def generer(sortie, avec_xls=True, dossier_demo=DOSSIER_DEMO):
         "historique.csv": csv_tableau(tableaux["historique"], ",", "utf-8"),
         "garanties.csv": csv_tableau(tableaux["garanties"], ";", "utf-8", bom=True),
         "contrats.csv": csv_tableau(tableaux["contrats"], ";", "utf-8", bom=True),
+        "reserves.csv": csv_tableau(tableaux["reserves"], ";", "utf-8", bom=True),
         "trop_de_lignes.csv": lignes_essai(LIGNES_DONNEES_MAX + 1),
         "limite_de_lignes.csv": lignes_essai(LIGNES_DONNEES_MAX),
         "chiffre.xlsx": ecrire_chiffre(),

@@ -595,7 +595,8 @@ L'écran « Importer des données » (responsable, depuis Paramètres) reprend d
 | Habilitations | `habilitations.csv` | Technicien + Intitulé |
 | Codes de défaillance | `codes_defaillance.csv` | Famille + Code |
 | Compteurs | `compteurs.csv` | Équipement + Libellé |
-| Contrôles réglementaires | `controles_reglementaires.csv` | Équipement + Nature du contrôle |
+| Contrôles réglementaires | `controles_reglementaires.csv`, `reserves_controle.csv` | Équipement + Nature du contrôle |
+| Réserves des contrôles | `reserves_controle.csv` | Équipement + Nature du contrôle + Date du contrôle + Réserve |
 | Garanties | `fournisseurs.csv`, `garanties.csv` | Équipement + Fin de garantie |
 | Contrats de prestataires | `fournisseurs.csv`, `contrats_prestataires.csv` | Prestataire + Objet du contrat |
 | Gammes de préventif | `gammes.csv`, `gamme_operations.csv` | Équipement + Libellé |
@@ -715,7 +716,7 @@ Un compteur par ligne : équipement (repère, déjà dans Prévo) et libellé.
 
 ### 4.9 Contrôles réglementaires
 
-Un contrôle par ligne : équipement (repère, déjà dans Prévo) et nature du contrôle.
+Un contrôle par ligne : équipement (repère, déjà dans Prévo) et nature du contrôle ; observations : une réserve par ligne non vide.
 
 | Titre de la colonne | Écrit dans | Obligatoire | Autres titres reconnus | Remarques |
 | --- | --- | --- | --- | --- |
@@ -726,10 +727,26 @@ Un contrôle par ligne : équipement (repère, déjà dans Prévo) et nature du 
 | Organisme de contrôle | `controles_reglementaires.csv` : `organisme` |  | organisme, prestataire, bureau de contrôle |  |
 | Date du dernier contrôle | `controles_reglementaires.csv` : `derniere_date` |  | dernier contrôle, fait le, réalisé le |  |
 | Date du prochain contrôle | `controles_reglementaires.csv` : `prochaine_date` |  | prochain contrôle, échéance, à faire le |  |
-| Observations | `controles_reglementaires.csv` : `observations` |  | remarques, réserves |  |
-| Observations levées | `controles_reglementaires.csv` : `observations_levees` |  | réserves levées, levée |  |
+| Réserves relevées (une par ligne) | `reserves_controle.csv` : `texte` |  | remarques, réserves, réserves relevées, observations / réserves | une réserve par ligne non vide (règle de la reprise, D183) ; la colonne `observations` du contrôle n'est pas écrite ; une réserve déjà là n'est ni recréée ni modifiée |
+| Réserves levées | `reserves_controle.csv` : `levee` |  | observations levées, levée | « oui » : réserves levées sans date, commentaire « levée avant la 2.2, date inconnue » (D183) |
 
-### 4.10 Garanties
+### 4.10 Réserves des contrôles
+
+Une réserve par ligne, reconnue par son contrôle (équipement et nature, déjà dans Prévo), la date du contrôle et son texte ; levée si « Levée » dit oui ou si la date de levée est remplie (levée sans date : date vide).
+
+| Titre de la colonne | Écrit dans | Obligatoire | Autres titres reconnus | Remarques |
+| --- | --- | --- | --- | --- |
+| Équipement |  | oui, clé | équipement (repère), repère, repère équipement, machine, code machine, tag | repère d'un équipement de Prévo ; avec la nature, désigne le contrôle |
+| Nature du contrôle | `reserves_controle.csv` : `controle_id` | oui, clé | nature, contrôle, type de contrôle, intitulé du contrôle, vérification | nature d'un contrôle de cet équipement, déjà dans Prévo ; inconnue : ligne refusée |
+| Date du contrôle | `reserves_controle.csv` : `date_controle` | clé | contrôle du, contrôle réalisé le, date de la visite, date de vérification, relevée le | obligatoire pour une réserve nouvelle, ni illisible ni future (règles des réserves) |
+| Réserve | `reserves_controle.csv` : `texte` | oui, clé | réserves, observation, observations, constat, écart, non-conformité, remarque, description |  |
+| Gravité | `reserves_controle.csv` : `gravite` |  | criticité, sévérité, niveau de gravité |  |
+| Échéance de levée | `reserves_controle.csv` : `echeance_levee` |  | échéance, à lever avant le, à lever le, date limite, délai de levée |  |
+| Levée | `reserves_controle.csv` : `levee` |  | réserve levée, soldée, levé | « oui », ou date de levée remplie : réserve levée ; sans date : date de levée vide, commentaire « levée avant la 2.2, date inconnue » s'il manque (D183) ; une réserve levée ne change plus |
+| Date de levée | `reserves_controle.csv` : `date_levee` |  | levée le, soldée le |  |
+| Commentaire de levée | `reserves_controle.csv` : `commentaire_levee` |  | commentaire, action réalisée, ce qui a été fait | obligatoire pour une levée datée |
+
+### 4.11 Garanties
 
 Une garantie par ligne, reconnue par son équipement (repère, déjà dans Prévo) et sa date de fin ; fournisseur par son nom (créé s'il manque).
 
@@ -741,7 +758,7 @@ Une garantie par ligne, reconnue par son équipement (repère, déjà dans Prév
 | Fournisseur | `garanties.csv` : `fournisseur_id` |  | nom du fournisseur, garant, vendeur | nom du fournisseur ; créé s'il manque |
 | Conditions | `garanties.csv` : `conditions` |  | conditions de garantie, couverture, ce qui est couvert |  |
 
-### 4.11 Contrats de prestataires
+### 4.12 Contrats de prestataires
 
 Un contrat par ligne, reconnu par son prestataire et son objet ; prestataire par son nom (créé s'il manque) ; équipements concernés par leurs repères (déjà dans Prévo), séparés par des virgules.
 
@@ -758,7 +775,7 @@ Un contrat par ligne, reconnu par son prestataire et son objet ; prestataire par
 | Durée d'une reconduction (mois) | `contrats_prestataires.csv` : `reconduction_mois` |  | durée de reconduction, reconduction (mois), durée du renouvellement, renouvellement (mois) |  |
 | Montant annuel (€ HT) | `contrats_prestataires.csv` : `montant_annuel` |  | montant annuel ht, montant annuel, montant, montant ht, coût annuel, prix annuel, redevance annuelle |  |
 
-### 4.12 Gammes de préventif
+### 4.13 Gammes de préventif
 
 Une gamme par équipement et libellé ; opérations : une ligne par opération (gamme répétée) ou une colonne d'opérations séparées par « ; ».
 
@@ -781,7 +798,7 @@ Une gamme par équipement et libellé ; opérations : une ligne par opération (
 | Opérations | `gamme_operations.csv` |  | opération, tâche, tâches, liste des opérations, travail à faire | une ligne par opération (gamme répétée) ou opérations séparées par « ; » |
 | Valeur attendue | `gamme_operations.csv` |  | valeurs attendues, critère, attendu | dans l'ordre des opérations, séparées par « ; » |
 
-### 4.13 Historique des interventions
+### 4.14 Historique des interventions
 
 Les interventions passées d'une autre GMAO : chacune devient un OT clôturé ; l'ancien numéro est gardé dans le compte rendu.
 

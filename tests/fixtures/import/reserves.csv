@@ -1,0 +1,16 @@
+﻿Repère;Nature du contrôle;Date du contrôle;Réserve;Gravité;Échéance;Levée;Levée le;Commentaire
+AE-01;Vérification périodique des installations électriques;12/11/2025;Schéma unifilaire du tableau général à mettre à jour.;;15/12/2026;;;
+RA-01;Inspection périodique du réservoir d'air comprimé;03/04/2025;Purgeur automatique du réservoir défectueux : à remplacer avant la prochaine inspection.;majeure;;oui;;
+GF-01;Contrôle d'étanchéité du circuit frigorifique (5 à < 50 t éq. CO2);24/03/2026;Raccord du détendeur à resserrer.;mineure;24/04/2026;;;
+GF-01;Contrôle d'étanchéité du circuit frigorifique (5 à < 50 t éq. CO2);24/03/2026;Étiquetage du circuit (fluide, charge) à compléter.;;;oui;10/04/2026;Étiquette posée par le frigoriste.
+PT-01;VGP pont roulant, palan, potence (installés à demeure);10/02/2026;Fin de course de montée à régler.;critique;;oui;;
+CH-01;Vérification des freins;18/03/2026;Frein de parc à régler.;;;;;
+XX-99;Vérification périodique des installations électriques;12/11/2025;Prise de terre à vérifier.;;;;;
+VE-02;Contrôle du captage, locaux à pollution spécifique;02/06/2026;Débit d'aspiration du poste 3 insuffisant.;;;;15/06/2026;
+GF-01;Contrôle d'étanchéité du circuit frigorifique (5 à < 50 t éq. CO2);15/12/2026;Contrôle d'étanchéité à refaire.;;;;;
+AE-04;Maintenance approfondie des extincteurs;05/11/2021;Extincteur n° 4 : pression basse.;mineure;01/11/2021;;;
+AE-01;Vérification périodique des installations électriques;12/11/2025;Différentiel 30 mA du tableau de l'atelier à remplacer.;majeure;;;;
+CH-01;VGP chariot élévateur;18/03/2026;Avertisseur de recul inaudible.;;;non;20/03/2026;Avertisseur remplacé.
+GF-01;Contrôle d'étanchéité du circuit frigorifique (5 à < 50 t éq. CO2);24/03/2026;RACCORD DU DÉTENDEUR À RESSERRER.;;;;;
+VE-02;Contrôle du captage, locaux à pollution spécifique;02/06/2026;Gaine d'extraction percée.;grave;;;;
+PT-01;VGP pont roulant, palan, potence (installés à demeure);;Câble du palan : un toron cassé.;;;;;

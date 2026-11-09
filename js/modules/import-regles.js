@@ -371,6 +371,12 @@ const Import = (() => {
       if (!erreurs.length && ids) ligne._cibles.push({ champ: champDe(description, 'equipements_concernes'), colonne: 'equipement_ids', valeur: brouillon.equipement_ids = ids });
     }
     if (!erreurs.length && v.prestataire !== undefined) brouillon.fournisseur_id = fournisseurNomme(contexte, v.prestataire);
+    // Réserve (T489) : contrôle désigné par l'équipement et la nature, déjà dans Prévo (inconnu : ligne refusée).
+    if (!erreurs.length && typeLigne === 'reserves') {
+      const controle = indexDe(contexte, 'controles_reglementaires', Import.REGLES.controles.cle).get(Import.REGLES.controles.cle({ equipement_id: brouillon.equipement_id, nature: v.nature }));
+      if (controle) brouillon.controle_id = controle.id;
+      else erreurs.push(I18n.t('import.premiere_passe.controle_introuvable', { nature: v.nature, equipement: v.equipement }));
+    }
     if (!erreurs.length && v.compteur !== undefined) {
       const compteur = Donnees.lignes('compteurs').find((c) => c.equipement_id === brouillon.equipement_id && cleTexte(c.libelle) === cleTexte(v.compteur));
       if (compteur) ligne._cibles.push({ champ: champDe(description, 'compteur'), colonne: 'compteur_id', valeur: brouillon.compteur_id = compteur.id });
@@ -523,8 +529,47 @@ const Import = (() => {
     decider(contexte, ligne, ajouts.length + modifications.length > 0);
     if (ligne.action === 'mettre_a_jour') modifications.forEach(({ connue, attendue }) => ligne._modifier.push({ table: 'gamme_operations', id: connue.id, changes: { valeur_attendue: attendue } }));
   }
+  // Contrôle (T489) : ses observations deviennent des réserves par la règle de la reprise (Formats.reservesReprises, D183 :
+  // une par ligne non vide ; observations levées → réserves levées sans date, commentaire de la reprise), datées du dernier
+  // contrôle (celui du fichier, sinon celui de la fiche). Une réserve déjà là (même contrôle, même date, même texte) n'est
+  // ni recréée ni modifiée ; la colonne observations du contrôle n'est jamais écrite (T418).
+  function secondeControle(contexte, ligne) {
+    const [v, existante, ajouts] = [ligne.valeurs, ligne._existante, []];
+    if (v.observations !== undefined) {
+      const cle = Import.REGLES.reserves.cle;
+      const controleId = existante ? existante.id : '';
+      const dejaLa = new Map();
+      Donnees.lignes('reserves_controle').filter((r) => controleId && texte(r.controle_id) === controleId).forEach((r) => dejaLa.set(cle(r), (dejaLa.get(cle(r)) || 0) + 1));
+      const reprises = Formats.reservesReprises([{ id: 'import', observations: v.observations, observations_levees: v.observations_levees || '0',
+        derniere_date: v.derniere_date !== undefined ? v.derniere_date : texte(existante && existante.derniere_date) }], []);
+      for (const reprise of reprises) {
+        const cleReserve = cle({ controle_id: controleId, date_controle: reprise.date_controle, texte: reprise.texte });
+        const restantes = dejaLa.get(cleReserve) || 0;                     // texte répété n fois : n réserves au plus
+        if (restantes > 0) { dejaLa.set(cleReserve, restantes - 1); continue; }
+        prevoir(contexte, 'reserves_controle', nouvelleLigne('reserves_controle', { controle_id: ligne._objet || controleId,
+          date_controle: reprise.date_controle, texte: reprise.texte, levee: reprise.levee, commentaire_levee: reprise.commentaire_levee }), ligne);
+        ajouts.push(reprise.texte);
+      }
+    }
+    ajouts.forEach((t) => ligne.changements.push({ champ: 'reserve', libelle: Schema.champ('reserves_controle', 'texte').libelle, avant: '', apres: t }));
+    decider(contexte, ligne, ajouts.length > 0);
+  }
+  // Réserve (T489) : levée si « Levée » dit oui ou si la date de levée est remplie ; une réserve déjà levée le reste (une
+  // cellule vide n'efface rien, D84). Levée sans date : date vide et, sans commentaire, celui de la reprise (D183 : aucune
+  // date inventée). « non » avec une date de levée, ou commentaire de levée d'une réserve non levée : ligne refusée.
+  function secondeReserve(contexte, ligne) {
+    const [v, existante] = [ligne.valeurs, ligne._existante];
+    const dejaLevee = Boolean(existante) && texte(existante.levee) === '1';
+    const levee = v.levee !== undefined ? v.levee === '1' : (v.date_levee !== undefined || dejaLevee);
+    if ((v.levee === '0' && v.date_levee !== undefined) || (!levee && v.commentaire_levee !== undefined)) return refuser(ligne, I18n.t('import.seconde_reserve.levee_contradictoire'));
+    if (levee && v.levee === undefined) poserReference(ligne, champDe(contexte.description, 'levee'), 'levee', '1');
+    if (levee && !dejaLevee && v.date_levee === undefined && v.commentaire_levee === undefined) {
+      poserReference(ligne, champDe(contexte.description, 'commentaire_levee'), 'commentaire_levee', Formats.COMMENTAIRE_LEVEE_REPRISE);
+    }
+    decider(contexte, ligne);
+  }
   const SECONDES_PASSES = { localisations: secondeLocalisation, equipements: secondeEquipement, articles: secondeArticle, gammes: secondeGamme,
-    garanties: (contexte, ligne) => { poserFournisseur(contexte, ligne); decider(contexte, ligne); } };
+    garanties: (contexte, ligne) => { poserFournisseur(contexte, ligne); decider(contexte, ligne); }, controles: secondeControle, reserves: secondeReserve };
   /** Fabrique d'identifiants suivants (Donnees.nouvelId), qui tient compte des créations déjà prévues (année de dateIso si annuels). */
   function fabriqueIdentifiants() {
     const derniers = new Map();

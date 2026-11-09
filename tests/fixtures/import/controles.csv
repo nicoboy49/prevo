@@ -1,6 +1,7 @@
 ﻿Équipement;Nature du contrôle;Texte de référence;Périodicité (mois);Organisme de contrôle;Date du dernier contrôle;Date du prochain contrôle;Observations
 PT-01;VGP pont roulant, palan, potence (installés à demeure);"Code du travail, art. R4323-23 et R4323-24 ; arrêté du 1er mars 2004, art. 22 et 23 (appareils visés : annexe)";12;Bureau Alpin de Contrôle (démo);10/02/2026;10/02/2027;
-CH-01;VGP chariot élévateur;Arrêté du 1er mars 2004, art. 20 II et art. 23 a);6;Bureau Alpin de Contrôle (démo);18/09/2026;18/03/2027;Aucune observation.
+CH-01;VGP chariot élévateur;Arrêté du 1er mars 2004, art. 20 II et art. 23 a);6;Bureau Alpin de Contrôle (démo);18/09/2026;18/03/2027;"Chaîne de levage : maillons usés à remplacer.
+Patin de fourche gauche fissuré."
 PR-01;Vérification générale périodique de la presse;"Arrêté du 1er mars 2004 (VGP) ; notice du constructeur";3;Bureau Alpin de Contrôle (démo);05/07/2026;05/10/2026;Carter de protection arrière à refixer.
 CU-01;Contrôle des arrêts d'urgence et des protecteurs;Notice du constructeur;12;Maintenance interne;14/01/2026;14/01/2027;
 XX-99;Vérification des installations électriques;Code du travail;12;Certif-Elec Services (démo);01/03/2026;01/03/2027;

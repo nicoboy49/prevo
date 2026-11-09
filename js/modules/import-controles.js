@@ -9,7 +9,8 @@
 // techniciens → Equipe.verifierTechnicien ; habilitations → Equipe.interne.verifierHabilitation ; codes →
 // Parametres.verifierCode (modification : erreurs du libellé seules, comme l'écran) ; contrôles réglementaires →
 // Controles.verifierControle (jour : « maintenant » de l'import) ; garanties et contrats → Garanties.verifierGarantie et
-// Garanties.verifierContrat (T487) ; gammes → Preventif.verifierGamme. Rien pour les
+// Garanties.verifierContrat (T487) ; gammes → Preventif.verifierGamme ; réserves des contrôles → règles des réserves du
+// L2 (Controles.interne.verifierAjoutReserves, verifierModificationReserve, verifierLeveeReserve ; T489). Rien pour les
 // compteurs (aucun formulaire de création dans Prévo) ni pour l'historique (Import.preparerHistorique : un OT clôturé
 // importé ne passe par aucun formulaire de création ; Ordres.verifierCloture est la règle de clôture RG4, que D92
 // n'impose pas aux interventions reprises).
@@ -42,7 +43,25 @@ Object.assign(Import, (() => {
     contrats: (v, lignes, id, jour, estProvisoire) => sansFournisseurProvisoire(v, estProvisoire,
       typeof Garanties !== 'undefined' ? Garanties.verifierContrat(v) : []),
     gammes: (v) => Preventif.verifierGamme(v),
+    reserves: (v, lignes, id, jour) => verifierReserve(v, id, jour),
   };
+  // Réserve (T489) : règles des réserves du L2 (controles-reserves.js), sans rien écrire. Création : verifierAjoutReserves
+  // (date du contrôle obligatoire, ni illisible ni future ; texte ; gravité ; échéance pas avant le contrôle) ; fiche
+  // existante : levée, elle ne change plus (la levée est un fait), sinon verifierModificationReserve sur ce qui change ;
+  // levée datée : verifierLeveeReserve (date ni future ni avant le contrôle, commentaire obligatoire). Levée sans date :
+  // permise, date vide (D183), commentaire posé par la seconde passe.
+  const NOMS_LEVEE = { date: 'date_levee', commentaire: 'commentaire_levee' };
+  function verifierReserve(v, id, jour) {
+    if (typeof Controles === 'undefined' || !Controles.interne.verifierAjoutReserves) return [];
+    const [regles, avant] = [Controles.interne, id ? Donnees.trouver('reserves_controle', id) : null];
+    if (avant && Controles.reserveLevee(avant)) return [{ nom: 'levee', message: I18n.t('controles.modifier_reserve.reserve_levee') }];
+    const changes = {};
+    if (avant) ['gravite', 'echeance_levee'].filter((nom) => texte(v[nom]) !== texte(avant[nom])).forEach((nom) => { changes[nom] = v[nom]; });
+    const erreurs = avant ? regles.verifierModificationReserve(avant, changes) : regles.verifierAjoutReserves(v, jour);
+    if (texte(v.levee) !== '1' || !texte(v.date_levee)) return erreurs;
+    return erreurs.concat(regles.verifierLeveeReserve(Object.assign({}, avant || v, { levee: '0' }), { date: v.date_levee, commentaire: v.commentaire_levee }, jour)
+      .map((erreur) => Object.assign({}, erreur, { nom: NOMS_LEVEE[erreur.nom] || erreur.nom })));
+  }
   // Fournisseur ou prestataire que l'import crée : pas encore dans la base, l'import en garantit l'existence (T487 ; le
   // prestataire d'un contrat est obligatoire, il ne peut donc pas être retiré des valeurs comme celui d'un article).
   function sansFournisseurProvisoire(v, estProvisoire, erreurs) {

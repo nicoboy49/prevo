@@ -18,12 +18,12 @@
 //   Import.annuler(resultat) → Promise<{ restaurees }> : rend les tables touchées dans leur état d'avant
 //     l'import (restauration de la sauvegarde, avec la copie de sécurité habituelle ; en démo, l'instantané).
 //   Import.ORDRE_ECRITURE : ordre des tables (les références avant ceux qui les citent ; garanties et contrats de
-//     prestataires après les fournisseurs et les équipements, T487).
+//     prestataires après les fournisseurs et les équipements, T487 ; réserves après les contrôles, T489).
 
 Object.assign(Import, (() => {
 
   const ORDRE_ECRITURE = Object.freeze(['localisations', 'fournisseurs', 'techniciens', 'equipements', 'articles',
-    'mouvements_stock', 'compteurs', 'controles_reglementaires', 'garanties', 'contrats_prestataires', 'habilitations',
+    'mouvements_stock', 'compteurs', 'controles_reglementaires', 'reserves_controle', 'garanties', 'contrats_prestataires', 'habilitations',
     'gammes', 'gamme_operations', 'codes_defaillance', 'ordres_travail', 'ot_temps']);
 
   // Instantanés de la démo (rien n'y est sauvegardé sur un disque) : resultat → { nomTable: octets }.

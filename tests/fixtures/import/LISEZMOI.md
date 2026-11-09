@@ -38,6 +38,7 @@ personnes et d'entreprises inventés, adresses en `.example`, comme le jeu de d�
 | historique.csv | CSV UTF-8 « , » | `historique` | 18 | 13 | 0 | 0 | 2 | 1 doublon sûr, 2 doublon supposé |
 | garanties.csv | CSV UTF-8 BOM « ; » | `garanties` | 10 | 3 | 1 | 1 | 5 | — |
 | contrats.csv | CSV UTF-8 BOM « ; » | `contrats` | 10 | 2 | 1 | 1 | 6 | — |
+| reserves.csv | CSV UTF-8 BOM « ; » | `reserves` | 15 | 3 | 1 | 1 | 10 | — |
 
 ## equipements.xlsx, equipements.ods, equipements.xls — liste du parc d'un atelier
 
@@ -321,10 +322,11 @@ fichier ; références créées : localisation LOC-0008 « Ligne de rectificatio
 | Organisme de contrôle | `organisme` | sûre (libellé) |
 | Date du dernier contrôle | `derniere_date` | sûre (libellé) |
 | Date du prochain contrôle | `prochaine_date` | sûre (libellé) |
-| Observations | `observations` | sûre (libellé) |
+| Observations | `observations` → réserves des contrôles (une par ligne non vide, D183 ; colonne `observations` du contrôle jamais écrite) | sûre (nom du champ) |
 
 **Pièges** :
 - « ; » dans un champ entre guillemets (ligne 4) ;
+- observations sur deux lignes (ligne 3, champ entre guillemets) : deux réserves (2.2, T489) ;
 - périodicité « 12 mois » illisible sur une fiche existante (refusée, la fiche ne change pas) ;
 - équipement inconnu « XX-99 ».
 
@@ -333,8 +335,8 @@ fichier ; références créées : localisation LOC-0008 « Ligne de rectificatio
 | Ligne | Clé | Action attendue | Détail |
 | --- | --- | --- | --- |
 | 2 | PT-01 | identique | CTR-0001 : aucune colonne ne change |
-| 3 | CH-01 | mettre à jour | CTR-0002 : dernier contrôle 2026-03-18 → 2026-09-18 ; prochain 2026-09-18 → 2027-03-18 ; observations (vide) → « Aucune observation. » |
-| 4 | PR-01 | créer | CTR-0008 (équipement EQ-0020) ; « ; » dans le texte de référence (champ entre guillemets) |
+| 3 | CH-01 | mettre à jour | CTR-0002 : dernier contrôle 2026-03-18 → 2026-09-18 ; prochain 2026-09-18 → 2027-03-18 ; observations sur deux lignes (champ entre guillemets) → deux réserves RES-00004 et RES-00005 créées, datées du 2026-09-18 (D183) ; la colonne observations du contrôle n'est pas écrite |
+| 4 | PR-01 | créer | CTR-0008 (équipement EQ-0020) ; « ; » dans le texte de référence (champ entre guillemets) ; réserve RES-00006 « Carter de protection arrière à refixer. » créée, datée du 2026-07-05 |
 | 5 | CU-01 | créer | CTR-0009 (équipement EQ-0016) |
 | 6 | XX-99 | refusée | équipement « XX-99 » introuvable |
 | 7 | GF-01 | refusée | périodicité « 12 mois » illisible (nombre entier attendu) : la fiche CTR-0005 n'est pas touchée |
@@ -518,6 +520,49 @@ même valeur ; absent → correctif différé (signalé). Origine « manuel » p
 | 10 | Froid Industriel du Dauphiné / groupe froid | refusée | doublon dans le fichier (même prestataire, écrit en majuscules, et même objet que la ligne 4) |
 | 11 | Hydraulique du Guiers / hydraulique | refusée | fin avant le début (contrôle du formulaire) ; prestataire « Hydraulique du Guiers » pas créé |
 
+## reserves.csv — réserves des contrôles (2.2)
+
+- **Type de données** : `reserves`.
+- **Format** : CSV UTF-8 **avec BOM**, séparateur « ; », CRLF, dates JJ/MM/AAAA.
+- **En-tête** : ligne 1 ; colonnes « Repère », « Nature du contrôle », « Date du contrôle », « Réserve », « Gravité », « Échéance », « Levée », « Levée le », « Commentaire ».
+
+| Colonne | Champ attendu | Statut attendu |
+| --- | --- | --- |
+| Repère | `equipement` (par repère, doit exister ; désigne le contrôle avec la nature) | sûre (synonyme) |
+| Nature du contrôle | `nature` → `controle_id` (contrôle de cet équipement, doit exister) | sûre (libellé) |
+| Date du contrôle | `date_controle` (clé naturelle avec le contrôle et le texte) | sûre (libellé) |
+| Réserve | `texte` (clé naturelle) | sûre (libellé) |
+| Gravité | `gravite` (mineure, majeure, critique) | sûre (libellé) |
+| Échéance | `echeance_levee` | sûre (synonyme) |
+| Levée | `levee` | sûre (libellé) |
+| Levée le | `date_levee` | sûre (synonyme) |
+| Commentaire | `commentaire_levee` | sûre (synonyme) |
+
+**Pièges** :
+- trois réserves créées et rattachées à leur contrôle, désigné par le repère et la nature (lignes 4 à 6) ; contrôle inconnu (ligne 7) : refusée ;
+- levée sans date : date de levée vide, commentaire « levée avant la 2.2, date inconnue » s'il manque (D183), sur une réserve existante (ligne 3) et sur une nouvelle (ligne 6) ;
+- règles des réserves (L2) : date du contrôle vide ou future, échéance avant le contrôle, levée datée sans commentaire, réserve déjà levée modifiée ; « non » dans Levée avec une date ; gravité hors liste ; doublon écrit en majuscules.
+
+**Attendu** (base de démo) : 15 lignes de données : 3 créer, 1 mettre à jour, 1 identique, 10 refusée.
+
+| Ligne | Clé | Action attendue | Détail |
+| --- | --- | --- | --- |
+| 2 | AE-01 / schéma unifilaire | identique | RES-00003 : aucune colonne ne change |
+| 3 | RA-01 / purgeur | mettre à jour | RES-00001 : gravité (vide) → majeure ; levée 0 → 1, sans date (date de levée vide) ; commentaire de levée (vide) → « levée avant la 2.2, date inconnue » (D183) |
+| 4 | GF-01 / raccord | créer | RES-00004 (contrôle CTR-0005), ouverte, échéance 2026-04-24 |
+| 5 | GF-01 / étiquetage | créer | RES-00005 (contrôle CTR-0005), levée le 2026-04-10 avec son commentaire |
+| 6 | PT-01 / fin de course | créer | RES-00006 (contrôle CTR-0001), levée sans date : date de levée vide, commentaire « levée avant la 2.2, date inconnue » (D183) |
+| 7 | CH-01 / freins | refusée | contrôle « Vérification des freins » introuvable pour CH-01 (un contrôle inconnu refuse la ligne) |
+| 8 | XX-99 | refusée | équipement « XX-99 » introuvable |
+| 9 | VE-02 / débit | refusée | levée datée sans commentaire (règle de la levée : commentaire obligatoire) |
+| 10 | GF-01 / futur | refusée | date du contrôle 2026-12-15 dans le futur (règle de l'ajout ; démo au 2026-10-19) |
+| 11 | AE-04 / extincteur | refusée | échéance de levée avant la date du contrôle (règle de l'ajout) |
+| 12 | AE-01 / différentiel | refusée | RES-00002 déjà levée : elle ne se modifie plus (la levée est un fait) ; la fiche n'est pas touchée |
+| 13 | CH-01 / avertisseur | refusée | « non » dans Levée avec une date de levée : contradiction |
+| 14 | GF-01 / raccord | refusée | doublon dans le fichier (même contrôle, même date et même texte, écrit en majuscules, que la ligne 4) |
+| 15 | VE-02 / gaine | refusée | gravité « grave » hors de la liste (mineure, majeure, critique) |
+| 16 | PT-01 / câble | refusée | date du contrôle vide (règle de l'ajout : date du contrôle obligatoire) |
+
 ## Fichiers piégés (CS89 : message clair, rien de lu ni d'écrit, l'onglet ne se bloque pas)
 
 | Fichier | Contenu | Attendu |
@@ -576,7 +621,7 @@ dans cet ordre : `codes.csv`, `techniciens.tsv`, `fournisseurs.tsv`, `equipement
 toutes les machines de la démo citées par les autres fichiers (avec leurs chemins de localisation complets), les
 techniciens et les codes de la démo sont dans leurs fichiers : sur une base vide, les références se résolvent alors
 par les fiches créées plus tôt, sauf les pièges voulus (« XX-99 », « Pierre Martel », « Paul Dumas », lignes en
-erreur). `garanties.csv` et `contrats.csv` (2.2) ne font pas partie de cette reprise : leurs attentes
+erreur). `garanties.csv`, `contrats.csv` et `reserves.csv` (2.2) ne font pas partie de cette reprise : leurs attentes
 valent pour la démo seulement (ils citent des équipements que la liste du parc ne contient pas). Différences attendues avec la démo : tout ce qui était « identique » ou « mis à jour » est **créé** ;
 « 007 » existe après la liste du parc (son compteur, sa gamme et l'habilitation d'Inès Chabert après
 `techniciens.tsv` deviennent des créations) ; la ligne 18 de l'historique n'a plus d'OT existant en face

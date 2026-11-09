@@ -31,6 +31,7 @@ Object.assign(Import.assistant, (() => {
     codes: ['code', 'famille', 'libelle'], compteurs: ['equipement', 'libelle'], controles: ['equipement', 'nature'],
     gammes: ['equipement', 'libelle', 'operations'], historique: ['ancien_numero', 'equipement', 'titre'],
     garanties: ['equipement', 'date_fin', 'fournisseur'], contrats: ['prestataire', 'objet'],
+    reserves: ['equipement', 'nature', 'date_controle', 'texte'],
   };
   // Nature d'une référence créée par l'import (lue à l'affichage).
   const REFERENCES = { get localisations() { return I18n.t('import.reference.localisation'); }, get fournisseurs() { return I18n.t('import.reference.fournisseur'); } };
@@ -39,7 +40,7 @@ Object.assign(Import.assistant, (() => {
     localisations: 'localisations', equipements: 'equipements', articles: 'articles', fournisseurs: 'fournisseurs',
     techniciens: 'techniciens', habilitations: 'habilitations', codes: 'codes_defaillance', compteurs: 'compteurs',
     controles: 'controles_reglementaires', gammes: 'gammes', historique: 'ordres_travail',
-    garanties: 'garanties', contrats: 'contrats_prestataires',
+    garanties: 'garanties', contrats: 'contrats_prestataires', reserves: 'reserves_controle',
   };
   const PAS_AFFICHAGE = 200;
 
@@ -223,7 +224,8 @@ Object.assign(Import.assistant, (() => {
 
   function fiche(ligne) {
     const etat = A.etat();
-    // Famille d'un code : valeur stockée de la liste, affichée par son libellé (D155) ; date (fin d'une garantie) : JJ/MM/AAAA.
+    // Famille d'un code : valeur stockée de la liste, affichée par son libellé (D155) ; date (fin d'une garantie, date du
+    // contrôle d'une réserve) : JJ/MM/AAAA.
     const estDate = (cle) => ((Import.TYPES[etat.type] || { champs: [] }).champs.find((c) => c.cle === cle) || {}).type === 'date';
     const valeurs = (FICHE[etat.type] || []).map((cle) => (etat.type === 'codes' && cle === 'famille'
       ? Schema.libelleValeur('codes_defaillance', 'famille', texte(ligne.valeurs && ligne.valeurs.famille))

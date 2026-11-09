@@ -71,12 +71,29 @@
         libelle: ['Usure par frottement', 'description|désignation|intitulé'] })]),
     compteurs: type('compteurs', () => I18n.t('import.type.compteurs'), () => I18n.t('import.type_aide.compteurs'), ['compteurs'], [equipementDe('compteurs'),
       S('compteurs', { libelle: ['Compteur de démarrages', 'compteur|nom du compteur', CLE], unite: ['démarrages', 'unité de mesure'] })]),
-    controles: type('controles', () => I18n.t('import.type.controles'), () => I18n.t('import.type_aide.controles'), ['controles_reglementaires'], [equipementDe('controles_reglementaires'),
+    // Observations (2.2, T489) : une réserve par ligne non vide, par la règle de la reprise (D183 ; Formats.reservesReprises),
+    // jamais écrites dans la colonne observations du contrôle (comme T418) ; observations levées : réserves levées sans date.
+    controles: type('controles', () => I18n.t('import.type.controles'), () => I18n.t('import.type_aide.controles'), ['controles_reglementaires', 'reserves_controle'], [equipementDe('controles_reglementaires'),
       S('controles_reglementaires', { nature: ['Inspection des soupapes de sécurité', 'nature|contrôle|intitulé|type de contrôle|vérification', CLE],
         texte_reference: ['Arrêté du 20 novembre 2017', 'référence réglementaire|réglementation|texte'], periodicite_mois: ['12', 'périodicité|périodicité mois|fréquence|fréquence mois'],
         organisme: ['Bureau Alpin de Contrôle (démo)', 'organisme|prestataire|bureau de contrôle'],
-        derniere_date: ['15/01/2026', 'dernier contrôle|fait le|réalisé le'], prochaine_date: ['15/01/2027', 'prochain contrôle|échéance|à faire le'],
-        observations: ['Aucune', 'remarques|réserves'], observations_levees: ['oui', 'réserves levées|levée'] })]),
+        derniere_date: ['15/01/2026', 'dernier contrôle|fait le|réalisé le'], prochaine_date: ['15/01/2027', 'prochain contrôle|échéance|à faire le'] }),
+      V('observations', () => I18n.t('import.champ.observations'), 'texte_long', 'Soupape n° 2 : plombage à refaire.', 'remarques|réserves|réserves relevées|observations / réserves',
+        { table: 'reserves_controle', ecrit: 'texte' }),
+      V('observations_levees', () => I18n.t('import.champ.observations_levees'), 'booleen', 'non', 'observations levées|levée', { table: 'reserves_controle', ecrit: 'levee' })]),
+    // Réserves des contrôles (2.2, T489, CS170) : une réserve par ligne ; contrôle désigné par l'équipement (repère) et la
+    // nature, déjà dans Prévo (inconnu : ligne refusée) ; clé naturelle contrôle + date du contrôle + texte ; ligne contrôlée
+    // par les règles des réserves (L2) ; levée si « Levée » dit oui ou si la date de levée est remplie ; levée sans date :
+    // date vide, commentaire de la reprise s'il manque (D183). Exemple : contrôle d'étanchéité de GF-01 de la démo.
+    reserves: type('reserves', () => I18n.t('import.type.reserves'), () => I18n.t('import.type_aide.reserves'), ['reserves_controle'], [
+      Object.assign(equipementDe('reserves_controle'), { exemple: 'GF-01', table: null, ecrit: null }),
+      V('nature', () => I18n.t('schema.controles_reglementaires.nature'), 'texte', "Contrôle d'étanchéité du circuit frigorifique (5 à < 50 t éq. CO2)",
+        'nature|contrôle|type de contrôle|intitulé du contrôle|vérification', Object.assign({ table: 'reserves_controle', ecrit: 'controle_id' }, CLE)),
+      S('reserves_controle', { date_controle: ['24/03/2026', 'contrôle du|contrôle réalisé le|date de la visite|date de vérification|relevée le', NATUREL],
+        texte: ['Raccord du détendeur à resserrer.', 'réserves|observation|observations|constat|écart|non-conformité|remarque|description', CLE],
+        gravite: ['mineure', 'criticité|sévérité|niveau de gravité'], echeance_levee: ['24/04/2026', 'échéance|à lever avant le|à lever le|date limite|délai de levée'],
+        levee: ['oui', 'réserve levée|soldée|levé'], date_levee: ['10/04/2026', 'levée le|soldée le'],
+        commentaire_levee: ["Raccord resserré, essai d'étanchéité satisfaisant.", 'commentaire|action réalisée|ce qui a été fait'] })]),
     // Garanties et contrats (2.2, T487) : équipement par son repère (déjà dans Prévo) ; fournisseur ou prestataire par son
     // nom (créé s'il manque, D88 a) ; équipements concernés d'un contrat : repères séparés par des virgules (ou « ; »),
     // écrits en identifiants séparés par « ; » (equipement_ids, un repère inconnu refuse la ligne) ; montant annuel
@@ -138,6 +155,7 @@
     techniciens: { table: 'techniciens', cle: (l) => cleTexte(l.nom) + '|' + cleTexte(l.prenom) },
     habilitations: { table: 'habilitations', cle: paire('technicien_id', 'intitule') }, codes: { table: 'codes_defaillance', cle: paire('famille', 'code') },
     compteurs: { table: 'compteurs', cle: paire('equipement_id', 'libelle') }, controles: { table: 'controles_reglementaires', cle: paire('equipement_id', 'nature') },
+    reserves: { table: 'reserves_controle', cle: (l) => texte(l.controle_id) + '|' + texte(l.date_controle) + '|' + cleTexte(l.texte) },
     garanties: { table: 'garanties', cle: paire('equipement_id', 'date_fin') },
     contrats: { table: 'contrats_prestataires', cle: (l) => prestataire(l.fournisseur_id) + '|' + cleTexte(l.objet) },
     gammes: { table: 'gammes', cle: paire('equipement_id', 'libelle') }, historique: { table: 'ordres_travail' },

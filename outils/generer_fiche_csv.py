@@ -512,6 +512,15 @@ REMARQUES_IMPORT = {
     ("habilitations", "technicien"): "« Prénom Nom », « Nom Prénom » ou nom seul s'il est unique ; doit exister",
     "equipement": "repère d'un équipement de Prévo",
     "compteur": "libellé d'un compteur du même équipement",
+    ("controles", "observations"): ("une réserve par ligne non vide (règle de la reprise, D183) ; la colonne `observations` du"
+                                    " contrôle n'est pas écrite ; une réserve déjà là n'est ni recréée ni modifiée"),
+    ("controles", "observations_levees"): "« oui » : réserves levées sans date, commentaire « levée avant la 2.2, date inconnue » (D183)",
+    ("reserves", "equipement"): "repère d'un équipement de Prévo ; avec la nature, désigne le contrôle",
+    ("reserves", "nature"): "nature d'un contrôle de cet équipement, déjà dans Prévo ; inconnue : ligne refusée",
+    ("reserves", "date_controle"): "obligatoire pour une réserve nouvelle, ni illisible ni future (règles des réserves)",
+    ("reserves", "levee"): ("« oui », ou date de levée remplie : réserve levée ; sans date : date de levée vide, commentaire"
+                            " « levée avant la 2.2, date inconnue » s'il manque (D183) ; une réserve levée ne change plus"),
+    ("reserves", "commentaire_levee"): "obligatoire pour une levée datée",
     "operations": "une ligne par opération (gamme répétée) ou opérations séparées par « ; »",
     "valeur_attendue": "dans l'ordre des opérations, séparées par « ; »",
     "ancien_numero": "écrit en tête du compte rendu (« Ancien n° : … ») ; sert à repérer les doublons",

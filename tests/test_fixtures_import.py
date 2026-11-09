@@ -45,7 +45,7 @@ FICHIERS = (
     "LISEZMOI.md", "equipements.xlsx", "equipements.ods", "equipements.xls", "articles.csv", "fournisseurs.tsv",
     "techniciens.tsv", "habilitations.csv", "codes.csv", "compteurs.csv", "controles.csv", "gammes.xlsx",
     "historique.csv", "trop_de_lignes.csv", "limite_de_lignes.csv", "chiffre.xlsx", "vide.csv",
-    "lignes_vides.csv", "sans_entete.csv", "cellules_repetees.ods", "garanties.csv", "contrats.csv",
+    "lignes_vides.csv", "sans_entete.csv", "cellules_repetees.ods", "garanties.csv", "contrats.csv", "reserves.csv",
 )
 TITRE_PARC = "Liste du parc — atelier"
 ENTETES_PARC = ["Désignation", "Code machine", "Fabricant", "Mise en service", "Emplacement", "N° de série",
@@ -501,6 +501,7 @@ class TestTextes(unittest.TestCase):
         self.assertTrue(any(";" in cellule for ligne in controles for cellule in ligne), "« ; » entre guillemets")
         self.assertEqual({ligne[0] for ligne in controles[1:]} - reperes_demo, {"XX-99"})
         self.assertIn("12 mois", [ligne[3] for ligne in controles])
+        self.assertTrue(any(chr(10) in ligne[7] for ligne in controles[1:]), "observations sur deux lignes (T489)")
 
     def test_historique_autre_gmao(self):
         octets = (DOSSIER / "historique.csv").read_bytes()
@@ -566,6 +567,20 @@ class TestTextes(unittest.TestCase):
         self.assertIn(b'"PO-01;PO-02;PO-03"', (DOSSIER / "contrats.csv").read_bytes(), "« ; » entre guillemets")
         self.assertIn("trois", [l[5] for l in contrats])
         self.assertIn("2 350,50", [l[7] for l in contrats])
+
+    def test_reserves(self):
+        # T489 : contrôles désignés par repère + nature (ceux de la démo, sauf les pièges), levée sans date, doublon.
+        self.assertTrue((DOSSIER / "reserves.csv").read_bytes().startswith(BOM))
+        reserves = lire_csv("reserves.csv", "utf-8", ";")
+        self.assertEqual(reserves[0], ["Repère", "Nature du contrôle", "Date du contrôle", "Réserve", "Gravité", "Échéance",
+                                       "Levée", "Levée le", "Commentaire"])
+        equipements = {e["id"]: e["repere"] for e in lire_demo("equipements")}
+        controles = {(equipements[c["equipement_id"]], c["nature"]) for c in lire_demo("controles_reglementaires")}
+        self.assertEqual({(l[0], l[1]) for l in reserves[1:]} - controles,
+                         {("CH-01", "Vérification des freins"), ("XX-99", "Vérification périodique des installations électriques")})
+        self.assertIn(["PT-01", "oui", "", ""], [[l[0], l[6], l[7], l[8]] for l in reserves[1:]], "levée sans date")
+        self.assertIn("grave", [l[4] for l in reserves])
+        self.assertIn("RACCORD DU DÉTENDEUR À RESSERRER.", [l[3] for l in reserves])
 
     def test_plafonds_de_lignes(self):
         trop = lignes_non_vides("trop_de_lignes.csv")

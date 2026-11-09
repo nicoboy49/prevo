@@ -44,7 +44,8 @@ SCRIPTS = [
 ]
 MAINTENANT = "2026-10-21 09:30"
 TYPES_ATTENDUS = ["localisations", "equipements", "articles", "fournisseurs", "techniciens", "habilitations",
-                  "codes", "compteurs", "controles", "garanties", "contrats", "gammes", "historique"]   # T487 : garanties, contrats
+                  "codes", "compteurs", "controles", "reserves", "garanties", "contrats", "gammes",
+                  "historique"]   # T487 : garanties, contrats ; T489 : reserves
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +194,8 @@ TABLE = {"localisations": "localisations", "equipements": "equipements", "articl
 TABLES_TYPE = {"localisations": ["localisations"], "equipements": ["localisations", "equipements"],
                "articles": ["fournisseurs", "articles", "mouvements_stock"], "fournisseurs": ["fournisseurs"],
                "techniciens": ["techniciens"], "habilitations": ["habilitations"], "codes": ["codes_defaillance"],
-               "compteurs": ["compteurs"], "controles": ["controles_reglementaires"], "gammes": ["gammes", "gamme_operations"],
+               "compteurs": ["compteurs"], "controles": ["controles_reglementaires", "reserves_controle"],   # T489 : observations → réserves
+               "reserves": ["reserves_controle"], "gammes": ["gammes", "gamme_operations"],
                "garanties": ["fournisseurs", "garanties"], "contrats": ["fournisseurs", "contrats_prestataires"]}
 CLES = {
     "equipements": lambda b: cle(b.get("repere", "")),
