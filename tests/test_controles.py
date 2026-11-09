@@ -5,21 +5,28 @@ Serveur Prévo sur une copie du jeu de démo (ServeurPrevo), profil préréglé 
 le disque. Aucun identifiant du jeu de démo n'est écrit en dur : les contrôles viennent des rôles de
 scenarios_demo() (controle_en_retard, controle_a_planifier, controle_observations, controle_a_jour),
 les autres lignes sont cherchées par leurs propriétés. Les statuts attendus sont recalculés en Python
-à la date du jour de l'application (Donnees.aujourdhui()).
+à la date du jour de l'application (Donnees.aujourdhui()), réserves des contrôles comprises (2.2, T412 :
+« réserves à lever (n) » dès qu'une réserve de reserves_controle.csv est ouverte ; les colonnes anciennes
+observations / observations_levees ne comptent plus).
 
 Familles (le nom du test le dit) :
     statuts      : rôles de la démo affichés avec leur statut ; statut secondaire en second badge ;
+                   « réserves à lever (1) » de RA-01 dans la liste et sur sa fiche (alerte des réserves) ;
     filtre       : #/controles?filtre=30j = calcul Python (même définition que l'accueil) ; ?statut= ;
+                   ?statut=observations à lever (liens d'avant la 2.2) lu comme « réserves à lever » ;
+                   ?filtre=reserves-en-retard = calcul Python ;
     creation     : création et modification par le formulaire ; refus (périodicité ≤ 0, équipement
                    absent ou introuvable, prochaine date avant la dernière) sans rien écrire ;
     realisation  : contrôle réalisé avec rapport joint (document écrit, dates recalculées, fin de
                    mois) ; date future refusée sans document écrit ;
-    observations : levée des observations (statut, journal) ; refus sans observation à lever ;
     ot           : « Créer un OT » ouvre un OT réglementaire pré-rempli (type, titre, équipement),
                    créé puis listé sur la fiche ; aucun OT généré par le module sans clic ;
-    parc         : carte « Contrôles réglementaires » de la fiche équipement (selon le profil) ;
+    parc         : carte « Contrôles réglementaires » de la fiche équipement (selon le profil ; réserves
+                   à lever comptées) ;
     profils      : technicien en lecture (aucun bouton d'écriture), demandeur renvoyé à l'accueil ;
-    demo         : parcours en file:// (statuts des rôles, contrôle réalisé avec une photo) ;
+    demo         : parcours en file:// (statuts des rôles, contrôle réalisé avec une photo et une réserve) ;
+La levée des observations (bouton « Lever les observations ») est retirée de l'écran par T412 : la levée se fait
+réserve par réserve (tests/test_reserves.py, T418-T419).
     telephone    : 375 px sans défilement horizontal, zones tactiles de 48 px.
 
 Lancer depuis la racine du projet :
@@ -41,8 +48,12 @@ A_PLANIFIER = SCENARIOS["controle_a_planifier"]
 OBSERVATIONS = SCENARIOS["controle_observations"]
 A_JOUR = SCENARIOS["controle_a_jour"]
 TECHNICIEN = SCENARIOS["technicien_br_valide"]
-ROLES = ((EN_RETARD, "en retard"), (A_PLANIFIER, "à planifier"), (OBSERVATIONS, "observations à lever"),
+# Statut principal de chaque rôle à la date de référence du générateur. 2.2 (T417) : AE-01 (controle_a_planifier) a
+# une réserve ouverte, « réserves à lever » passe avant « à planifier » (statut secondaire) ; RA-01
+# (controle_observations) a sa réserve du purgeur, en retard. Le badge dit le nombre : « réserves à lever (1) ».
+ROLES = ((EN_RETARD, "en retard"), (A_PLANIFIER, "réserves à lever"), (OBSERVATIONS, "réserves à lever"),
          (A_JOUR, "à jour"))
+RESERVES_A_LEVER = "réserves à lever"
 
 # Appel d'une écriture du module dans la page : 'accepté:<valeur JSON>' ou 'refus:<message>'.
 APPEL_JS = """async ([fonction, arguments_]) => {
@@ -96,19 +107,50 @@ def prochaine_date(controle):
     return ajouter_mois(derniere, mois) if derniere and mois else None
 
 
-def etat_python(controle, aujourdhui):
-    """(statut, secondaires) — RG9 : le premier vrai de en retard, observations, à planifier, à jour."""
+def reserves_ouvertes(dossier):
+    """{controle_id: [échéance de levée de chaque réserve ouverte]} (D187 : échéance vide → date du contrôle
+    + 30 jours ; None si la date du contrôle est inconnue)."""
+    ouvertes = {}
+    for reserve in lire_csv(dossier, "reserves_controle.csv"):
+        if brut(reserve["levee"]) == "1":
+            continue
+        echeance = jour(reserve["echeance_levee"])
+        if echeance is None and jour(reserve["date_controle"]):
+            echeance = jour(reserve["date_controle"]) + datetime.timedelta(days=30)
+        ouvertes.setdefault(reserve["controle_id"], []).append(echeance)
+    return ouvertes
+
+
+def etat_python(controle, aujourdhui, ouvertes):
+    """(statut, secondaires) — RG9 : le premier vrai de en retard, réserves à lever, à planifier, à jour."""
     prochaine = prochaine_date(controle)
     vrais = []
     if prochaine is not None and prochaine < aujourdhui:
         vrais.append("en retard")
-    if brut(controle["observations"]) and brut(controle["observations_levees"]) != "1":
-        vrais.append("observations à lever")
+    if ouvertes.get(controle["id"]):
+        vrais.append(RESERVES_A_LEVER)
     if prochaine is None or aujourdhui <= prochaine <= aujourdhui + datetime.timedelta(days=30):
         vrais.append("à planifier")
     if not vrais:
         vrais.append("à jour")
     return vrais[0], vrais[1:]
+
+
+def libelle(statut, controle_id, ouvertes):
+    """Texte du badge : « réserves à lever (n) » avec le nombre de réserves ouvertes, sinon le statut."""
+    return "%s (%d)" % (statut, len(ouvertes[controle_id])) if statut == RESERVES_A_LEVER else statut
+
+
+def badges_python(controle, aujourdhui, ouvertes):
+    statut, secondaires = etat_python(controle, aujourdhui, ouvertes)
+    return [libelle(s, controle["id"], ouvertes) for s in [statut] + secondaires]
+
+
+def avec_reserve_en_retard(dossier, aujourdhui):
+    """Contrôles suivis qui ont au moins une réserve ouverte dont l'échéance est passée (?filtre=reserves-en-retard)."""
+    ouvertes = reserves_ouvertes(dossier)
+    return [c["id"] for c in suivis(dossier)
+            if any(echeance is not None and echeance < aujourdhui for echeance in ouvertes.get(c["id"], []))]
 
 
 def sous_30_jours(dossier, aujourdhui):
@@ -221,13 +263,22 @@ class TestListe(CasControles):
             self.ouvrir(serveur, "#/controles")
             self.attendre_liste()
             aujourdhui = self.aujourdhui()
+            ouvertes = reserves_ouvertes(serveur.dossier)
             self.assertEqual(self.page.inner_text("#contenu h1"), "Contrôles réglementaires")
             for controle_id, role in ROLES:
                 with self.subTest(controle=controle_id):
-                    statut, secondaires = etat_python(controle(serveur.dossier, controle_id), aujourdhui)
-                    self.assertEqual(self.badges(controle_id), [statut] + secondaires)
+                    ligne = controle(serveur.dossier, controle_id)
+                    self.assertEqual(self.badges(controle_id), badges_python(ligne, aujourdhui, ouvertes))
                     if 0 <= (aujourdhui - date_reference()).days < 7:
-                        self.assertEqual(statut, role)       # rôle du générateur, vrai à sa date de référence
+                        self.assertEqual(etat_python(ligne, aujourdhui, ouvertes)[0], role)   # rôle du générateur
+            # RA-01 : sa réserve du purgeur est ouverte (une seule), « réserves à lever (1) » dans la liste
+            self.assertEqual(self.badges(OBSERVATIONS), ["réserves à lever (1)"])
+            # Instrument « Réserves à lever » (ambre) : contrôles suivis qui ont une réserve ouverte
+            instrument = "#contenu .controles-instruments a[data-statut='réserves à lever']"
+            self.assertEqual(self.page.inner_text(instrument + " .lib"), "Réserves à lever")
+            self.assertIn("ambre", self.page.get_attribute(instrument, "class"))
+            self.assertEqual(int(self.page.inner_text(instrument + " .chiffre")),
+                             len([c for c in suivis(serveur.dossier) if ouvertes.get(c["id"])]))
             # Menu « Contrôles » allumé
             self.assertEqual(self.page.evaluate("document.querySelector('#menu a.actif').dataset.ecran"), "controles")
 
@@ -237,11 +288,19 @@ class TestListe(CasControles):
             self.page.evaluate("App.reafficher()")
             self.page.wait_for_function("(id) => document.querySelectorAll(`.controles-statuts[data-controle='${id}'] .badge`).length === 2",
                                         arg=OBSERVATIONS)
-            self.assertEqual(self.badges(OBSERVATIONS), ["en retard", "observations à lever"])
+            self.assertEqual(self.badges(OBSERVATIONS), ["en retard", "réserves à lever (1)"])
             self.aller("#/controles/" + OBSERVATIONS)
             self.attendre_fiche(OBSERVATIONS)
-            self.assertEqual(self.badges(OBSERVATIONS, ".controles-fiche"), ["en retard", "observations à lever"])
+            self.assertEqual(self.badges(OBSERVATIONS, ".controles-fiche"), ["en retard", "réserves à lever (1)"])
             self.assertIn("en retard de 1 jour", self.page.inner_text(".controles-fiche .controles-raison"))
+            # Alerte de la fiche fondée sur les réserves (plus sur les observations) ; plus de « Lever les observations »
+            reserve = next(r for r in lire_csv(serveur.dossier, "reserves_controle.csv") if r["controle_id"] == OBSERVATIONS)
+            echeance = jour(reserve["echeance_levee"]) or jour(reserve["date_controle"]) + datetime.timedelta(days=30)
+            self.assertLess(echeance, aujourdhui)
+            self.assertEqual(self.page.inner_text(".controles-fiche .controles-alerte-reserves .alerte-texte"),
+                             "1 réserve à lever, en retard (échéance le %s)." % echeance.strftime("%d/%m/%Y"))
+            self.assertEqual(self.page.locator("#controle-lever").count(), 0)
+            self.assertEqual(self.page.locator(".controles-fiche .controles-alerte-reserves").count(), 1)
 
     def test_filtre_30j_egal_au_calcul_python_et_filtre_par_statut(self):
         with ServeurPrevo() as serveur:
@@ -263,9 +322,30 @@ class TestListe(CasControles):
             self.aller("#/controles?statut=" + "en%20retard")
             self.page.wait_for_function("(n) => new Set(Array.from(document.querySelectorAll('.controles-liste a.controles-lien')).map(a => a.getAttribute('href'))).size < n",
                                         arg=len(tous))
+            ouvertes = reserves_ouvertes(serveur.dossier)
             en_retard = [c["id"] for c in suivis(serveur.dossier)
-                         if "en retard" in [etat_python(c, aujourdhui)[0]] + etat_python(c, aujourdhui)[1]]
+                         if "en retard" in [etat_python(c, aujourdhui, ouvertes)[0]] + etat_python(c, aujourdhui, ouvertes)[1]]
             self.assertEqual(sorted(self.ids_affiches()), sorted(en_retard))
+            # Liens d'avant la 2.2 : ?statut=observations à lever est lu comme « réserves à lever »
+            avec_reserves = sorted(c["id"] for c in suivis(serveur.dossier) if ouvertes.get(c["id"]))
+            self.assertIn(OBSERVATIONS, avec_reserves)
+            self.aller("#/controles?statut=" + "observations%20%C3%A0%20lever")
+            self.page.wait_for_function("document.querySelector('#controles-statut') && "
+                                        "document.querySelector('#controles-statut').value === 'réserves à lever'")
+            self.assertEqual(sorted(self.ids_affiches()), avec_reserves)
+            self.assertEqual(self.page.inner_text("#contenu .controles-instruments a[data-statut='réserves à lever'] .comp"),
+                             "filtre appliqué")
+            # ?filtre=reserves-en-retard : contrôles qui ont une réserve en retard (RA-01 en démo), proposé dans le choix
+            attendus = avec_reserve_en_retard(serveur.dossier, aujourdhui)
+            self.assertIn(OBSERVATIONS, attendus)
+            self.aller("#/controles?filtre=reserves-en-retard")
+            self.page.wait_for_function("document.querySelector('#controles-statut') && "
+                                        "document.querySelector('#controles-statut').value === 'reserves-en-retard'")
+            self.assertEqual(sorted(self.ids_affiches()), sorted(attendus))
+            self.assertEqual(self.badges(OBSERVATIONS), badges_python(controle(serveur.dossier, OBSERVATIONS), aujourdhui, ouvertes))
+            self.assertEqual(self.page.evaluate("Array.from(document.querySelectorAll('#controles-statut option')).map((o) => o.textContent)"),
+                             ["Tous les statuts", "Sous 30 jours (retards compris)", "En retard", "Réserves à lever",
+                              "Réserves en retard", "À planifier", "À jour"])
             # ?equipement= : seulement les contrôles de cet équipement
             equipement = controle(serveur.dossier, A_JOUR)["equipement_id"]
             self.aller("#/controles?equipement=" + equipement)
@@ -318,7 +398,7 @@ class TestCreation(CasControles):
                              (equipement["id"], "Contrôle des appareils à pression (test)", "12", "Organisme de test", derniere))
             self.assertEqual(ligne["observations"], "")
             self.attendre_fiche(nouveau)
-            statut, _ = etat_python(ligne, aujourdhui)
+            statut, _ = etat_python(ligne, aujourdhui, reserves_ouvertes(serveur.dossier))
             self.assertEqual(self.badges(nouveau, ".controles-fiche")[0], statut)
             self.assertTrue(any(e["action"].startswith("création") for e in journal_de(serveur.dossier, nouveau)))
 
@@ -350,7 +430,7 @@ class TestCreation(CasControles):
 
 
 # ---------------------------------------------------------------------------
-# Contrôle réalisé, observations
+# Contrôle réalisé
 # ---------------------------------------------------------------------------
 
 class TestRealisation(CasControles):
@@ -401,7 +481,7 @@ class TestRealisation(CasControles):
             actions = [e["action"] for e in journal_de(serveur.dossier, EN_RETARD)]
             self.assertTrue(any("contrôle réalisé le %s" % date.strftime("%d/%m/%Y") in a for a in actions), actions)
             # L'écran suit : statut recalculé, rapport en lien, historique
-            statut, secondaires = etat_python(ligne, aujourdhui)
+            statut, secondaires = etat_python(ligne, aujourdhui, reserves_ouvertes(serveur.dossier))
             page.wait_for_function("([id, statut]) => { const b = document.querySelector(`.controles-fiche .controles-statuts[data-controle='${id}'] .badge`); return b && b.textContent.trim() === statut; }",
                                    arg=[EN_RETARD, statut])
             self.assertTrue(page.get_attribute("#controle-rapport", "href").endswith("/api/documents/" + ligne["rapport"]))
@@ -411,38 +491,6 @@ class TestRealisation(CasControles):
                                          ((date - datetime.timedelta(days=1)).isoformat(), "antérieure")):
                 resultat = self.appeler("enregistrerRealisation", EN_RETARD, {"date": date_refusee})
                 self.assertTrue(resultat.startswith("refus:") and attendu in resultat, resultat)
-
-    def test_observations_levees_statut_et_journal(self):
-        page = self.page
-        with ServeurPrevo() as serveur:
-            self.ouvrir(serveur, "#/controles/" + OBSERVATIONS)
-            self.attendre_fiche(OBSERVATIONS)
-            aujourdhui = self.aujourdhui()
-            self.assertIn("observations à lever", self.badges(OBSERVATIONS, ".controles-fiche"))
-            # Refus : rien à lever sur un contrôle à jour ; commentaire obligatoire
-            resultat = self.appeler("leverObservations", A_JOUR, {"date": aujourdhui.isoformat(), "commentaire": "rien"})
-            self.assertTrue(resultat.startswith("refus:") and "observation" in resultat, resultat)
-            resultat = self.appeler("leverObservations", OBSERVATIONS, {"date": aujourdhui.isoformat(), "commentaire": ""})
-            self.assertTrue(resultat.startswith("refus:"), resultat)
-            self.assertEqual(controle(serveur.dossier, OBSERVATIONS)["observations_levees"], "0")
-
-            page.click("#controle-lever")
-            page.wait_for_selector("dialog [name=commentaire]")
-            page.fill("dialog [name=commentaire]", "Purgeur automatique remplacé")
-            self.valider_fenetre()
-            self.attendre_toast("Observations levées")
-            ligne = controle(serveur.dossier, OBSERVATIONS)
-            self.assertEqual(ligne["observations_levees"], "1")
-            self.assertTrue(ligne["observations"])                   # le texte des observations est gardé
-            actions = [e["action"] for e in journal_de(serveur.dossier, OBSERVATIONS)]
-            self.assertTrue(any("observations levées le %s : Purgeur automatique remplacé" % aujourdhui.strftime("%d/%m/%Y") in a
-                                for a in actions), actions)
-            statut, secondaires = etat_python(ligne, aujourdhui)
-            self.assertNotEqual(statut, "observations à lever")
-            page.wait_for_function("(id) => !document.querySelector('#controle-lever') && document.querySelector(`.controles-fiche .controles-statuts[data-controle='${id}']`)",
-                                   arg=OBSERVATIONS)
-            self.assertEqual(self.badges(OBSERVATIONS, ".controles-fiche"), [statut] + secondaires)
-            self.assertIn("observations levées", page.inner_text(".controles-historique"))
 
 
 # ---------------------------------------------------------------------------
@@ -484,16 +532,18 @@ class TestOrdres(CasControles):
             page.wait_for_function("document.querySelector('#form-nouvel-ot [name=titre]') && document.querySelector('#form-nouvel-ot [name=titre]').value === 'Essai de titre'")
             self.assertEqual(page.input_value("#form-nouvel-ot [name=type]"), "correctif différé")
 
-    def test_titre_de_l_ot_pour_lever_des_observations(self):
-        """D40 : un contrôle aux observations à lever pré-remplit « Levée des observations — … »."""
+    def test_titre_de_l_ot_d_un_controle_aux_reserves_a_lever(self):
+        """D40, 2.2 : un contrôle aux réserves à lever pré-remplit aussi « Accompagnement du contrôle — … » (le titre
+        « Levée des observations » sort : l'OT d'une réserve se crée depuis la réserve, T420)."""
         page = self.page
         with ServeurPrevo() as serveur:
             self.ouvrir(serveur, "#/controles/" + OBSERVATIONS)
             self.attendre_fiche(OBSERVATIONS)
+            self.assertEqual(self.badges(OBSERVATIONS, ".controles-fiche")[0], "réserves à lever (1)")
             ligne = controle(serveur.dossier, OBSERVATIONS)
             page.click("#controle-creer-ot")
             page.wait_for_selector("#form-nouvel-ot")
-            self.assertEqual(page.input_value("#form-nouvel-ot [name=titre]"), "Levée des observations — " + ligne["nature"])
+            self.assertEqual(page.input_value("#form-nouvel-ot [name=titre]"), "Accompagnement du contrôle — " + ligne["nature"])
 
     def test_aucun_ot_genere_par_le_module_sans_clic(self):
         page = self.page
@@ -501,7 +551,7 @@ class TestOrdres(CasControles):
             self.ouvrir(serveur, "#/accueil")
             ordres = (serveur.dossier / "ordres_travail.csv").read_bytes()
             nombre = page.evaluate("Donnees.lignes('ordres_travail').length")
-            routes = ["#/controles", "#/controles?filtre=30j"]
+            routes = ["#/controles", "#/controles?filtre=30j", "#/controles?filtre=reserves-en-retard"]
             routes += ["#/controles/" + c["id"] for c in lire_csv(serveur.dossier, "controles_reglementaires.csv")]
             routes += ["#/equipement/" + controle(serveur.dossier, EN_RETARD)["equipement_id"]]
             for route in routes:
@@ -527,8 +577,17 @@ class TestProfils(CasControles):
             page.wait_for_selector(".parc-controles")
             liens = page.eval_on_selector_all(".parc-controles li a[href^='#/controles/']", "l => l.map(a => a.getAttribute('href'))")
             self.assertEqual(sorted(liens), sorted("#/controles/" + c for c in controles))
-            statut, _ = etat_python(controle(serveur.dossier, EN_RETARD), self.aujourdhui())
+            ouvertes = reserves_ouvertes(serveur.dossier)
+            statut, _ = etat_python(controle(serveur.dossier, EN_RETARD), self.aujourdhui(), ouvertes)
             self.assertEqual(self.badges(EN_RETARD, ".parc-controles")[0], statut)
+            # RA-01 sur la fiche de son équipement : « réserves à lever (1) » (Controles.libelleStatut avec l'état)
+            self.aller("#/equipement/" + controle(serveur.dossier, OBSERVATIONS)["equipement_id"])
+            page.wait_for_selector(".parc-controles .controles-statuts[data-controle='%s']" % OBSERVATIONS)
+            self.assertEqual(self.badges(OBSERVATIONS, ".parc-controles"),
+                             badges_python(controle(serveur.dossier, OBSERVATIONS), self.aujourdhui(), ouvertes))
+            self.assertEqual(self.badges(OBSERVATIONS, ".parc-controles")[0], "réserves à lever (1)")
+            self.aller("#/equipement/" + equipement)
+            page.wait_for_selector(".parc-controles .controles-statuts[data-controle='%s']" % EN_RETARD)
             page.click("#parc-ajouter-controle")
             page.wait_for_selector("#form-controle")
             self.assertEqual(page.input_value("#form-controle [name=equipement_id]"), equipement)
@@ -599,7 +658,9 @@ class TestDemoEtTelephone(CasControles):
         self.attendre_liste()
         for controle_id, role in ROLES:                 # dates décalées par semaines entières : rôles gardés
             with self.subTest(controle=controle_id):
-                self.assertEqual(self.badges(controle_id)[0], role)
+                attendu = role + " (1)" if role == RESERVES_A_LEVER else role      # une réserve ouverte chacun
+                self.assertEqual(self.badges(controle_id)[0], attendu)
+        self.assertEqual(self.badges(A_PLANIFIER), ["réserves à lever (1)", "à planifier"])
         self.aller("#/controles/" + A_PLANIFIER)
         self.attendre_fiche(A_PLANIFIER)
         page.click("#controle-realise")
@@ -614,7 +675,14 @@ class TestDemoEtTelephone(CasControles):
         self.assertTrue(ligne["rapport"].startswith("controle-" + A_PLANIFIER))
         page.wait_for_selector("#controle-rapport")
         self.assertTrue(page.get_attribute("#controle-rapport", "href").startswith("blob:"))
-        self.assertEqual(self.badges(A_PLANIFIER, ".controles-fiche")[0], "observations à lever")
+        # La saisie devient une réserve (T413) ; la réserve d'avant reste ouverte : « réserves à lever (2) », plus
+        # « à planifier » (prochaine date recalculée)
+        self.assertEqual(page.evaluate("""(id) => Donnees.lignes('reserves_controle').filter((r) => r.controle_id === id
+            && r.texte === 'Prise de terre à reprendre').length""", A_PLANIFIER), 1)
+        page.wait_for_function("(id) => { const b = document.querySelector(`.controles-fiche .controles-statuts[data-controle='${id}'] .badge`); "
+                               "return b && b.textContent.trim() === 'réserves à lever (2)'; }", arg=A_PLANIFIER)
+        self.assertEqual(self.badges(A_PLANIFIER, ".controles-fiche"), ["réserves à lever (2)"])
+        self.assertIn("2 réserves à lever", page.inner_text(".controles-fiche .controles-alerte-reserves"))
 
     def test_telephone_375px_sans_defilement_horizontal(self):
         page = self.page
@@ -631,7 +699,7 @@ class TestDemoEtTelephone(CasControles):
             self.aller("#/controles/" + OBSERVATIONS)
             self.attendre_fiche(OBSERVATIONS)
             sans_defilement("fiche")
-            for selecteur in ("#controle-realise", "#controle-lever", "#controle-creer-ot", "#form-controle button[type=submit]"):
+            for selecteur in ("#controle-realise", "#controle-creer-ot", "#form-controle button[type=submit]"):
                 hauteur = page.eval_on_selector(selecteur, "e => e.getBoundingClientRect().height")
                 self.assertGreaterEqual(hauteur, 48, selecteur)
             page.click("#controle-realise")

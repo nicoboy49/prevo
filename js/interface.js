@@ -331,7 +331,7 @@ const UI = (function () {
     // achats
     'demandée': 'info', 'commandée': 'violet', 'reçue': 'ok',
     // contrôles réglementaires, habilitations
-    'à jour': 'ok', 'à planifier': 'attention', 'en retard': 'ko', 'observations à lever': 'attention',
+    'à jour': 'ok', 'à planifier': 'attention', 'en retard': 'ko', 'réserves à lever': 'attention',
     'valide': 'ok', 'à renouveler': 'attention', 'échue': 'ko',
   };
 

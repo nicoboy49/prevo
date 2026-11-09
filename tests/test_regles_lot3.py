@@ -4,13 +4,14 @@
 Deux familles :
     - jeu construit À LA MAIN dans ce fichier, date fixe passée en argument (aujourd'hui = mardi
       20/10/2026 ; la semaine du 19 au 25/10/2026 traverse le passage à l'heure d'hiver) :
-      Controles.ajouterMois / prochaineDate / etat / sous30Jours, Equipe.etatHabilitation /
+      Controles.ajouterMois / prochaineDate / etat (réserves à lever comprises, 2.2 : T412) / libelleStatut /
+      sous30Jours, Equipe.etatHabilitation /
       habilitationsQuiComptent / aRenouveler, Planning.lundiDe / joursDeLaSemaine /
       ordresDeLaSemaine / chargeSemaine / semaine ;
     - jeu de démo (donnees/demo, SANS décalage de dates, aujourd'hui = date de référence du
       générateur) : rôles de scénario du lot 3 (tests/fixtures/demo-scenarios.json) et égalité avec
-      un calcul Python indépendant (contrôles sous 30 jours, habilitations à renouveler, charges des
-      4 semaines du planning).
+      un calcul Python indépendant (statuts des contrôles, contrôles sous 30 jours, habilitations à
+      renouveler, charges des 4 semaines du planning).
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_regles_lot3.py" -v
@@ -33,6 +34,7 @@ SCRIPTS = [
     "js/stockage-demo.js",
     "js/interface.js",
     "js/modules/controles-regles.js",
+    "js/modules/controles-reserves.js",
     "js/modules/equipe-regles.js",
     "js/modules/planning-regles.js",
 ]
@@ -51,19 +53,35 @@ EQUIPEMENTS = csv("id;repere;designation;statut;actif", [
     "EQ-0003;PR-03;Presse désactivée;en service;0",
 ])
 
+# Les colonnes anciennes observations / observations_levees ne comptent plus pour le statut (2.2, T412) : ce sont
+# les réserves (RESERVES) qui font « réserves à lever ».
 CONTROLES = csv("id;equipement_id;nature;periodicite_mois;derniere_date;prochaine_date;observations;observations_levees", [
-    "CTR-0001;EQ-0001;VGP;12;2025-10-01;2026-10-01;Crochet usé;0",       # en retard (+ observations)
+    "CTR-0001;EQ-0001;VGP;12;2025-10-01;2026-10-01;Crochet usé;0",       # en retard (+ réserve en retard)
     "CTR-0002;EQ-0001;Électricité;12;2025-11-19;2026-11-19;;1",          # à planifier (30 j pile)
     "CTR-0003;EQ-0001;Aération;12;2025-11-20;2026-11-20;;1",             # à jour (31 j)
     "CTR-0004;EQ-0001;Pression;1;2026-01-31;;;1",                        # prochaine calculée : 28/02 → en retard
     "CTR-0005;EQ-0001;Inconnu;;;;;1",                                    # date inconnue → à planifier
-    "CTR-0006;EQ-0001;Réservoir;36;2024-05-01;2027-05-01;Purgeur à remplacer;0",   # observations à lever
-    "CTR-0007;EQ-0001;Levage;12;2026-05-01;2027-05-01;Remarque levée;1",          # à jour
+    "CTR-0006;EQ-0001;Réservoir;36;2024-05-01;2027-05-01;Purgeur à remplacer;0",   # réserves à lever (1, à venir)
+    "CTR-0007;EQ-0001;Levage;12;2026-05-01;2027-05-01;Remarque levée;1",          # à jour (réserve levée)
     "CTR-0008;EQ-0002;VGP rebut;12;2025-10-01;2026-10-01;;1",            # équipement au rebut
     "CTR-0009;EQ-0003;VGP inactif;12;2025-10-25;2026-10-25;;1",          # équipement inactif
     "CTR-0010;EQ-0001;Aujourd'hui;12;2025-10-20;2026-10-20;;1",          # à planifier, aujourd'hui
     "CTR-0011;EQ-9999;Absent;12;2025-10-21;2026-10-21;;1",               # équipement introuvable
-    "CTR-0012;EQ-0001;Froid;12;2025-11-19;2026-11-19;Fuite;0",           # observations + à planifier
+    "CTR-0012;EQ-0001;Froid;12;2025-11-19;2026-11-19;Fuite;0",           # 2 réserves dont 1 en retard + à planifier
+    "CTR-0013;EQ-0001;Ancien;12;2026-05-01;2027-05-01;Observation d'avant la 2.2;0",   # à jour : aucune réserve
+    "CTR-0014;EQ-0001;Pont;12;2026-06-01;2027-06-01;;1",                 # 2 réserves, toutes en retard
+    "CTR-0015;EQ-0001;Potence;12;2026-06-01;2027-06-01;;1",              # 1 réserve, échéance inconnue
+])
+
+RESERVES = csv("id;controle_id;date_controle;texte;gravite;echeance_levee;levee;date_levee;commentaire_levee;ot_id", [
+    "RES-00001;CTR-0001;2025-10-01;Crochet usé;;;0;;;",                  # 31/10/2025 (30 jours) : en retard
+    "RES-00002;CTR-0006;2024-05-01;Purgeur à remplacer;;2026-11-30;0;;;",   # échéance saisie à venir
+    "RES-00003;CTR-0007;2026-05-01;Remarque levée;;;1;2026-05-20;Fait;",  # levée : ne compte pas
+    "RES-00004;CTR-0012;2025-11-19;Fuite;;;0;;;",                        # 19/12/2025 : en retard
+    "RES-00005;CTR-0012;2025-11-19;Isolation à reprendre;;2026-12-01;0;;;",   # à venir
+    "RES-00006;CTR-0014;2026-06-01;Câble usé;;2026-09-01;0;;;",          # en retard (échéance saisie)
+    "RES-00007;CTR-0014;2026-06-01;Fin de course;;;0;;;",                # 01/07/2026 : en retard, la plus ancienne
+    "RES-00008;CTR-0015;;Date du contrôle inconnue;;;0;;;",              # échéance inconnue : jamais en retard
 ])
 
 TECHNICIENS = csv("id;nom;prenom;capacite_h_semaine;actif", [
@@ -104,8 +122,8 @@ ORDRES = csv("id;statut;technicien_id;date_prevue;temps_prevu_h;priorite;equipem
 
 
 def jeu_de_test():
-    return {"equipements": EQUIPEMENTS, "controles_reglementaires": CONTROLES, "techniciens": TECHNICIENS,
-            "habilitations": HABILITATIONS, "ordres_travail": ORDRES}
+    return {"equipements": EQUIPEMENTS, "controles_reglementaires": CONTROLES, "reserves_controle": RESERVES,
+            "techniciens": TECHNICIENS, "habilitations": HABILITATIONS, "ordres_travail": ORDRES}
 
 
 class CasRegles(CasNavigateur):
@@ -153,15 +171,18 @@ class TestControles(CasRegles):
 
     def test_statuts_dans_l_ordre_de_priorite_et_secondaires(self):
         attendus = {
-            "CTR-0001": ("en retard", ["observations à lever"], -19),
+            "CTR-0001": ("en retard", ["réserves à lever"], -19),
             "CTR-0002": ("à planifier", [], 30),
             "CTR-0003": ("à jour", [], 31),
             "CTR-0004": ("en retard", [], -234),
             "CTR-0005": ("à planifier", [], None),
-            "CTR-0006": ("observations à lever", [], 193),
+            "CTR-0006": ("réserves à lever", [], 193),
             "CTR-0007": ("à jour", [], 193),
             "CTR-0010": ("à planifier", [], 0),
-            "CTR-0012": ("observations à lever", ["à planifier"], 30),
+            "CTR-0012": ("réserves à lever", ["à planifier"], 30),
+            "CTR-0013": ("à jour", [], 193),
+            "CTR-0014": ("réserves à lever", [], 224),
+            "CTR-0015": ("réserves à lever", [], 224),
         }
         for controle_id, (statut, secondaires, jours) in attendus.items():
             with self.subTest(controle=controle_id):
@@ -173,7 +194,50 @@ class TestControles(CasRegles):
         self.assertIn("date inconnue", self.etat("CTR-0005")["raison"])
         self.assertIn("aujourd'hui", self.etat("CTR-0010")["raison"])
         self.assertIn("19 jours", self.etat("CTR-0001")["raison"])
-        self.assertEqual(self.js("Controles.STATUTS"), ["en retard", "observations à lever", "à planifier", "à jour"])
+        self.assertEqual(self.js("Controles.STATUTS"), ["en retard", "réserves à lever", "à planifier", "à jour"])
+
+    def test_reserves_a_lever_nombre_retards_echeance_et_raison(self):
+        """CS170 : n réserves ouvertes, k en retard (échéance passée), plus ancienne échéance ; raison du statut."""
+        attendus = {   # contrôle : (reservesALever, reservesEnRetard, echeanceReserves, raison)
+            "CTR-0001": (1, 1, "2025-10-31", None),                        # statut « en retard » : sa propre raison
+            "CTR-0002": (0, 0, "", None),
+            "CTR-0006": (1, 0, "2026-11-30", "1 réserve à lever, échéance le 30/11/2026"),
+            "CTR-0007": (0, 0, "", None),
+            "CTR-0012": (2, 1, "2025-12-19", "2 réserves à lever, dont 1 en retard"),
+            "CTR-0013": (0, 0, "", None),
+            "CTR-0014": (2, 2, "2026-07-01", "2 réserves à lever, toutes en retard (première échéance le 01/07/2026)"),
+            "CTR-0015": (1, 0, "", "1 réserve à lever"),
+        }
+        for controle_id, (n, k, echeance, raison) in attendus.items():
+            with self.subTest(controle=controle_id):
+                etat = self.etat(controle_id)
+                self.assertEqual((etat["reservesALever"], etat["reservesEnRetard"], etat["echeanceReserves"]), (n, k, echeance))
+                if raison is not None:
+                    self.assertEqual(etat["raison"], raison)
+        self.assertIn("19 jours", self.etat("CTR-0001")["raison"])   # en retard : la raison reste celle du retard
+        # Une seule réserve, en retard ; le lendemain de l'échéance de CTR-0006, elle l'est aussi
+        self.assertEqual(self.etat("CTR-0006", "2026-12-01")["raison"],
+                         "1 réserve à lever, en retard (échéance le 30/11/2026)")
+        self.assertEqual(self.etat("CTR-0006", "2026-11-30")["reservesEnRetard"], 0)    # le jour même : à lever
+        # Plusieurs réserves sans retard : la première échéance
+        self.assertEqual(self.etat("CTR-0012", "2025-11-20")["raison"],
+                         "2 réserves à lever, première échéance le 19/12/2025")
+        # Phrase de l'alerte de la fiche (Controles.interne.texteReserves) : aussi pour un contrôle en retard
+        self.assertEqual(self.js("""(jour) => Controles.interne.texteReserves(
+            Controles.etat(Donnees.trouver('controles_reglementaires', 'CTR-0001'), jour))""", AUJOURDHUI),
+                         "1 réserve à lever, en retard (échéance le 31/10/2025)")
+        self.assertEqual(self.js("""(jour) => Controles.interne.texteReserves(
+            Controles.etat(Donnees.trouver('controles_reglementaires', 'CTR-0003'), jour))""", AUJOURDHUI), "")
+
+    def test_libelle_du_statut_dit_le_nombre_de_reserves(self):
+        libelle = """([statut, id, jour]) => Controles.libelleStatut(statut,
+            id ? Controles.etat(Donnees.trouver('controles_reglementaires', id), jour) : undefined)"""
+        self.assertEqual(self.js(libelle, ["réserves à lever", "CTR-0012", AUJOURDHUI]), "réserves à lever (2)")
+        self.assertEqual(self.js(libelle, ["réserves à lever", "CTR-0006", AUJOURDHUI]), "réserves à lever (1)")
+        self.assertEqual(self.js(libelle, ["réserves à lever", "", AUJOURDHUI]), "réserves à lever")      # sans état
+        self.assertEqual(self.js(libelle, ["à planifier", "CTR-0012", AUJOURDHUI]), "à planifier")
+        self.assertEqual(self.js(libelle, ["en retard", "", AUJOURDHUI]), "en retard")
+        self.assertEqual(self.js(libelle, ["observations à lever", "", AUJOURDHUI]), "observations à lever")   # inconnu
 
     def test_date_impossible_traitee_comme_inconnue(self):
         etat = self.js("""(jour) => Controles.etat({ equipement_id: 'EQ-0001', prochaine_date: '2026-13-05',
@@ -354,12 +418,45 @@ class TestDemo(CasRegles):
         self.charger(self.tables)
 
     def test_roles_des_controles_donnent_leur_statut(self):
-        for role, statut in (("controle_en_retard", "en retard"), ("controle_a_planifier", "à planifier"),
-                             ("controle_observations", "observations à lever"), ("controle_a_jour", "à jour")):
+        # 2.2 (T417, T412) : RA-01 (controle_observations) a sa réserve en retard ; AE-01 (controle_a_planifier,
+        # aussi controle_reserves) a une réserve ouverte à échéance à venir : « réserves à lever » passe avant
+        # « à planifier », qui reste en statut secondaire.
+        for role, statut, secondaires, reserves in (
+                ("controle_en_retard", "en retard", [], (0, 0)),
+                ("controle_a_planifier", "réserves à lever", ["à planifier"], (1, 0)),
+                ("controle_observations", "réserves à lever", [], (1, 1)),
+                ("controle_reserves", "réserves à lever", ["à planifier"], (1, 0)),
+                ("controle_a_jour", "à jour", [], (0, 0))):
             with self.subTest(role=role):
                 etat = self.js("([id, jour]) => Controles.etat(Donnees.trouver('controles_reglementaires', id), jour)",
                                [self.scenarios[role], self.reference])
-                self.assertEqual(etat["statut"], statut)
+                self.assertEqual((etat["statut"], etat["secondaires"]), (statut, secondaires))
+                self.assertEqual((etat["reservesALever"], etat["reservesEnRetard"]), reserves)
+
+    def test_statuts_de_tous_les_controles_egaux_au_calcul_python(self):
+        aujourdhui = datetime.date.fromisoformat(self.reference)
+        ouvertes = {}
+        for reserve in lire_demo("reserves_controle"):
+            if brut(reserve["levee"]) == "1":
+                continue
+            echeance = jour(reserve["echeance_levee"]) or (
+                jour(reserve["date_controle"]) + datetime.timedelta(days=30) if jour(reserve["date_controle"]) else None)
+            ouvertes.setdefault(reserve["controle_id"], []).append(echeance)
+        self.assertTrue(ouvertes, "la démo doit avoir des réserves ouvertes")
+        for controle in lire_demo("controles_reglementaires"):
+            prochaine = jour(controle["prochaine_date"]) or ajouter_mois(jour(controle["derniere_date"]),
+                                                                         int(nombre(controle["periodicite_mois"])))
+            echeances = ouvertes.get(controle["id"], [])
+            vrais = [statut for statut, vrai in (
+                ("en retard", prochaine < aujourdhui),
+                ("réserves à lever", bool(echeances)),
+                ("à planifier", 0 <= (prochaine - aujourdhui).days <= 30)) if vrai] or ["à jour"]
+            en_retard = sum(1 for echeance in echeances if echeance and echeance < aujourdhui)
+            with self.subTest(controle=controle["id"]):
+                etat = self.js("([id, jour]) => Controles.etat(Donnees.trouver('controles_reglementaires', id), jour)",
+                               [controle["id"], self.reference])
+                self.assertEqual([etat["statut"]] + etat["secondaires"], vrais)
+                self.assertEqual((etat["reservesALever"], etat["reservesEnRetard"]), (len(echeances), en_retard))
 
     def test_sous_30_jours_egal_au_calcul_python(self):
         aujourdhui = datetime.date.fromisoformat(self.reference)

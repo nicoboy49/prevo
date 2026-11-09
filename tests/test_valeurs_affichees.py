@@ -11,7 +11,7 @@ Dans Chromium, application de démonstration en file:// (profil responsable), la
       brute), type d'OT traduit ; la donnée reste « En cours » ;
     - liste des OT : colonne Statut (badges) et colonne Type au libellé de la langue d'essai, ligne par ligne ;
     - historique d'un contrôle : marqueurs du journal (« modification : … — contrôle réalisé le … ») traduits, action
-      inconnue telle quelle ; statut calculé du contrôle traduit ;
+      inconnue telle quelle ; statut calculé du contrôle traduit (« réserves à lever (1) », nombre compris) ;
     - retour au français : texte de chaque écran identique à celui d'avant le changement de langue.
 
 Lancer depuis la racine du projet :
@@ -23,8 +23,8 @@ from commun import CasNavigateur, attendre_pret, scenarios_demo, url_fichier
 
 SCENARIOS = scenarios_demo()
 OT_EN_COURS = SCENARIOS["ot_statut_en_cours"]       # correctif « En cours », P2
-CONTROLE = "CTR-0001"                                # contrôle du jeu de démo
-CLES_STATUT_CONTROLE = {"en retard": "en_retard", "observations à lever": "observations_a_lever",
+CONTROLE = SCENARIOS["controle_observations"]       # RA-01 : une réserve à lever (badge « réserves à lever (1) »)
+CLES_STATUT_CONTROLE = {"en retard": "en_retard", "réserves à lever": "reserves_a_lever",
                         "à planifier": "a_planifier", "à jour": "a_jour"}
 
 STATUTS_OT = ["Créé", "Préparé", "Planifié", "En cours", "En attente", "Clôturé techniquement",
@@ -48,7 +48,8 @@ TEXTES_ESSAI = dict(
        ("controles.journal.realisation", "{realise} | {rapport} | {observations}"),
        ("controles.journal.sans_rapport", "xx-sans-rapport"),
        ("controles.journal.sans_observation", "xx-sans-observation")]
-    + [("controles.statut_calcule." + cle, "xx-" + cle) for cle in CLES_STATUT_CONTROLE.values()])
+    + [("controles.statut_calcule." + cle, "xx-" + cle) for cle in CLES_STATUT_CONTROLE.values()]
+    + [("controles.statut_calcule.reserves_a_lever_n", "xx-reserves_a_lever_n ({n})")])     # 2.2 : nombre de réserves
 
 # Langue d'essai déclarée et choisie dans la page ; l'écran courant est réaffiché.
 CHOISIR_ESSAI_JS = """async (textes) => {
@@ -159,14 +160,16 @@ class TestValeursAffichees(CasNavigateur):
         francais = self.page.eval_on_selector_all(actions, "(liste) => liste.map((e) => e.textContent)")
         self.assertEqual(sorted(francais), sorted([ACTION_REALISATION, ACTION_INCONNUE]))
         statut = ".controles-statuts .badge.statut"
-        calcule = self.page.evaluate("Controles.etat(Donnees.trouver('controles_reglementaires', %r)).statut" % CONTROLE)
-        self.assertEqual(self.texte(statut), calcule)
+        etat = self.page.evaluate("Controles.etat(Donnees.trouver('controles_reglementaires', %r))" % CONTROLE)
+        self.assertEqual((etat["statut"], etat["reservesALever"]), ("réserves à lever", 1))     # rôle de la démo (T417)
+        francais = "réserves à lever (1)"                     # libellé avec le nombre de réserves ouvertes (T412)
+        self.assertEqual(self.texte(statut), francais)
         classe = self.page.get_attribute(statut, "class")
         page_francaise = self.texte(".controles-historique")
 
         self.choisir_essai()
         self.page.wait_for_function("document.querySelector(%r).textContent === %r"
-                                    % (statut, "xx-" + CLES_STATUT_CONTROLE[calcule]))
+                                    % (statut, "xx-reserves_a_lever_n (1)"))
         self.assertEqual(self.page.get_attribute(statut, "class"), classe)          # ton choisi sur le statut calculé
         essai = self.page.eval_on_selector_all(actions, "(liste) => liste.map((e) => e.textContent)")
         self.assertEqual(sorted(essai), sorted([
@@ -177,7 +180,7 @@ class TestValeursAffichees(CasNavigateur):
         self.assertIn(ACTION_REALISATION, self.page.evaluate("Donnees.lignes('journal').map((l) => l.action)"))
 
         self.revenir_au_francais()
-        self.page.wait_for_function("document.querySelector(%r).textContent === %r" % (statut, calcule))
+        self.page.wait_for_function("document.querySelector(%r).textContent === %r" % (statut, francais))
         self.assertEqual(self.texte(".controles-historique"), page_francaise)
 
 

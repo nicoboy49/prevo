@@ -487,13 +487,21 @@
       "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
     },
     {
-      "texte": "observations à lever",
+      "texte": "réserves à lever",
       "classe": "D155",
       "fichiers": [
         "js/modules/controles-regles.js",
         "js/modules/controles-ecrans.js"
       ],
-      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+      "raison": "Statut calculé du contrôle (RG9, 2.2 : au moins une réserve ouverte, CS170), valeur comparée dans le code et des adresses (?statut=), jamais affichée telle quelle (libellé controles.statut_calcule.* dans fr.js) ; remplace « observations à lever » (T412)."
+    },
+    {
+      "texte": "observations à lever",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Ancien statut calculé du contrôle (avant la 2.2), lu seulement dans les liens enregistrés (?statut=observations à lever) et traité comme « réserves à lever » ; jamais affiché (T412)."
     },
     {
       "texte": "à planifier",

@@ -1,8 +1,9 @@
 'use strict';
 // Controles (3/3) — écran E10 (ARCHITECTURE.md §15.7, §15.2) : liste #/controles (?statut=,
-// ?filtre=30j, ?equipement=, ?recherche=, ?inactifs=1), création #/controles/nouveau (?equipement=),
-// fiche #/controles/<id> (statut RG9, dernier contrôle et rapport, OT réglementaires de
-// l'équipement, historique au journal) ; puis l'enregistrement des écrans auprès d'App.
+// ?filtre=30j, ?filtre=reserves-en-retard, ?equipement=, ?recherche=, ?inactifs=1 ; l'ancien
+// ?statut=observations à lever est lu comme « réserves à lever »), création #/controles/nouveau
+// (?equipement=), fiche #/controles/<id> (statut RG9, réserves à lever, dernier contrôle et rapport,
+// OT réglementaires de l'équipement, historique au journal) ; puis l'enregistrement des écrans auprès d'App.
 // Profils : le responsable a tous les boutons ; le technicien consulte (aucun bouton d'écriture
 // n'est rendu) ; le demandeur n'a pas accès (App le renvoie à l'accueil).
 // Le module ne crée jamais d'OT : « Créer un OT » ouvre #/ot/nouveau pré-rempli (type
@@ -12,18 +13,25 @@
 Object.assign(Controles, (() => {
 
   // Règles et outils de controles-regles.js et controles-ecritures.js.
-  const { texte, dateIso, observationsALever, equipementSuivi, verifierRealisation, verifierLevee,
+  const { texte, dateIso, equipementSuivi, texteReserves, verifierRealisation,
     verifierFichierRapport, EXTENSIONS_RAPPORT } = Controles.interne;
   const { STATUTS, etat, sous30Jours, libelleStatut } = Controles;
+  const [EN_RETARD, RESERVES_A_LEVER, A_PLANIFIER, A_JOUR] = STATUTS;
 
+  // Filtres de la liste qui ne sont pas un statut (?filtre=) : sous 30 jours (retards compris, comme l'accueil) ;
+  // contrôles qui ont au moins une réserve en retard (accueil et rapport, 2.2).
   const FILTRE_30J = '30j';
+  const FILTRE_RESERVES_EN_RETARD = 'reserves-en-retard';
+  const FILTRES = [FILTRE_30J, FILTRE_RESERVES_EN_RETARD];
+  // Statut d'avant la 2.2 dans les liens enregistrés (?statut=) : lu comme « réserves à lever ».
+  const STATUT_ANCIEN_RESERVES = 'observations à lever';
   // Instruments de la liste : statut, libellé, couleur du trait (le libellé dit toujours le statut).
   function instruments() {
     return [
-      { statut: 'en retard', libelle: I18n.t('controles.instruments.retard'), ton: 'rouge' },
-      { statut: 'observations à lever', libelle: I18n.t('controles.instruments.observations_lever'), ton: 'ambre' },
-      { statut: 'à planifier', libelle: I18n.t('controles.instruments.planifier_30_jours'), ton: 'cyan' },
-      { statut: 'à jour', libelle: I18n.t('controles.instruments.jour'), ton: 'vert' },
+      { statut: EN_RETARD, libelle: I18n.t('controles.instruments.retard'), ton: 'rouge' },
+      { statut: RESERVES_A_LEVER, libelle: I18n.t('controles.instruments.reserves_lever'), ton: 'ambre' },
+      { statut: A_PLANIFIER, libelle: I18n.t('controles.instruments.planifier_30_jours'), ton: 'cyan' },
+      { statut: A_JOUR, libelle: I18n.t('controles.instruments.jour'), ton: 'vert' },
     ];
   }
   const LIMITE_HISTORIQUE = 30;
@@ -53,16 +61,19 @@ Object.assign(Controles, (() => {
     return UI.html`<a href="#/equipement/${encodeURIComponent(controle.equipement_id)}">${libelleEquipement(controle)}</a>`;
   }
 
-  /** Statut principal puis statuts secondaires (badges : texte toujours affiché, la couleur aide). */
+  /** Statut principal puis statuts secondaires (badges : texte toujours affiché, la couleur aide ; « réserves à
+   *  lever (2) » dit le nombre de réserves ouvertes). */
   function badgesStatut(controle, etatCalcule) {
-    return UI.html`<span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etatCalcule.statut, '', libelleStatut(etatCalcule.statut))}${etatCalcule.secondaires.map((statut) => UI.html` <span class="controles-secondaire" title="${I18n.t('controles.badges_statut.aussi_statut', { statut: libelleStatut(statut) })}">${UI.badgeStatut(statut, '', libelleStatut(statut))}</span>`)}</span>`;
+    const libelle = (statut) => libelleStatut(statut, etatCalcule);
+    return UI.html`<span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etatCalcule.statut, '', libelle(etatCalcule.statut))}${etatCalcule.secondaires.map((statut) => UI.html` <span class="controles-secondaire" title="${I18n.t('controles.badges_statut.aussi_statut', { statut: libelle(statut) })}">${UI.badgeStatut(statut, '', libelle(statut))}</span>`)}</span>`;
   }
 
   /** Lien « Créer un OT » : formulaire de l'OT pré-rempli (rien n'est créé sans validation). Titre
-   *  (D40) : « Levée des observations — <nature> » s'il en reste à lever, sinon « Accompagnement du
-   *  contrôle — <nature> » ; l'équipement est déjà dans son propre champ. Titre pré-rempli : langue de l'installation (D156). */
+   *  (D40) : « Accompagnement du contrôle — <nature> » ; l'équipement est déjà dans son propre champ (2.2 : le
+   *  titre « Levée des observations » sort, l'OT d'une réserve se crée depuis la réserve). Titre pré-rempli : langue
+   *  de l'installation (D156). */
   function adresseNouvelOt(controle) {
-    const titre = (observationsALever(controle) ? I18n.donnees('controles.adresse_nouvel_ot.levee_observations') + ' ' : I18n.donnees('controles.adresse_nouvel_ot.accompagnement_controle') + ' ')
+    const titre = I18n.donnees('controles.adresse_nouvel_ot.accompagnement_controle') + ' '
       + (texte(controle.nature) || I18n.donnees('controles.adresse_nouvel_ot.controle_reglementaire'));
     return '#/ot/nouveau?equipement=' + encodeURIComponent(controle.equipement_id)
       + '&type=' + encodeURIComponent('réglementaire') + '&titre=' + encodeURIComponent(titre);
@@ -97,15 +108,16 @@ Object.assign(Controles, (() => {
 
   /** Filtres lus dans l'adresse (le formulaire réécrit l'adresse : actualiser garde le filtre). */
   function filtresDepuis(requete) {
-    const statut = requete.get('filtre') === FILTRE_30J ? FILTRE_30J
-      : (STATUTS.includes(requete.get('statut')) ? requete.get('statut') : '');
+    const demande = requete.get('statut') === STATUT_ANCIEN_RESERVES ? RESERVES_A_LEVER : requete.get('statut');
+    const statut = FILTRES.includes(requete.get('filtre')) ? requete.get('filtre')
+      : (STATUTS.includes(demande) ? demande : '');
     return { statut, recherche: requete.get('recherche') || '', inactifs: requete.get('inactifs') === '1',
       equipement: requete.get('equipement') || '' };
   }
 
   function adresseDesFiltres(filtres) {
     const parametres = new URLSearchParams();
-    if (filtres.statut === FILTRE_30J) parametres.set('filtre', FILTRE_30J);
+    if (FILTRES.includes(filtres.statut)) parametres.set('filtre', filtres.statut);
     else if (filtres.statut) parametres.set('statut', filtres.statut);
     if (filtres.recherche) parametres.set('recherche', filtres.recherche);
     if (filtres.inactifs) parametres.set('inactifs', '1');
@@ -140,7 +152,8 @@ Object.assign(Controles, (() => {
   function garder(ligne, filtres, ids30j) {
     if (!dansLaBase(ligne, filtres)) return false;
     if (filtres.statut === FILTRE_30J && !ids30j.has(ligne.controle.id)) return false;
-    if (filtres.statut && filtres.statut !== FILTRE_30J && !aLeStatut(ligne, filtres.statut)) return false;
+    if (filtres.statut === FILTRE_RESERVES_EN_RETARD && !ligne.etat.reservesEnRetard) return false;
+    if (filtres.statut && !FILTRES.includes(filtres.statut) && !aLeStatut(ligne, filtres.statut)) return false;
     const recherche = normaliser(filtres.recherche);
     if (!recherche) return true;
     const controle = ligne.controle;
@@ -157,9 +170,14 @@ Object.assign(Controles, (() => {
         <div class="comp">${filtres.statut === instrument.statut ? I18n.t('controles.instruments.filtre_applique') : I18n.t('controles.instruments.voir_liste')}</div></a>`)}</div>`;
   }
 
+  /** Choix du filtre : tous, sous 30 jours, puis chaque statut ; « Réserves en retard » juste après « Réserves à lever ». */
   function optionsStatut() {
-    return [{ valeur: '', libelle: I18n.t('controles.options_statut.tous_statuts') }, { valeur: FILTRE_30J, libelle: I18n.t('controles.options_statut.sous_30_jours_retards') }]
-      .concat(STATUTS.map((statut) => ({ valeur: statut, libelle: libelleStatut(statut).charAt(0).toUpperCase() + libelleStatut(statut).slice(1) })));
+    const options = [{ valeur: '', libelle: I18n.t('controles.options_statut.tous_statuts') }, { valeur: FILTRE_30J, libelle: I18n.t('controles.options_statut.sous_30_jours_retards') }];
+    STATUTS.forEach((statut) => {
+      options.push({ valeur: statut, libelle: libelleStatut(statut).charAt(0).toUpperCase() + libelleStatut(statut).slice(1) });
+      if (statut === RESERVES_A_LEVER) options.push({ valeur: FILTRE_RESERVES_EN_RETARD, libelle: I18n.t('controles.options_statut.reserves_en_retard') });
+    });
+    return options;
   }
 
   function colonnesListe() {
@@ -324,7 +342,7 @@ Object.assign(Controles, (() => {
   }
 
   // ===========================================================================================
-  // 11. Fiche #/controles/<id> : contrôle réalisé, levée des observations, OT, historique
+  // 11. Fiche #/controles/<id> : contrôle réalisé, réserves à lever, OT, historique
   // ===========================================================================================
 
   function champFichierRapport() {
@@ -361,20 +379,6 @@ Object.assign(Controles, (() => {
     if (fait) await apresEcriture(I18n.t('controles.ouvrir_realisation.controle_realise_enregistre'));
   }
 
-  async function ouvrirLevee(controle) {
-    const jour = Donnees.aujourdhui();
-    const fait = await UI.fenetreAction({ classe: 'controles-fenetre',
-      titre: I18n.t('controles.ouvrir_levee.lever_observations'),
-      introduction: UI.html`<div class="encadre attention">${I18n.html('controles.ouvrir_levee.observations_controle', { derniere_date: UI.dateFr(controle.derniere_date), observations: controle.observations })}</div>`,
-      champs: [UI.champ({ nom: 'date', type: 'date', libelle: I18n.t('controles.ouvrir_levee.levees') }, jour, { obligatoire: true, attributs: { max: jour } }),
-        UI.champ({ nom: 'commentaire', type: 'texte_long', libelle: I18n.t('controles.ouvrir_levee.ete_fait') }, '', { obligatoire: true, placeholder: I18n.t('controles.ouvrir_levee.ex_purgeur_remplace_12') })],
-      libelleValider: I18n.t('controles.ouvrir_levee.lever_observations'),
-      verifier: (valeurs) => verifierLevee(Donnees.trouver('controles_reglementaires', controle.id) || controle, valeurs),
-      action: (valeurs) => Controles.leverObservations(controle.id, valeurs),
-    });
-    if (fait) await apresEcriture(I18n.t('controles.ouvrir_levee.observations_levees'));
-  }
-
   async function apresEcriture(message) {
     App.marquerSaisie(false);
     UI.toast(message, 'succes');
@@ -398,11 +402,9 @@ Object.assign(Controles, (() => {
         ? UI.html`<a id="controle-rapport" href="${adresseRapport}" target="_blank" rel="noopener">${UI.icone('document')} ${controle.rapport}</a>`
         : UI.html`${I18n.html('controles.carte_dernier_controle.fichier_introuvable', { rapport: controle.rapport })}`;
     }
+    // Texte des observations tel qu'enregistré (2.2 : ce qui reste à lever est dit par les réserves, CS170).
     let observations = UI.html`<span class="muted">${I18n.t('controles.carte_dernier_controle.aucune_observation')}</span>`;
-    if (texte(controle.observations)) {
-      observations = UI.html`<span class="controles-observations">${controle.observations}</span>
-        ${observationsALever(controle) ? UI.badgeStatut(I18n.t('controles.carte_dernier_controle.lever'), 'attention') : UI.badgeStatut(I18n.t('controles.carte_dernier_controle.levees'), 'ok')}`;
-    }
+    if (texte(controle.observations)) observations = UI.html`<span class="controles-observations">${controle.observations}</span>`;
     return UI.html`<article class="carte"><h2>${I18n.t('controles.carte_dernier_controle.dernier_controle')}</h2><dl class="valeurs">
       <dt>${I18n.t('commun.champ.date')}</dt><dd>${controle.derniere_date ? UI.dateFr(controle.derniere_date) : I18n.t('controles.carte_dernier_controle.non_renseignee')}</dd>
       <dt>${I18n.t('controles.colonnes_liste.organisme')}</dt><dd>${controle.organisme}</dd>
@@ -501,6 +503,7 @@ Object.assign(Controles, (() => {
     const controle = Donnees.trouver('controles_reglementaires', id);
     if (!controle) { afficherIntrouvable(conteneur, id); return; }
     const etatCalcule = etat(controle);
+    const reserves = texteReserves(etatCalcule);
     const responsable = App.estResponsable();
     App.definirTitre(repere(controle) ? I18n.t('controles.fiche.repere_controle', { repere: repere(controle) }) : I18n.t('controles.colonnes_liste.controle'));
     UI.remplir(conteneur, UI.html`
@@ -513,12 +516,11 @@ Object.assign(Controles, (() => {
           </div>
           ${responsable ? UI.html`<div class="actions">
             <button type="button" class="btn btn-primaire" id="controle-realise">${UI.icone('valider')}${I18n.t('controles.ouvrir_realisation.enregistrer_controle_realise')}</button>
-            ${observationsALever(controle) ? UI.html`<button type="button" class="btn btn-secondaire" id="controle-lever">${UI.icone('controles')}${I18n.t('controles.ouvrir_levee.lever_observations')}</button>` : ''}
             <a class="btn btn-secondaire" id="controle-creer-ot" href="${adresseNouvelOt(controle)}">${UI.icone('ordres')}${I18n.t('controles.fiche.creer_ot')}</a>
           </div>` : ''}
         </div>
-        ${observationsALever(controle) ? UI.html`<div class="alertes"><div class="alerte attention" role="status">${UI.icone('alerte')}
-          <div class="alerte-texte">${I18n.html('controles.fiche.observations_lever', { observations: controle.observations })}</div></div></div>` : ''}
+        ${reserves ? UI.html`<div class="alertes"><div class="alerte attention controles-alerte-reserves" role="status">${UI.icone('alerte')}
+          <div class="alerte-texte">${I18n.t('controles.fiche.alerte_reserves', { reserves })}</div></div></div>` : ''}
         <div class="grille controles-grille">
           <div class="c7 controles-zone-controle"></div>
           <div class="c5">${carteDernierControle(controle, adresseRapport)}${carteOrdres(controle)}</div>
@@ -531,8 +533,6 @@ Object.assign(Controles, (() => {
       carte.appendChild(formulaireControle(controle));
       zone.appendChild(carte);
       UI.$('#controle-realise', conteneur).addEventListener('click', () => ouvrirRealisation(controle));
-      const lever = UI.$('#controle-lever', conteneur);
-      if (lever) lever.addEventListener('click', () => ouvrirLevee(controle));
     } else {
       UI.remplir(zone, carteDescription(controle, etatCalcule.prochaine));
     }
@@ -548,7 +548,7 @@ Object.assign(Controles, (() => {
       id: 'controles', route: /^#\/controles$/, get titre() { return I18n.t('controles.liste.controles_reglementaires'); },
       menu: { get libelle() { return I18n.t('controles.introuvable.controles'); }, icone: 'controles', ordre: 37 },
       profils: intervenants,
-      tables: ['controles_reglementaires', 'equipements'],
+      tables: ['controles_reglementaires', 'equipements', 'reserves_controle'],
       afficher: afficherListe,
     });
     // Les routes les plus précises d'abord : « nouveau » ne doit pas être pris pour un identifiant.
@@ -561,7 +561,7 @@ Object.assign(Controles, (() => {
     App.ecran({
       id: 'controles-fiche', route: /^#\/controles\/(?!nouveau$)(?<id>[^/?]+)$/, get titre() { return I18n.t('controles.titre.controle_reglementaire'); }, parent: 'controles',
       profils: intervenants,
-      tables: ['controles_reglementaires', 'equipements', 'ordres_travail'],
+      tables: ['controles_reglementaires', 'equipements', 'ordres_travail', 'reserves_controle'],
       afficher: afficherFiche,
     });
   });

@@ -198,7 +198,7 @@ Object.assign(Parc, (() => {
     const lignes = controles.map(({ controle, etat }) => UI.html`<li>
         <div class="parc-gamme-tete">
           <a href="#/controles/${encodeURIComponent(controle.id)}">${controle.nature || controle.id}</a>
-          <span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etat.statut, '', Controles.libelleStatut(etat.statut))}${etat.secondaires.map((statut) => UI.html` ${UI.badgeStatut(statut, '', Controles.libelleStatut(statut))}`)}</span>
+          <span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etat.statut, '', Controles.libelleStatut(etat.statut, etat))}${etat.secondaires.map((statut) => UI.html` ${UI.badgeStatut(statut, '', Controles.libelleStatut(statut, etat))}`)}</span>
         </div>
         <div class="parc-gamme-detail"><span class="parc-gamme-raison">${etat.raison}</span>${controle.organisme ? UI.html`<span>${controle.organisme}</span>` : ''}</div>
       </li>`);

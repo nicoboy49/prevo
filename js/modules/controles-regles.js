@@ -3,17 +3,20 @@
 // (VGP des appareils de levage, installations électriques, équipements sous pression…), suivies à
 // part du préventif (ARCHITECTURE.md §15.7 ; brief §6 « controles_reglementaires », §7 RG9, §9 E10).
 //
-// Le module est découpé en trois fichiers, chargés dans cet ordre par index.html (§15.1) :
+// Le module est découpé en fichiers chargés dans cet ordre par index.html (§15.1) :
 //   controles-regles.js      CE FICHIER, qui crée l'objet Controles : règles PURES
 //                              1. Constantes et petits outils (textes, dates ISO)
 //                              2. Prochaine date d'un contrôle (ajouterMois, prochaineDate)
-//                              3. Statut calculé RG9 (etat) et contrôles sous 30 jours
-//   controles-ecritures.js   création, modification, contrôle réalisé, levée des observations
+//                              3. Statut calculé RG9 (etat, réserves à lever comprises) et contrôles sous 30 jours
+//   controles-reserves.js    réserves des contrôles (2.2) : règles pures puis écritures
+//   controles-catalogue.js   catalogue des contrôles (2.2)
+//   controles-ecritures.js   création, modification, contrôle réalisé
 //   controles-ecrans.js      écrans #/controles, #/controles/nouveau, #/controles/<id>
 //
 // Les fichiers suivants complètent l'objet : Object.assign(Controles, (() => { … })()). Une
 // fonction dont un autre fichier du module a besoin est rangée dans Controles.interne (usage
-// interne au module : ce n'est pas une API).
+// interne au module : ce n'est pas une API) ; une fonction d'un fichier chargé plus tard est
+// cherchée au moment de l'appel (Controles.reservesOuvertes dans etat).
 //
 // Les fonctions de ce fichier sont PURES : elles lisent Donnees, n'écrivent jamais. Les dates
 // sont des chaînes ISO 'AAAA-MM-JJ', calculées en UTC ; la date du jour est passée en argument
@@ -26,11 +29,16 @@ const Controles = (() => {
   // ===========================================================================================
 
   /** Statuts calculés (RG9), dans l'ordre de priorité : le premier vrai est le statut affiché. */
-  const STATUTS = Object.freeze(['en retard', 'observations à lever', 'à planifier', 'à jour']);
+  const STATUTS = Object.freeze(['en retard', 'réserves à lever', 'à planifier', 'à jour']);
+  const [EN_RETARD, RESERVES_A_LEVER, A_PLANIFIER, A_JOUR] = STATUTS;
   // Libellé affiché d'un statut calculé (controles.statut_calcule.*) : le statut reste la valeur des filtres et adresses.
-  const CLES_STATUT = Object.freeze({ 'en retard': 'en_retard', 'observations à lever': 'observations_a_lever',
+  const CLES_STATUT = Object.freeze({ 'en retard': 'en_retard', 'réserves à lever': 'reserves_a_lever',
     'à planifier': 'a_planifier', 'à jour': 'a_jour' });
-  function libelleStatut(statut) {
+  /** Libellé affiché d'un statut calculé ; avec l'état du contrôle (etat), « réserves à lever » dit le nombre de
+   *  réserves ouvertes : « réserves à lever (2) ». Statut inconnu : tel quel. */
+  function libelleStatut(statut, etatCalcule) {
+    const n = etatCalcule ? etatCalcule.reservesALever : 0;
+    if (statut === RESERVES_A_LEVER && n > 0) return I18n.t('controles.statut_calcule.reserves_a_lever_n', { n });
     return CLES_STATUT[statut] ? I18n.t('controles.statut_calcule.' + CLES_STATUT[statut]) : statut;
   }
 
@@ -128,17 +136,47 @@ const Controles = (() => {
   // 3. Statut calculé (RG9) et contrôles sous 30 jours
   // ===========================================================================================
 
-  /** Des observations ont été notées et ne sont pas encore levées. */
-  function observationsALever(controle) {
-    return texte(controle.observations) !== '' && texte(controle.observations_levees) !== '1';
+  /**
+   * Réserves ouvertes d'un contrôle à une date (CS170) : { aLever, enRetard, echeance } — nombre de réserves non
+   * levées, nombre d'entre elles en retard (échéance de levée passée, Controles.etatReserve) et la plus ancienne de
+   * leurs échéances connues ('' si aucune). Les colonnes anciennes observations et observations_levees ne comptent
+   * plus (reprises en réserves par la migration D183). Les règles des réserves sont dans controles-reserves.js,
+   * chargé après ce fichier : elles sont cherchées au moment de l'appel.
+   */
+  function bilanReserves(controle, jour) {
+    const ouvertes = Controles.reservesOuvertes(controle && controle.id);
+    let enRetard = 0;
+    let echeance = '';
+    ouvertes.forEach((reserve) => {
+      const etatReserve = Controles.etatReserve(reserve, jour);
+      if (etatReserve.statut === EN_RETARD) enRetard += 1;          // même valeur pour une réserve (STATUTS_RESERVE)
+      if (etatReserve.echeance && (!echeance || etatReserve.echeance < echeance)) echeance = etatReserve.echeance;
+    });
+    return { aLever: ouvertes.length, enRetard, echeance };
   }
 
-  function raisonDuStatut(statut, prochaine, joursRestants) {
-    if (statut === 'en retard') {
+  /**
+   * Phrase des réserves ouvertes d'un état (etat) : « 2 réserves à lever, dont 1 en retard », « 1 réserve à lever,
+   * en retard (échéance le 03/05/2025) », « 1 réserve à lever, échéance le 15/12/2026 », « 1 réserve à lever »
+   * (échéance inconnue) ; '' sans réserve ouverte. Raison du statut « réserves à lever », alerte de la fiche.
+   */
+  function texteReserves(etatCalcule) {
+    const n = etatCalcule ? etatCalcule.reservesALever : 0;
+    if (!n) return '';
+    const enRetard = etatCalcule.reservesEnRetard;
+    const echeance = etatCalcule.echeanceReserves ? UI.dateFr(etatCalcule.echeanceReserves) : '';
+    if (enRetard === n) return I18n.t('controles.raison_du_statut.reserves_toutes_en_retard', { n, echeance });
+    if (enRetard) return I18n.t('controles.raison_du_statut.reserves_dont_en_retard', { n, enRetard });
+    return echeance ? I18n.t('controles.raison_du_statut.reserves_echeance', { n, echeance })
+      : I18n.t('controles.raison_du_statut.reserves_sans_echeance', { n });
+  }
+
+  function raisonDuStatut(statut, prochaine, joursRestants, etatCalcule) {
+    if (statut === EN_RETARD) {
       return I18n.t('controles.raison_du_statut.retard_jours_prevu', { n: -joursRestants, prochaine: UI.dateFr(prochaine) });
     }
-    if (statut === 'observations à lever') return I18n.t('controles.raison_du_statut.observations_dernier_controle_non');
-    if (statut === 'à planifier') {
+    if (statut === RESERVES_A_LEVER) return texteReserves(etatCalcule);
+    if (statut === A_PLANIFIER) {
       if (!prochaine) return I18n.t('controles.raison_du_statut.date_inconnue_renseignez_derniere');
       return joursRestants === 0 ? I18n.t('controles.raison_du_statut.prevu_aujourd_hui')
         : I18n.t('controles.raison_du_statut.n_jours_prochaine', { n: joursRestants, prochaine: UI.dateFr(prochaine) });
@@ -147,22 +185,28 @@ const Controles = (() => {
   }
 
   /**
-   * État d'un contrôle à une date : { statut, secondaires, prochaine, joursRestants, raison }.
-   * statut = le premier vrai de STATUTS : « en retard » (prochaine date dépassée), « observations
-   * à lever », « à planifier » (prochaine date dans les 30 jours, ou inconnue), « à jour » ;
-   * secondaires = les autres états vrais (ex. « en retard » avec des observations à lever).
+   * État d'un contrôle à une date : { statut, secondaires, prochaine, joursRestants, raison, reservesALever,
+   * reservesEnRetard, echeanceReserves }. statut = le premier vrai de STATUTS : « en retard » (prochaine date
+   * dépassée), « réserves à lever » (au moins une réserve du contrôle non levée, bilanReserves), « à planifier »
+   * (prochaine date dans les 30 jours, ou inconnue), « à jour » ; secondaires = les autres états vrais (ex.
+   * « en retard » avec des réserves à lever). reservesALever (n), reservesEnRetard (k, parmi elles) et
+   * echeanceReserves (plus ancienne échéance de levée connue, '') : bilanReserves.
    */
   function etat(controle, aujourdhui) {
     const jour = dateDuJour(aujourdhui);
     const prochaine = prochaineDate(controle);
     const joursRestants = prochaine ? joursEntre(jour, prochaine) : null;
+    const reserves = bilanReserves(controle, jour);
     const vrais = [];
-    if (prochaine && joursRestants < 0) vrais.push('en retard');
-    if (observationsALever(controle)) vrais.push('observations à lever');
-    if (!prochaine || (joursRestants >= 0 && joursRestants <= HORIZON_A_PLANIFIER_JOURS)) vrais.push('à planifier');
-    if (!vrais.length) vrais.push('à jour');
+    if (prochaine && joursRestants < 0) vrais.push(EN_RETARD);
+    if (reserves.aLever) vrais.push(RESERVES_A_LEVER);
+    if (!prochaine || (joursRestants >= 0 && joursRestants <= HORIZON_A_PLANIFIER_JOURS)) vrais.push(A_PLANIFIER);
+    if (!vrais.length) vrais.push(A_JOUR);
     const statut = vrais[0];
-    return { statut, secondaires: vrais.slice(1), prochaine, joursRestants, raison: raisonDuStatut(statut, prochaine, joursRestants) };
+    const resultat = { statut, secondaires: vrais.slice(1), prochaine, joursRestants,
+      reservesALever: reserves.aLever, reservesEnRetard: reserves.enRetard, echeanceReserves: reserves.echeance };
+    resultat.raison = raisonDuStatut(statut, prochaine, joursRestants, resultat);
+    return resultat;
   }
 
   /** L'équipement du contrôle existe, est actif et n'est pas au rebut. */
@@ -193,6 +237,6 @@ const Controles = (() => {
     // règles pures (ARCHITECTURE.md §15.7)
     ajouterMois, prochaineDate, etat, sous30Jours,
     // Usage interne au module (pas une API).
-    interne: { texte, dateIso, dateDuJour, joursEntre, periodicite, observationsALever, equipementSuivi },
+    interne: { texte, dateIso, dateDuJour, joursEntre, periodicite, equipementSuivi, texteReserves },
   };
 })();
