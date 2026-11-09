@@ -78,7 +78,8 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 (§22.11) ; la 2.2 (T410) insère `controles-reserves.js` et `controles-catalogue.js` juste après `controles-regles.js`,
 `controles-reserves-ecrans.js` juste après `controles-ecrans.js`, `equipe-habilitations.js` juste après
 `equipe-ecrans.js` et `ordres-habilitations.js` juste après `ordres-impression.js`, §15.1 ; le lot L4 (T450) insère
-les cinq fichiers `garanties-*.js` juste après `controles-reserves-ecrans.js`, §15.1), `js/app.js` (en dernier).
+les cinq fichiers `garanties-*.js` juste après `controles-reserves-ecrans.js`, puis (T454) `parametres-reglages.js`
+juste avant `parametres.js`, §15.1), `js/app.js` (en dernier).
 Langue active (T234, T295) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (le choix du poste, écrit par
 le sélecteur de langue, §24.10) puis « prevo.langue.installation » (la langue de l'installation, §24.11 ; la langue du
 compte viendra plus tard) ; la première des deux déclarée par `js/i18n/langues.js` (sinon le français) est la langue
@@ -1413,7 +1414,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   rapport-contenu.js  rapport-ecrans.js
   zip-donnees.js
   zip-tables.js  zip-flux.js  zip-lecture.js
-  parametres.js  parametres-codes.js  parametres-solo.js  parametres-sauvegardes.js  parametres-zip.js  parametres-acces.js  (puis import-*.js, §18.1, et wiki-*.js, §20 ; puis js/app.js)
+  parametres-reglages.js  parametres.js  parametres-codes.js  parametres-solo.js  parametres-sauvegardes.js  parametres-zip.js  parametres-acces.js  (puis import-*.js, §18.1, et wiki-*.js, §20 ; puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
   `indicateurs-regles.js`, qui aurait dépassé 700 lignes.
@@ -1434,6 +1435,10 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   `Object.assign(Garanties, …)`. Feuille `css/modules/garanties.css`, juste après `controles.css` ; domaine et
   section de textes « garanties », juste après « controles » (§24.3). Un autre module n'appelle `Garanties` que
   derrière `typeof Garanties !== 'undefined'`.
+  Lot L4 (T454) : `parametres-reglages.js` (objet `ParametresReglages`, `REGLAGES` : le tableau des réglages de
+  Paramètres, gelé, sorti de `parametres.js` arrivé à 698 lignes, D28) se charge juste avant `parametres.js`, qui le
+  lit au chargement (formulaire, carte Mode Solo, `Parametres.reglagesConnus` de l'import ZIP) ;
+  `outils/generer_fiche_csv.py` y relit les réglages de sa section 5. Rien ne change à l'écran.
   Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
   écran de connexion, §22.4) se charge après `acces-textes.js` (ses textes) et avant `accueil.js` ; feuille
   `css/modules/connexion.css`. Lot 7 (T168) : `installation-etapes.js` (objet `InstallationEtapes`, les formulaires des
@@ -1848,6 +1853,9 @@ le rapport de <mois> » (avec élision : « d'octobre », « d'août ») ; rien 
   modifiable ; code unique, libellé non vide et unique dans la famille) ;
   `Parametres.modifierLibelleCode(id, libelle)`. Ni désactivation ni suppression (la table n'a pas
   de champ `actif`).
+- 2.2, lot L4 (T454, D187) : réglage `alerte_echeances_jours` (section « Garanties et contrats », entier de 1 à 365,
+  défaut 60 ; absent de `parametres.csv` → 60), lu par `Garanties.delaiAlerte` ; les réglages sont déclarés dans
+  `parametres-reglages.js` (§15.1) et gardés par l'import ZIP quand le ZIP ne les a pas (T319).
 - Écart retenu (T46) : les réglages sont réunis dans une carte « Réglages » ;
   `Parametres.FAMILLES_CODES`, `codePropose(famille, lignes)` et `verifierCode(valeurs, lignes,
   idCourant)` sont exposés (contrôles affichés sous les champs avant d'écrire).

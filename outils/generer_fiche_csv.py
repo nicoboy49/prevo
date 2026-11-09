@@ -5,11 +5,11 @@ développement, déjà utilisé par les tests) ; la fiche est donc toujours fid�
 La section 4 (import depuis un tableur, lot 5) reprend Import.TYPES, relu en Python dans
 js/modules/import-regles.js (types, clés naturelles, colonnes reconnues et leurs autres titres).
 La section 5 (Prévo 2, lot 7 : accès et installation) relit serveur.py importé comme module (colonnes du journal
-des connexions, types de documents, fichiers jamais sauvegardés, quota) et les réglages de js/modules/parametres.js.
+des connexions, types de documents, fichiers jamais sauvegardés, quota) et les réglages de js/modules/parametres-reglages.js.
 tests/test_fiche_csv.py vérifie qu'elle est à jour (ARCHITECTURE.md §17.8).
 
 Lancer depuis la racine du projet, après toute modification de js/schema.js, des types de
-js/modules/import-regles.js, des réglages du lot 7 de js/modules/parametres.js ou des listes de serveur.py citées
+js/modules/import-regles.js, des réglages du lot 7 de js/modules/parametres-reglages.js ou des listes de serveur.py citées
 en section 5 :
     py outils/generer_fiche_csv.py
 """
@@ -593,15 +593,15 @@ def rediger_import(schema):
 # ---------------------------------------------------------------------------------------------------------
 # Section 5 : Prévo 2 (lot 7, accès et installation), ce qui change pour qui ouvre le dossier des données
 # (ARCHITECTURE.md §22.3, §22.11, §22.12). Les listes viennent de serveur.py, importé comme module (rien n'est
-# lancé), et de js/modules/parametres.js ; si elles ne disent plus ce que la section affirme, la génération
+# lancé), et de js/modules/parametres-reglages.js ; si elles ne disent plus ce que la section affirme, la génération
 # s'arrête avec un message clair : jamais de fiche fausse.
 # ---------------------------------------------------------------------------------------------------------
 
 FICHIER_SERVEUR = RACINE / "serveur.py"
-FICHIER_PARAMETRES = RACINE / "js" / "modules" / "parametres.js"
+FICHIER_PARAMETRES = RACINE / "js" / "modules" / "parametres-reglages.js"   # REGLAGES, sorti de parametres.js (T454)
 EXTENSIONS_RETIREES = ("doc", "xls")              # audit F4 : refusées depuis Prévo 2 (§22.12)
 # Réglages de parametres.csv ajoutés au lot 7 (D132, §22.11) et leur rôle, écrit à la main ; libellé, valeurs et
-# défaut sont relus dans REGLAGES de parametres.js.
+# défaut sont relus dans REGLAGES de parametres-reglages.js.
 ROLES_PARAMETRES_LOT_7 = {
     "mode_solo": ("`1` : mode Solo (menu allégé, « Nouvel OT » en premier). Posé par l'assistant en Solo ou par"
                   " « Passer en mode Solo » (Paramètres), remis à `0` par « Quitter le mode Solo »."),
@@ -621,7 +621,7 @@ CLE_IA_DISTANT = "ia_distant_autorise"
 
 
 class ErreurLectureLot7(Exception):
-    """serveur.py ou parametres.js ne disent plus ce que la section 5 affirme : la fiche n'est pas écrite."""
+    """serveur.py ou parametres-reglages.js ne disent plus ce que la section 5 affirme : la fiche n'est pas écrite."""
 
 
 def lire_serveur():
@@ -633,7 +633,7 @@ def lire_serveur():
 
 
 def lire_reglages_parametres(cles):
-    """{ clé : {libelle, valeurs, defaut} } des réglages « cles » du tableau REGLAGES de js/modules/parametres.js."""
+    """{ clé : {libelle, valeurs, defaut} } des réglages « cles » du tableau REGLAGES de js/modules/parametres-reglages.js."""
     texte = FICHIER_PARAMETRES.read_text(encoding="utf-8")
     debut = texte.index("const REGLAGES = [")
     textes_francais = None
@@ -750,8 +750,8 @@ def rediger_fiche(schema):
         "# Fiche technique des fichiers CSV de Prévo",
         "",
         "Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4,"
-        " `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres.js`) : ne pas le"
-        " modifier à la main.",
+        " `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres-reglages.js`) :"
+        " ne pas le modifier à la main.",
         "",
         "Prévo range ses données dans **%d fichiers CSV** (format **version %d**), dans le dossier de données"
         " (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient"

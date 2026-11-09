@@ -1,6 +1,6 @@
 # Fiche technique des fichiers CSV de Prévo
 
-Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4, `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres.js`) : ne pas le modifier à la main.
+Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4, `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres-reglages.js`) : ne pas le modifier à la main.
 
 Prévo range ses données dans **27 fichiers CSV** (format **version 4**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
 

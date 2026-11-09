@@ -41,7 +41,8 @@ NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "docs/brief-g
 # fichiers nouveaux, controles-reserves.js et controles-catalogue.js après controles-regles.js,
 # controles-reserves-ecrans.js après controles-ecrans.js, equipe-habilitations.js après equipe-ecrans.js,
 # ordres-habilitations.js après ordres-impression.js. Lot L4 (T450) : le module Garanties (garanties-regles.js à
-# garanties-encarts.js) juste après le module Controles (controles-reserves-ecrans.js).
+# garanties-encarts.js) juste après le module Controles (controles-reserves-ecrans.js). Lot L4 (T454) :
+# parametres-reglages.js (le tableau REGLAGES, sorti de parametres.js) juste avant parametres.js.
 ORDRE_MODULES = [
     "apropos.js", "mise-a-jour.js", "aide-ecrans-textes.js", "aide-ecrans.js", "acces-textes.js", "connexion-ecrans.js",
     "installation-etapes.js", "installation-ecrans.js", "installation-fiche.js",
@@ -63,8 +64,8 @@ ORDRE_MODULES = [
     "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
     "rapport-contenu.js", "rapport-ecrans.js",
     "zip-donnees.js", "zip-tables.js", "zip-flux.js", "zip-lecture.js",
-    "parametres.js", "parametres-codes.js", "parametres-solo.js", "parametres-sauvegardes.js", "parametres-zip.js",
-    "parametres-acces.js",
+    "parametres-reglages.js", "parametres.js", "parametres-codes.js", "parametres-solo.js", "parametres-sauvegardes.js",
+    "parametres-zip.js", "parametres-acces.js",
     "import-regles.js", "import-historique.js", "import-controles.js", "import-lecture.js", "import-ecritures.js",
     "import-modeles.js",
     "import-ecrans.js", "import-apercu.js",
