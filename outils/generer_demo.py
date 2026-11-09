@@ -123,6 +123,11 @@ du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncé
     reserve_en_retard                réserve du purgeur de RA-01 (03/04/2025) : ouverte, échéance par défaut passée
     reserve_levee                    réserve d'AE-01 levée le 09/12/2025 (levee 1, commentaire, OT réglementaire clôturé lié)
     reserve_a_echeance               réserve ouverte d'AE-01 : échéance saisie le 15/12/2026, à venir
+  2.2 (T460) : garanties et contrats de prestataires (CONCEPTION-L4-L5-L6 §2.5), dates relatives à la date de référence
+    garantie_en_cours                garantie de CP-01 (équipement qui a des pannes) : en cours, fin dans 160 jours
+    garantie_bientot_finie           garantie de PO-02 : se termine bientôt (fin dans 30 jours)
+    contrat_a_decider                maintenance des compresseurs : tacite, date limite de résiliation dans 13 jours (à décider)
+    contrat_a_mettre_a_jour          vérification électrique : tacite, fin enregistrée passée (dates à mettre à jour)
   Lot 3 : planning des 4 semaines qui commencent à la date de référence (§15.5)
     technicien_surcharge             TEC-0002 : plus d'heures prévues que sa capacité dans la semaine_surcharge
     semaine_surcharge                lundi (AAAA-MM-JJ) de la semaine en surcharge : l'arrêt programmé
@@ -187,6 +192,7 @@ GRAINE = 42                      # graine fixe : deux exécutions donnent des fi
 GRAINE_LOT3 = 4203               # graine des ajouts du lot 3 (générateur à part : le reste ne bouge pas)
 GRAINE_LOT3BIS = 4204            # graine des ajouts du lot 3 bis (même principe : les lots 1 à 3 ne bougent pas)
 GRAINE_LOT6 = 4206               # graine des ajouts du lot 6 : astuces et OT de scénario du wiki (D109, D110)
+GRAINE_V22 = 4220                # graine des ajouts de la 2.2 : garanties et contrats (aucun tirage aujourd'hui)
 DATE_REFERENCE = '2026-10-19'    # « aujourd'hui » du jeu de démo (un lundi)
 MOIS_PAR_DEFAUT = 13             # durée de l'historique (ARCHITECTURE.md §14.8)
 PART_DI_AVEC_CODE = 0.8          # proportion des DI dont le demandeur a choisi un code symptôme
@@ -1597,6 +1603,7 @@ class Contexte:
         self.rng_lot3 = random.Random(GRAINE_LOT3)    # hasard des ajouts du lot 3 (voir hasard_du_lot3)
         self.rng_lot3bis = random.Random(GRAINE_LOT3BIS)   # hasard des ajouts du lot 3 bis (hasard_du_lot3bis)
         self.rng_lot6 = random.Random(GRAINE_LOT6)    # hasard des ajouts du lot 6 (hasard_du_lot6)
+        self.rng_v22 = random.Random(GRAINE_V22)      # hasard des ajouts de la 2.2 (hasard_v22)
         self.mois = mois
         self.volume = volume                          # None ou (nombre d'équipements, nombre d'OT)
         self.ref = jour_depuis_texte(DATE_REFERENCE)
@@ -1679,6 +1686,18 @@ def hasard_du_lot6(ctx):
     """
     principal = ctx.rng
     ctx.rng = ctx.rng_lot6
+    try:
+        yield
+    finally:
+        ctx.rng = principal
+
+
+@contextmanager
+def hasard_v22(ctx):
+    """Pendant le bloc, ctx.rng est le générateur de la 2.2 (graine GRAINE_V22) : les lignes des lots précédents
+    ne changent pas."""
+    principal = ctx.rng
+    ctx.rng = ctx.rng_v22
     try:
         yield
     finally:
@@ -4829,6 +4848,126 @@ def charger_wiki_fige(ctx, dossier):
         raise ErreurCoherence('Wiki de démo figé incohérent :\n' + '\n'.join(erreurs))
 
 
+# ---------------------------------------------------------------------------
+# 2.2 : garanties et contrats de prestataires (CONCEPTION-L4-L5-L6 §2.5, T460)
+# ---------------------------------------------------------------------------
+
+DELAI_ALERTE_V22 = 60            # réglage alerte_echeances_jours par défaut (jours)
+
+# Garanties : (rôle, repère, fournisseur (rang), début, fin, conditions) ; dates en jours avant (-) ou après (+) la
+# date de référence, pour que le jeu reste juste si elle change.
+GARANTIES_V22 = [
+    ('garantie_en_cours', 'CP-01', 1, -200, 160,
+     "Pièces et main-d'œuvre sur le bloc vis remplacé ; déplacement inclus. Appeler le fournisseur avant toute "
+     "intervention sur le bloc."),
+    ('garantie_bientot_finie', 'PO-02', 4, -700, 30,
+     "Garniture mécanique et roulements : pièces seules, main-d'œuvre à notre charge."),
+    (None, 'PO-01', 4, -900, -110, 'Pompe neuve : garantie constructeur de 2 ans, échue.'),
+]
+
+# Contrats : (rôle, fournisseur (rang), objet, repères, périmètre, début, fin, préavis (mois), tacite, durée d'une
+# reconduction (mois), montant annuel, statut attendu à la date de référence)
+CONTRATS_V22 = [
+    ('contrat_a_decider', 1, 'Maintenance préventive des compresseurs', ('CP-01', 'CP-01.SEC'),
+     "Deux visites par an, pièces d'usure comprises.", -320, 74, 2, '1', '12', '4800', 'a_decider'),
+    ('contrat_a_mettre_a_jour', 2, 'Vérification annuelle des installations électriques', (),
+     "Armoires et tableaux de l'atelier.", -700, -111, 3, '1', '', '1250', 'a_mettre_a_jour'),
+    (None, 4, 'Contrôle des pompes de circulation', ('PO-01', 'PO-02'), '', -1100, -200, 1, '0', '', '980',
+     'termine'),
+    (None, 3, 'Lubrification des chaînes de convoyage', (), 'Tournée mensuelle, huile fournie.', -150, 250, 3,
+     '0', '', '', 'en_cours'),
+]
+
+
+def jour_v22(ctx, jours):
+    return texte_date(ctx.ref + timedelta(days=jours))
+
+
+def generer_garanties_et_contrats(ctx):
+    """Garanties et contrats de la démo, relatifs à la date de référence (rien n'est tiré au hasard : les lignes des
+    lots précédents ne changent pas). Aucun OT ni aucune DI ajouté."""
+    for role, repere, rang, debut, fin, conditions in GARANTIES_V22:
+        ligne = creer_ligne(ctx, 'garanties', equipement_id=ctx.equipement[repere]['id'],
+                            fournisseur_id=ctx.fournisseurs[rang], date_debut=jour_v22(ctx, debut),
+                            date_fin=jour_v22(ctx, fin), conditions=conditions)
+        if role:
+            ctx.marquer(role, ligne)
+    for role, rang, objet, reperes, perimetre, debut, fin, preavis, tacite, duree, montant, _ in CONTRATS_V22:
+        ligne = creer_ligne(ctx, 'contrats_prestataires', fournisseur_id=ctx.fournisseurs[rang], objet=objet,
+                            equipement_ids=';'.join(ctx.equipement[r]['id'] for r in reperes), perimetre=perimetre,
+                            date_debut=jour_v22(ctx, debut), date_fin=jour_v22(ctx, fin),
+                            preavis_mois=preavis, reconduction_tacite=tacite, reconduction_mois=duree,
+                            montant_annuel=montant)
+        if role:
+            ctx.marquer(role, ligne)
+
+
+def statut_garantie_v22(garantie, jour, delai=DELAI_ALERTE_V22):
+    """Statut d'une garantie à `jour` (règles de js/modules/garanties-regles.js, recalculées ici en Python)."""
+    fin = jour_depuis_texte(garantie['date_fin'])
+    debut = jour_depuis_texte(garantie['date_debut']) if garantie['date_debut'] else None
+    if debut and debut > jour:
+        return 'a_venir'
+    if fin < jour:
+        return 'terminee'
+    return 'bientot' if (fin - jour).days <= delai else 'en_cours'
+
+
+def statut_contrat_v22(contrat, jour, delai=DELAI_ALERTE_V22):
+    """Statut d'un contrat à `jour` (mêmes règles : à décider, dates à mettre à jour, se termine bientôt, préavis
+    dépassé, terminé, en cours). Sans durée de reconduction connue, la période n'est pas recalculée."""
+    fin = jour_depuis_texte(contrat['date_fin'])
+    tacite = contrat['reconduction_tacite'] == '1'
+    duree = int(contrat['reconduction_mois'] or 0)
+    fin_periode = fin
+    if tacite and fin < jour and duree:
+        k = 1
+        while True:
+            fin_periode = ajouter_mois(fin + timedelta(days=1), k * duree) - timedelta(days=1)
+            if fin_periode >= jour:
+                break
+            k += 1
+    preavis = int(contrat['preavis_mois'] or 0)
+    limite = ajouter_mois(fin_periode, -preavis) if preavis else fin_periode
+    avant_limite, avant_fin = (limite - jour).days, (fin_periode - jour).days
+    if 0 <= avant_limite <= delai:
+        return 'a_decider'
+    if tacite and fin < jour:
+        return 'a_mettre_a_jour'
+    if not tacite and 0 <= avant_fin <= delai:
+        return 'bientot'
+    if avant_limite < 0 <= avant_fin:
+        return 'preavis_depasse'
+    return 'termine' if avant_fin < 0 else 'en_cours'
+
+
+def verifier_demo_v22(ctx):
+    """Auto-vérification des garanties et contrats de la démo : statuts attendus à la date de référence, une
+    garantie sur un équipement qui a des pannes, au moins un contrat tacite et un contrat sans montant."""
+    erreurs = []
+    base = ctx.base
+    statuts = sorted(statut_garantie_v22(g, ctx.ref) for g in base['garanties'])
+    if statuts != ['bientot', 'en_cours', 'terminee']:
+        erreurs.append('garanties : statuts %s au lieu de bientot, en_cours, terminee' % statuts)
+    for role, attendu in (('garantie_en_cours', 'en_cours'), ('garantie_bientot_finie', 'bientot')):
+        obtenu = statut_garantie_v22(ctx.marques[role], ctx.ref)
+        if obtenu != attendu:
+            erreurs.append('%s : %s au lieu de %s' % (role, obtenu, attendu))
+    pannes = {o['equipement_id'] for o in base['ordres_travail'] if o['type'].startswith('correctif')}
+    if ctx.marques['garantie_en_cours']['equipement_id'] not in pannes:
+        erreurs.append("garantie_en_cours : l'équipement n'a aucune panne")
+    for definition, contrat in zip(CONTRATS_V22, base['contrats_prestataires']):
+        obtenu = statut_contrat_v22(contrat, ctx.ref)
+        if obtenu != definition[-1]:
+            erreurs.append('%s : %s au lieu de %s' % (contrat['id'], obtenu, definition[-1]))
+    if not any(c['reconduction_tacite'] == '1' for c in base['contrats_prestataires']):
+        erreurs.append('aucun contrat en reconduction tacite')
+    if not any(not c['montant_annuel'] for c in base['contrats_prestataires']):
+        erreurs.append('aucun contrat sans montant')
+    if erreurs:
+        raise ErreurCoherence('Garanties et contrats de la démo :\n  ' + '\n  '.join(erreurs))
+
+
 def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None, dossier_wiki=None):
     """Construit toutes les tables en mémoire (liste de dictionnaires) et vérifie leur cohérence."""
     ctx = Contexte(mois, volume)
@@ -4859,6 +4998,8 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None, dossier_wiki=None):
     attribuer_identifiants_historique(ctx)
     generer_reserves_ae01(ctx)
     if not volume:
+        with hasard_v22(ctx):
+            generer_garanties_et_contrats(ctx)
         with hasard_du_lot6(ctx):
             ajouter_ot_de_scenario_lot6(ctx)
             poser_astuces_lot6(ctx)
@@ -4884,6 +5025,7 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None, dossier_wiki=None):
     verifier_jeu(ctx)
     if not volume:
         verifier_demo_lot3(ctx)
+        verifier_demo_v22(ctx)
     return ctx
 
 

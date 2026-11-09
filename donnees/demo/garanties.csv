@@ -1,1 +1,4 @@
 ﻿id;equipement_id;fournisseur_id;date_debut;date_fin;conditions;document;actif
+GAR-0001;EQ-0001;FOU-0002;2026-04-02;2027-03-28;"Pièces et main-d'œuvre sur le bloc vis remplacé ; déplacement inclus. Appeler le fournisseur avant toute intervention sur le bloc.";;1
+GAR-0002;EQ-0005;FOU-0005;2024-11-18;2026-11-18;Garniture mécanique et roulements : pièces seules, main-d'œuvre à notre charge.;;1
+GAR-0003;EQ-0004;FOU-0005;2024-05-02;2026-07-01;Pompe neuve : garantie constructeur de 2 ans, échue.;;1

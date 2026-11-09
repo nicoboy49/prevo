@@ -1,1 +1,5 @@
 ﻿id;fournisseur_id;objet;equipement_ids;perimetre;date_debut;date_fin;preavis_mois;reconduction_tacite;reconduction_mois;montant_annuel;document;actif
+CTP-0001;FOU-0002;Maintenance préventive des compresseurs;"EQ-0001;EQ-0002";Deux visites par an, pièces d'usure comprises.;2025-12-03;2027-01-01;2;1;12;4800;;1
+CTP-0002;FOU-0003;Vérification annuelle des installations électriques;;Armoires et tableaux de l'atelier.;2024-11-18;2026-06-30;3;1;;1250;;1
+CTP-0003;FOU-0005;Contrôle des pompes de circulation;"EQ-0004;EQ-0005";;2023-10-15;2026-04-02;1;0;;980;;1
+CTP-0004;FOU-0004;Lubrification des chaînes de convoyage;;Tournée mensuelle, huile fournie.;2026-05-22;2027-06-26;3;0;;;;1

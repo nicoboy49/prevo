@@ -1071,12 +1071,12 @@ class TestContenuDemo(unittest.TestCase):
         self.assertTrue(all(n == 1 for n in ouverts.values()))
 
     def test_format_4_reserves_garanties_contrats_et_colonnes_vides(self):
-        """T387 : 27 tables ; réserves tirées des observations (CONCEPTION-L1 §3.2) ; garanties et contrats en
-        en-tête seul ; colonnes nouvelles vides sauf source_periodicite = saisie."""
+        """T387 : 27 tables ; réserves tirées des observations (CONCEPTION-L1 §3.2) ; garanties et contrats (3 et 4 lignes, T460) ;
+        colonnes nouvelles vides sauf source_periodicite = saisie."""
         self.assertEqual(len(TABLES), 27)
         self.assertEqual(TABLES[-3:], ['reserves_controle', 'garanties', 'contrats_prestataires'])
-        self.assertEqual(self.t['garanties'], [])
-        self.assertEqual(self.t['contrats_prestataires'], [])
+        self.assertEqual(len(self.t['garanties']), 3)                  # T460 : tests/test_garanties_demo.py
+        self.assertEqual(len(self.t['contrats_prestataires']), 4)
         controles = self.t['controles_reglementaires']
         reserves = self.t['reserves_controle']
         avec_observations = [c for c in controles if c['observations'].strip()]
