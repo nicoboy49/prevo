@@ -377,6 +377,44 @@ Règles propres au portugais du Portugal (`pt-PT`) :
 | décision / ingestion / manuel | decision / ingestion / manual | karar / işleme alma / manuel | decisione / acquisizione / manuale | decisão / ingestão / manual | nature d'une entrée du journal du wiki. |
 | IA / IA et manuel / manuel | AI / AI and manual / manual | YZ / YZ ve manuel / manuel | IA / IA e manuale / manuale | IA / IA e manual / manual | origine d'une page du wiki. |
 
+## 12. Nouveautés de la 2.2 : réserves, catalogue, habilitations, garanties, coût de l'arrêt
+
+Termes relevés tels qu'ils sont déjà écrits dans `js/i18n/*.js` (T488) ; le glossaire suit les dictionnaires, il ne les corrige pas. Les écarts entre écrans sont signalés dans la colonne « remarque ».
+
+| fr | en | tr | it | pt-PT | remarque |
+|---|---|---|---|---|---|
+| réserve (d'un contrôle) | finding | bulgu | rilievo | reserva | une observation à lever relevée lors d'un contrôle. Table « Réserves des contrôles » : inspection findings / kontrol bulguları / rilievi delle verifiche / reservas das inspeções. pt-PT garde « reserva » (usage portugais). |
+| lever une réserve, levée | clear, clearing | gidermek, giderme | risolvere, risoluzione | resolver, resolução | « Lever la réserve » : Clear the finding / Bulguyu gider / Risolvi il rilievo / Resolver a reserva. « à lever » : to be cleared / giderilecek / da risolvere / por resolver. Même verbe que « levée d'observations » (section 4). |
+| catalogue (Prévo) | catalogue | katalog | catalogo | catálogo | catalogue de contrôles et de types d'habilitation, réglementation française. Anglais britannique : catalogue. Rien n'est changé sans l'utilisateur. |
+| nature de la source | source type | kaynağın niteliği | natura della fonte | natureza da fonte | libellé du champ (contrôles et habilitations). Valeurs : voir les trois lignes suivantes. |
+| obligation réglementaire | legal requirement | yasal zorunluluk | obbligo di legge | obrigação legal | valeur de « nature de la source ». |
+| norme | standard | standart | norma | norma | valeur de « nature de la source ». |
+| recommandation | recommendation | tavsiye | raccomandazione | recomendação | valeur de « nature de la source ». |
+| à confirmer | to be confirmed | onaylanacak | da confermare | a confirmar | seul emploi relevé : proposition de l'IA à l'import (« proposée par l'IA : à confirmer »). La formule « à confirmer avec votre organisme de contrôle » n'existe pas encore dans les dictionnaires : à traduire avec ce terme quand elle sera écrite. |
+| relu le (catalogue) | reviewed on | gözden geçirildi | riletto il | relido em | « relu le {date} » : reviewed on {date} / {date} tarihinde gözden geçirildi / riletto il {date} / relido em {date}. Champ « Catalogue relu le » : Catalogue reviewed on. |
+| habilitation exigée | authorisation required | gerekli yetkilendirme | abilitazione richiesta | habilitação exigida | habilitation demandée par l'OT. Cohérent avec « habilitation » (section 5). |
+| passer outre, dérogation | override | kuralı aşmak, istisna | deroga | exceção | bouton « Passer outre et enregistrer » : Override and save / Kuralı aş ve kaydet / Deroga e salva / Abrir exceção e guardar. « Motif de la dérogation » : Reason for the override / İstisna gerekçesi / Motivo della deroga / Motivo da exceção. |
+| recyclage (habilitation) | refresher interval | yenileme | aggiornamento | reciclagem | durée en mois entre deux remises à niveau : « Recyclage (mois) » : Refresher interval (months). |
+| justificatif | supporting document | dayanak belge | giustificativo | comprovativo | pièce jointe à une habilitation (titre, attestation, CACES). |
+| autorisation de conduite | operating authorisation | kullanma yetkisi | autorizzazione alla conduzione | autorização de condução | délivrée par l'employeur ; le CACES en est un justificatif. |
+| garantie | warranty | garanti | garanzia | garantia | « Fin de garantie » : Warranty end / Garanti bitişi / Fine garanzia / Fim da garantia. |
+| contrat de prestataire | service contract | hizmet sözleşmesi | contratto di servizio | contrato de prestador | pt-PT : « prestador » (de serviços). |
+| préavis (de résiliation) | termination notice | fesih ihbarı | preavviso di recesso | pré-aviso de rescisão | délai en mois. Anglais : « Termination notice » (champ) mais « Notice period » (fiche du contrat) : à unifier. |
+| date limite de résiliation | termination deadline | fesih için son tarih | termine ultimo di recesso | data limite de rescisão | fin − préavis. « préavis dépassé » : notice deadline passed / ihbar süresi geçti / termine di recesso superato / pré-aviso ultrapassado. |
+| reconduction tacite | automatic renewal | otomatik yenileme | rinnovo tacito | renovação tácita | le contrat se renouvelle seul s'il n'est pas résilié. |
+| coût de l'arrêt | downtime cost | duruş maliyeti | costo del fermo | custo da paragem | indicateurs et rapport mensuel. |
+| coût d'une heure d'arrêt | downtime cost per hour | bir saatlik duruş maliyeti | costo di un'ora di fermo | custo de uma hora de paragem | champ de l'équipement. |
+| non chiffré | not costed | maliyetlendirilmemiş | non quantificato | não quantificado | équipement sans coût d'une heure d'arrêt. |
+| aide au suivi | aid to keeping track | takip yardımcısı | aiuto al monitoraggio | ajuda ao acompanhamento | « Prévo est une aide au suivi ; la responsabilité reste celle de l'employeur. » |
+
+Incohérences relevées entre écrans (aucune corrigée ici) :
+
+- **Préavis, anglais** : « Termination notice (months) » (champ du schéma) contre « Notice period » (fiche du contrat, avertissement) ; le turc, l'italien et le portugais sont constants.
+- **Autorisation, anglais** : « habilitation » et « autorisation de conduite » donnent tous deux « authorisation » (« operating authorisation » pour la seconde) ; sans ambiguïté en italien, portugais et turc (yetkilendirme / yetki).
+- **Dérogation, turc** : « Kuralı aş » (bouton) contre « istisna » (motif, bandeau) ; l'italien et le portugais emploient « deroga » / « exceção » partout (le bouton pt-PT dit « Abrir exceção »).
+- **Réserve, turc** : « bulgu » traduit aussi « observation » ; pas de distinction réserve / observation.
+- **Justificatif, turc** : « dayanak belge » rappelle « dayanak metin » (texte de référence, section 4).
+
 ## Choix tranchés par Nicolas (06/11/2026)
 
 Nicolas a retenu les choix par défaut ci-dessous ; le glossaire ci-dessus les applique. L'autre option reste notée pour mémoire.
