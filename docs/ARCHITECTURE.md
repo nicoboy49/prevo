@@ -821,7 +821,11 @@ RG8 ne prévient plus : elle **bloque** (D186, D191, ci-dessous).
     `Donnees.modifier`.
   - *Marqueur du journal* (D156, texte fixe en français) : à la fin de l'action de l'écriture,
     `dérogation habilitation : TEC-0004 le 2026-11-20 sans BR (échue), H0V (absente) ; motif : <texte>`
-    (`Ordres.marqueurDerogation` l'écrit, `lireDerogation` le relit ; raisons `(échue)`, `(absente)`, `(pas encore obtenue)`).
+    En mode serveur avec comptes (T448, D186 « qui »), le compte connecté s'insère avant le motif :
+    `… sans BR (échue), H0V (absente) ; compte : nicolas.briand ; motif : <texte>` (hors comptes, ou marqueur écrit
+    avant T448 : la forme ci-dessus, sans compte). `Ordres.marqueurDerogation(technicienId, date, manquantes, motif,
+    compte)` l'écrit, `lireDerogation` relit les deux formes (la clé `compte` n'existe que si le marqueur la porte ; un
+    ancien motif qui contient « ; compte : » reste le motif) ; raisons `(échue)`, `(absente)`, `(pas encore obtenue)`.
     L'entrée du journal porte donc qui (utilisateur du journal), quand, l'OT (`id_ligne`), le technicien, la date et les
     habilitations. `Ordres.derogationAccordee(otId, technicienId, date, manquantes)` retrouve la dérogation déjà notée pour
     le même OT, technicien, date et ensemble d'habilitations : l'étape suivante (préparer puis « Planifier ») ne la
@@ -4946,3 +4950,78 @@ la 2.2 afficheront.
 - **Écarts connus** (tests `expectedFailure` de `tests/test_formats_serveur.py`) : place d'une colonne inconnue de
   `controles_reglementaires` (écart A, navigateur et serveur ne la rangent pas au même endroit) ; colonnes
   manquantes complétées en fin par l'étape (B) ; dates d'Excel normalisées par le navigateur seulement (C).
+
+## 26. Garanties et contrats de prestataires (2.2, lot L4 ; D182, D187, D190, CS173, CS175)
+
+Les données sont celles du §25 (`garanties`, `contrats_prestataires`). Ici, le code. Prévo rappelle la fin d'une
+garantie et la date limite de résiliation d'un contrat, et garde leurs documents ; il aide au suivi, la responsabilité
+reste celle de l'employeur (D182) : aucun texte ne dit « conforme » (CS175).
+
+- **Fichiers** (objet `Garanties`, chargés dans cet ordre juste après le module Controles, §15.1 ; feuille
+  `css/modules/garanties.css`, section de textes `garanties`) : `garanties-regles.js` (crée l'objet ; règles pures),
+  `garanties-ecritures.js`, `garanties-formulaires.js`, `garanties-ecrans.js`, `garanties-encarts.js` ; les quatre
+  derniers complètent l'objet par `Object.assign(Garanties, …)`. Ce qui ne sert qu'au module est dans
+  `Garanties.interne` (pas une API). Un autre module n'appelle `Garanties` que derrière
+  `typeof Garanties !== 'undefined'`.
+- **Règles pures** (`garanties-regles.js`, lisent `Donnees`, n'écrivent jamais ; dates ISO en UTC, date du jour passée en
+  argument) :
+  - `delaiAlerte(valeur)` : réglage **`alerte_echeances_jours`** de `parametres.csv` (`Garanties.PARAMETRE_DELAI`, un seul
+    pour les deux tables, D187) ; entier de 1 à 365, vide, illisible ou hors bornes : **60**. Le réglage se saisit dans
+    Paramètres, section « Garanties et contrats » (T454, `parametres-reglages.js`, §1).
+  - `etatGarantie(garantie, aujourdhui, delai)` → `{ statut, debut, fin, joursRestants, alerte, raison }` ; statut =
+    le premier vrai de `STATUTS_GARANTIE` : `fin_inconnue`, `a_venir`, `terminee`, `bientot` (0 ≤ fin − jour ≤ délai :
+    alerte), `en_cours` ; bornes incluses. `sousGarantie(equipementId, jour)` → `{ garantie, fournisseur, fin }` ou
+    `null` (garantie active, début vide ou au plus tard le jour, jour au plus tard la fin ; plusieurs : la fin la plus
+    lointaine) ; `garantiesDeLEquipement`, `contratsDeLEquipement`.
+  - **`dateLimiteResiliation(contrat)`** : `date_fin` − `preavis_mois` mois, jour ramené au dernier jour du mois
+    (`Controles.ajouterMois`, une seule règle des fins de mois : 31/12/2026 − 3 mois = 30/09/2026) ; préavis vide, 0 ou
+    illisible : la date de fin ; `''` si la fin est vide ou illisible. CS173 (délai 60) : fin 31/12/2026, préavis
+    3 mois → « à décider » du 01/08/2026 au 30/09/2026.
+  - `etatContrat(contrat, aujourdhui, delai)` → `{ statut, fin, finPeriode, periodeCalculee, tacite, dateLimite,
+    joursAvantLimite, joursAvantFin, alerte, raison }` ; statut = le premier vrai de `STATUTS_CONTRAT` : `fin_inconnue`,
+    `a_decider` (0 ≤ date limite − jour ≤ délai : alerte), `a_mettre_a_jour` (fin enregistrée passée avec reconduction
+    tacite : le contrat continue), `bientot` (sans reconduction tacite, 0 ≤ fin − jour ≤ délai : alerte),
+    `preavis_depasse` (date limite < jour ≤ fin), `termine`, `en_cours`. Un contrat tacite dont la fin est passée et dont
+    `reconduction_mois` est connu est jugé sur la période reconduite **calculée** (`periodeCalculee`, rien n'est écrit).
+  - `propositionReconduction(contrat)` → `{ date_debut, date_fin, mois }` ou `null` : début = ancienne fin + 1 jour ;
+    durée = `reconduction_mois`, sinon la durée de la période en mois entiers, sinon 12 ; toujours modifiable.
+  - `totalMontants(contrats, aujourdhui)` → `{ centimes, sansMontant }` : contrats actifs dont la prestation continue
+    (ni « fin inconnue » ni « terminé ») ; calcul en centimes sur le texte, sans flottant ; un montant vide ou illisible
+    est compté dans `sansMontant`, jamais estimé (D190).
+  - `aEcheance(aujourdhui)` → `{ garanties, contrats, aMettreAJour }` (compteurs de l'écran ; équipements actifs hors
+    rebut) ; `verifierGarantie`, `verifierContrat` (erreurs par champ, aussi pour l'import), `avertissementsContrat`
+    (non bloquants), `equipementsDuContrat` (`equipement_ids` séparés par « ; », « , » ou espaces).
+- **Écritures** (`garanties-ecritures.js`, **responsable seul**) : `creerGarantie`, `modifierGarantie`,
+  `retirerGarantie`, `creerContrat`, `modifierContrat`, `retirerContrat` (« retirer » met `actif` à 0, jamais de
+  suppression), `reconduireContrat` (nouvelle période), `noterResiliation` (`reconduction_tacite` à 0, date de la lettre
+  au journal), `ecrireDocument`. Tout passe par `Donnees.modifier` ; les contrôles sont refaits dans la fonction de
+  mutation, sur les lignes fraîches ; un refus lève `Donnees.ErreurValidation` et n'écrit rien ; une ligne de journal par
+  écriture (D156, français fixe). Document joint (PDF, JPEG, PNG ; photo réduite en JPEG) écrit après les contrôles,
+  jamais d'écrasement : `garantie-GAR-0001-2026-11-08.pdf`, `contrat-CTP-0001-2026-11-08.pdf` (« -2 », « -3 » si pris).
+- **Formulaires** (`garanties-formulaires.js`) : `#/garanties/garantie/nouvelle` (`?equipement=EQ-…` pré-remplit),
+  `#/garanties/garantie/<id>/modifier`, `#/garanties/contrat/nouveau`, `#/garanties/contrat/<id>/modifier`. Équipements
+  d'un contrat en puces ; « Nouveau fournisseur… » ouvre la fenêtre du Magasin (saisie gardée en brouillon) ; date limite
+  de résiliation recalculée à la saisie ; erreurs sous les champs avant toute écriture ; montant annuel facultatif,
+  hors taxes.
+- **Écrans** (`garanties-ecrans.js`, **responsable seul** : menu caché aux autres, `App` renvoie à l'accueil) :
+  `#/garanties` (compteurs, onglets Garanties et Contrats, filtres gardés dans l'adresse : `?onglet=`, `?filtre=`,
+  `?fournisseur=`, `?recherche=` ; pied des contrats : total des montants), `#/garanties/garantie/<id>`,
+  `#/garanties/contrat/<id>` (bandeau d'échéance, « Écrire au prestataire » en `mailto:` : Prévo n'envoie rien, « Noter
+  la résiliation », « Reconduire », « Retirer », historique du journal). Une ligne retirée reste lisible, sans bouton.
+- **Encarts** (`garanties-encarts.js`, techniciens et responsable, **jamais de montant**) :
+  `Garanties.badgeEquipement(equipement, jour)` (« Sous garantie jusqu'au … », fiche équipement, `parc-fiche.js`),
+  `Garanties.carteEquipement(equipement, responsable, jour)` (carte « Garanties et contrats » de la fiche équipement),
+  `Garanties.rappelOt(equipementId, type, jour)` (bandeau `.ot-zone-garantie` du formulaire d'un OT et fenêtre
+  « Accepter » d'une DI, `ordres-fiche.js` et `demandes-fiche.js` ; seulement pour un correctif, immédiat ou différé ;
+  `null` sinon ; un rappel, jamais un blocage, rien au journal).
+- **Droits du serveur** (§22.5 ; T453, T473 ; D126 prolongé) : `garanties`, `contrats_prestataires` (et
+  `reserves_controle`) s'écrivent par le **responsable seul** (`TABLES_DU_RESPONSABLE_EN_ECRITURE` : `PUT` et ajout
+  refusés en 403 au technicien) ; le technicien les lit, le demandeur non. `contrats_prestataires.montant_annuel` est
+  retiré pour le technicien (`COLONNES_CACHEES_PAR_ROLE`) ; le document d'un contrat n'est servi qu'au responsable.
+  `equipements.cout_arret_h` est caché au technicien, au demandeur et à l'appareil : la colonne garde son nom dans
+  l'en-tête et ses valeurs sont vidées, remises depuis le fichier à chaque `PUT`, vidées dans un ajout.
+- **Démo** (T460) : `outils/generer_demo.py` (`GRAINE_V22`) écrit 3 garanties (en cours, bientôt finie, terminée) et
+  4 contrats (à décider, dates à mettre à jour, terminé, en cours sans montant) relatifs à la date de référence ;
+  rôles de scénario `garantie_en_cours`, `garantie_bientot_finie`, `contrat_a_decider`, `contrat_a_mettre_a_jour` ;
+  statuts recalculés en Python et comparés à ceux de `Garanties` (`tests/test_garanties_demo.py`).
+- **Pas encore branché** : `Garanties.aEcheance` n'alimente pas encore l'accueil.
