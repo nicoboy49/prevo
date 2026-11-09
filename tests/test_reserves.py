@@ -320,7 +320,7 @@ class TestServeur(CasReserves):
             carte = {r["id"]: r for r in self.carte()}
             self.assertIn("gravité : majeure", carte[premiere]["meta"])
             self.assertIn("OT lié : %s" % ot, carte[premiere]["meta"])
-            self.assertEqual(page.locator(".controles-reserve[data-reserve='%s'] a[href='#/ot/%s']" % (premiere, ot)).count(), 1)
+            self.assertEqual(page.locator(".controles-reserve[data-reserve='%s'] .controles-reserve-meta a[href='#/ot/%s']" % (premiere, ot)).count(), 1)
             self.assertEqual((carte[deuxieme]["statut"], carte[deuxieme]["badge"], carte[deuxieme]["repliee"]),
                              ("levée", "levée le %s" % fr(levee_le), True))
             self.assertEqual(carte[deuxieme]["commentaire"], "Ce qui a été fait : Schéma mis à jour")

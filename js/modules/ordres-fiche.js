@@ -2,9 +2,9 @@
 // Ordres (4/7) — écran E5, fiche d'un OT (#/ot/<id>) : en-tête, étapes, consignation, anomalie
 // d'un OT préventif et ses demandes liées (§14.6), barre d'actions (transitions RG3 avec leurs
 // contrôles), messages et structure des onglets ; et l'écran de création #/ot/nouveau (manuel, ou
-// d'urgence avec ?urgence=1 ; ?type= et ?titre= pré-remplissent le formulaire, §15.7). Le contenu
-// des onglets est dans ordres-onglets.js et ordres-pieces.js (ARCHITECTURE.md §14.2). Complète
-// l'objet Ordres.
+// d'urgence avec ?urgence=1 ; ?type=, ?titre= et ?travail= pré-remplissent le formulaire, §15.7 ;
+// ?reserve= : l'OT créé est relié à cette réserve, T420). Le contenu des onglets est dans
+// ordres-onglets.js et ordres-pieces.js (ARCHITECTURE.md §14.2). Complète l'objet Ordres.
 
 Object.assign(Ordres, (() => {
 
@@ -29,7 +29,7 @@ Object.assign(Ordres, (() => {
   let formulairesFiche = [];
 
   // ===========================================================================================
-  // 5. Nouvel OT (#/ot/nouveau, ?equipement=EQ-0005, ?urgence=1, ?type=, ?titre=)
+  // 5. Nouvel OT (#/ot/nouveau, ?equipement=EQ-0005, ?urgence=1, ?type=, ?titre=, ?travail=, ?reserve=)
   // ===========================================================================================
 
   /**
@@ -45,7 +45,7 @@ Object.assign(Ordres, (() => {
     const requete = parametres.requete || new URLSearchParams('');
     const urgence = requete.get('urgence') === '1';
     const priorite = urgence ? 'P1' : 'P3';
-    // Titre pré-rempli par l'adresse (?titre=…), toujours modifiable avant la création.
+    // Titre et travail pré-remplis par l'adresse (?titre=…, ?travail=…), toujours modifiables avant la création.
     const titre = (requete.get('titre') || '').trim();
     App.definirTitre(urgence ? I18n.t('ordres.nouveau.ot_urgence') : I18n.t('ordres.nouveau.nouvel_ot'));
     UI.remplir(conteneur, UI.html`
@@ -75,7 +75,7 @@ Object.assign(Ordres, (() => {
     placer('titre', champOt('titre', titre, { placeholder: I18n.t('ordres.nouveau.ex_po_02_fuite') }));
     placer('type', champOt('type', urgence ? 'correctif immédiat' : typeDemande(requete), { lectureSeule: urgence }));
     placer('priorite', champOt('priorite', priorite, { lectureSeule: urgence }));
-    placer('travail_a_faire', champOt('travail_a_faire', ''));
+    placer('travail_a_faire', champOt('travail_a_faire', (requete.get('travail') || '').trim()));
     // Mode Solo (D132) : le technicien « moi » est pré-rempli (toujours modifiable) ; '' sinon.
     const technicienParDefaut = App.technicienSolo();
     placer('technicien_id', champOt('technicien_id', technicienParDefaut, { liste: listeTechniciens(technicienParDefaut) }));
@@ -95,7 +95,7 @@ Object.assign(Ordres, (() => {
     });
     formulaire.addEventListener('submit', (evenement) => {
       evenement.preventDefault();
-      validerNouvelOt(formulaire, selecteur, urgence);
+      validerNouvelOt(formulaire, selecteur, urgence, (requete.get('reserve') || '').trim());
     });
   }
 
@@ -107,7 +107,7 @@ Object.assign(Ordres, (() => {
     if (message) zone.appendChild(bandeauHabilitation(selecteur.valeur(), valeurs.technicien_id, valeurs.date_prevue));
   }
 
-  async function validerNouvelOt(formulaire, selecteur, urgence) {
+  async function validerNouvelOt(formulaire, selecteur, urgence, reserveId) {
     const erreurs = UI.verifierFormulaire(formulaire);
     const erreurEquipement = UI.$('#ot-nouveau-equipement-erreur', formulaire);
     erreurEquipement.hidden = Boolean(selecteur.valeur());
@@ -123,7 +123,11 @@ Object.assign(Ordres, (() => {
         travail_a_faire: valeurs.travail_a_faire, technicien_id: valeurs.technicien_id, date_prevue: valeurs.date_prevue,
       });
       App.marquerSaisie(false);
-      UI.toast(I18n.t('ordres.valider_nouvel_ot.ordre_travail_cree', { id }), 'succes');
+      // Depuis une réserve (T420) : l'OT créé lui est relié ; un lien refusé (réserve levée ou reliée ailleurs
+      // entre-temps) laisse l'OT créé, le toast dit pourquoi (raison : null si relié, ou sans réserve).
+      const raison = reserveId ? await Controles.lierOtAReserve(reserveId, id).then(() => null, App.raisonErreur) : null;
+      if (raison !== null) UI.toast(I18n.t('ordres.valider_nouvel_ot.reserve_non_reliee', { id, raisonErreur: raison }), 'attention');
+      else UI.toast(reserveId ? I18n.t('ordres.valider_nouvel_ot.cree_et_relie_reserve', { id }) : I18n.t('ordres.valider_nouvel_ot.ordre_travail_cree', { id }), 'succes');
       App.naviguer('#/ot/' + encodeURIComponent(id));
     } catch (erreur) {
       App.signalerErreur(erreur, 'création d\'un OT');

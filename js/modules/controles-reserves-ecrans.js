@@ -6,7 +6,8 @@
 // - T419 : les boutons de la carte (« Lever », « Modifier » par réserve ouverte, « Ajouter une réserve »), le rappel
 //   « L'OT … est clôturé » et les fenêtres « Lever la réserve », « Modifier la réserve », « Ajouter une réserve »
 //   (ouvrirLeveeReserve, ouvrirModificationReserve, ouvrirAjoutReserve) ;
-// - T420 : « Créer un OT » depuis une réserve (#/ot/nouveau pré-rempli ; rien n'est créé sans « Créer »).
+// - T420 : « Créer un OT » depuis une réserve (#/ot/nouveau pré-rempli ; rien n'est créé sans « Créer », puis
+//   ordres-fiche.js relie l'OT créé à la réserve) ; « Voir l'OT » quand elle en a un.
 // Profils : le responsable écrit ; le technicien lit (aucun bouton d'écriture rendu) ; le demandeur n'a pas accès.
 // Chargé juste après controles-ecrans.js. Complète l'objet Controles ; la fiche (controles-ecrans.js) appelle ce
 // fichier par Controles.interne, au moment de l'appel.
@@ -75,14 +76,41 @@ Object.assign(Controles, (() => {
     return ot && STATUTS_OT_CLOTURES.includes(texte(ot.statut)) ? ot : null;
   }
 
+  /**
+   * Titre et travail à faire de l'OT d'une réserve (T420), écrits dans la langue de l'installation (D156) : « Levée
+   * de la réserve — <texte, 80 caractères> » ; le texte entier, puis « Contrôle du 12/11/2025 : <nature> ».
+   */
+  function textesOtReserve(reserve) {
+    const controle = Donnees.trouver('controles_reglementaires', texte(reserve.controle_id));
+    const date = dateIso(reserve.date_controle);
+    return I18n.enLangueDesDonnees(() => {
+      const nature = texte(controle && controle.nature) || I18n.t('controles.adresse_nouvel_ot.controle_reglementaire');
+      const origine = date ? I18n.t('controles.textes_ot_reserve.controle_du', { date: UI.dateFr(date), nature })
+        : I18n.t('controles.textes_ot_reserve.controle_date_inconnue', { nature });
+      return { titre: I18n.t('controles.textes_ot_reserve.titre', { reserve: texteCourtReserve(reserve) }),
+        travail: texte(reserve.texte) + '\n\n' + origine };
+    });
+  }
+
+  /** « Créer un OT » (lien : #/ot/nouveau pré-rempli, Controles.adresseOtReserve ; rien n'est créé sans « Créer »
+   *  du formulaire, qui relie ensuite l'OT à la réserve), ou « Voir l'OT » quand la réserve en a un. */
+  function lienOtReserve(reserve) {
+    const otId = texte(reserve.ot_id);
+    if (otId) {
+      return UI.html`<a class="btn btn-fantome controles-reserve-voir-ot" href="#/ot/${encodeURIComponent(otId)}">${UI.icone('ordres')}${I18n.t('controles.carte_reserves.voir_ot')}</a>`;
+    }
+    return UI.html`<a class="btn btn-fantome controles-reserve-creer-ot" href="${Controles.adresseOtReserve(reserve, textesOtReserve(reserve))}">${UI.icone('ordres')}${I18n.t('controles.carte_reserves.creer_ot')}</a>`;
+  }
+
   /** Responsable, réserve ouverte : rappel « L'OT … est clôturé : levez la réserve si le travail l'a corrigée. »
-   *  (OT lié clôturé), puis « Lever » et « Modifier ». */
+   *  (OT lié clôturé), puis « Lever », « Modifier » et « Créer un OT » (ou « Voir l'OT »). */
   function actionsReserve(reserve) {
     const ot = otLieCloture(reserve);
     return UI.html`${ot ? UI.html`<p class="controles-reserve-rappel" role="note">${UI.icone('alerte')}<span>${I18n.t('controles.carte_reserves.rappel_ot_cloture', { otId: ot.id })}</span></p>` : ''}
       <div class="actions controles-reserve-actions">
         <button type="button" class="btn btn-secondaire" data-action="lever">${UI.icone('valider')}${I18n.t('controles.carte_reserves.lever')}</button>
-        <button type="button" class="btn btn-fantome" data-action="modifier">${I18n.t('commun.bouton.modifier')}</button></div>`;
+        <button type="button" class="btn btn-fantome" data-action="modifier">${I18n.t('commun.bouton.modifier')}</button>
+        ${lienOtReserve(reserve)}</div>`;
   }
 
   /** Une réserve : texte ; badge ; gravité s'il y en a une ; échéance (ouverte) ; OT lié ; commentaire de levée ;
@@ -122,7 +150,8 @@ Object.assign(Controles, (() => {
    * Carte « Réserves » d'un contrôle (élément DOM) : titre « Réserves (5, dont 2 à lever) » (« Réserves (3, toutes
    * levées) »), un groupe par réalisation, la plus récente d'abord (Controles.reservesDuControle) ; carte vide :
    * « Aucune réserve relevée. ». Le technicien la lit seulement ; le responsable a en plus « Ajouter une réserve »
-   * (en-tête) et, par réserve ouverte, « Lever » et « Modifier » (fenêtres du §4 ; T420 y ajoutera « Créer un OT »).
+   * (en-tête) et, par réserve ouverte, « Lever » et « Modifier » (fenêtres du §4), « Créer un OT » ou « Voir l'OT »
+   * (liens, hors du branchement des boutons).
    */
   function carteReserves(controle) {
     const jour = Donnees.aujourdhui();
