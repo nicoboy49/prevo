@@ -66,7 +66,7 @@ ORDRE_MODULES = [
     "zip-donnees.js", "zip-tables.js", "zip-flux.js", "zip-lecture.js",
     "parametres-reglages.js", "parametres.js", "parametres-codes.js", "parametres-solo.js", "parametres-sauvegardes.js",
     "parametres-zip.js", "parametres-acces.js",
-    "import-regles.js", "import-historique.js", "import-controles.js", "import-lecture.js", "import-ecritures.js",
+    "import-regles.js", "import-types.js", "import-historique.js", "import-controles.js", "import-lecture.js", "import-ecritures.js",
     "import-modeles.js",
     "import-ecrans.js", "import-apercu.js",
     "wiki-regles.js", "wiki-calculs.js", "wiki-entites.js", "wiki-texte.js", "wiki-recherche.js", "wiki-ingestion.js",

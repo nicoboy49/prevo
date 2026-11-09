@@ -32,7 +32,7 @@ SCRIPTS = [
     "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js", "js/interface.js",
     "js/modules/accueil.js", "js/modules/ordres-regles.js", "js/modules/planning-regles.js",
     "js/modules/indicateurs-regles.js", "js/modules/indicateurs-series.js",
-    "js/modules/import-regles.js", "js/modules/import-historique.js",
+    "js/modules/import-regles.js", "js/modules/import-types.js", "js/modules/import-historique.js",
 ]
 HEURE_FIXE = "2026-10-21T09:30:00"
 MAINTENANT = "2026-10-21 09:30"

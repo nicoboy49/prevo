@@ -40,6 +40,7 @@ SCRIPTS = [
     "js/donnees.js",
     "js/stockage-demo.js",
     "js/modules/import-regles.js",
+    "js/modules/import-types.js",
 ]
 MAINTENANT = "2026-10-21 09:30"
 TYPES_ATTENDUS = ["localisations", "equipements", "articles", "fournisseurs", "techniciens", "habilitations",

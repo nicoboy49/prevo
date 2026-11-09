@@ -3,13 +3,13 @@
 Le schéma est la seule source : js/schema.js (objet Schema) est lu dans Chromium (Playwright, outil de
 développement, déjà utilisé par les tests) ; la fiche est donc toujours fidèle aux fichiers réels.
 La section 4 (import depuis un tableur, lot 5) reprend Import.TYPES, relu en Python dans
-js/modules/import-regles.js (types, clés naturelles, colonnes reconnues et leurs autres titres).
+js/modules/import-types.js (types, clés naturelles, colonnes reconnues et leurs autres titres).
 La section 5 (Prévo 2, lot 7 : accès et installation) relit serveur.py importé comme module (colonnes du journal
 des connexions, types de documents, fichiers jamais sauvegardés, quota) et les réglages de js/modules/parametres-reglages.js.
 tests/test_fiche_csv.py vérifie qu'elle est à jour (ARCHITECTURE.md §17.8).
 
 Lancer depuis la racine du projet, après toute modification de js/schema.js, des types de
-js/modules/import-regles.js, des réglages du lot 7 de js/modules/parametres-reglages.js ou des listes de serveur.py citées
+js/modules/import-types.js, des réglages du lot 7 de js/modules/parametres-reglages.js ou des listes de serveur.py citées
 en section 5 :
     py outils/generer_fiche_csv.py
 """
@@ -135,27 +135,27 @@ def remarques(champ):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# Section 4 : import depuis un tableur, d'après Import.TYPES (js/modules/import-regles.js, lot 5)
+# Section 4 : import depuis un tableur, d'après Import.TYPES (js/modules/import-types.js, lot 5)
 # ---------------------------------------------------------------------------------------------------------
 # Import.TYPES est écrit en JavaScript avec des appels S(…), V(…), type(…), reference(…), equipementDe(…). Un
 # petit lecteur d'expressions le relit ici, sans navigateur, depuis le texte du fichier : littéraux (textes,
 # nombres, tableaux, objets), « + », appels, Object.assign et fonctions fléchées à une expression. Les constantes
 # et fonctions du fichier sont relues de la même façon ; S, V et type, qui assemblent les champs, sont reproduites
-# ci-dessous (mêmes règles que dans import-regles.js : libellé, type et synonymes du schéma, synonymes ajoutés,
+# ci-dessous (mêmes règles que dans import-types.js : libellé, type et synonymes du schéma, synonymes ajoutés,
 # options). Libellés et aides des types et des champs propres à l'import sont des fonctions « () => I18n.t('clé') »
 # (lues à l'affichage, T242) : leur texte est lu dans le dictionnaire français, js/i18n/fr.js.
 # Une construction inconnue arrête la génération avec un message clair : jamais de fiche fausse.
 
-FICHIER_IMPORT = RACINE / "js" / "modules" / "import-regles.js"
+FICHIER_IMPORT = RACINE / "js" / "modules" / "import-types.js"
 FICHIER_LECTURE = RACINE / "js" / "modules" / "import-lecture.js"
 FICHIER_FRANCAIS = RACINE / "js" / "i18n" / "fr.js"
 MOTIF_ENTREE = re.compile(r"^\s*'([\w.]+)': '((?:[^'\\]|\\.)*)',\s*$", re.MULTILINE)
-DEBUT_TYPES = "// ===== 2."            # section de import-regles.js qui définit TYPES
-FIN_TYPES = "// ===== 3."
+DEBUT_TYPES = "// ===== 2."            # section de import-types.js qui définit TYPES (T486)
+FIN_TYPES = "// ===== Fin des types"
 
 
 class ErreurLectureImport(Exception):
-    """import-regles.js n'a pas pu être relu (construction inconnue) : la fiche n'est pas écrite."""
+    """import-types.js n'a pas pu être relu (construction inconnue) : la fiche n'est pas écrite."""
 
 
 MOTIF_JETON = re.compile(r"""
@@ -348,7 +348,7 @@ def lire_textes_francais():
 
 
 def lire_types_import(schema):
-    """Import.TYPES relu dans js/modules/import-regles.js : { cle: { cle, libelle, aide, tables, champs, refs } }."""
+    """Import.TYPES relu dans js/modules/import-types.js : { cle: { cle, libelle, aide, tables, champs, refs } }."""
     texte = FICHIER_IMPORT.read_text(encoding="utf-8")
     if DEBUT_TYPES not in texte or FIN_TYPES not in texte:
         raise ErreurLectureImport("sections « %s » et « %s » introuvables dans %s" % (DEBUT_TYPES, FIN_TYPES, FICHIER_IMPORT.name))
@@ -750,7 +750,7 @@ def rediger_fiche(schema):
         "# Fiche technique des fichiers CSV de Prévo",
         "",
         "Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4,"
-        " `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres-reglages.js`) :"
+        " `js/modules/import-types.js` ; pour la section 5, `serveur.py` et `js/modules/parametres-reglages.js`) :"
         " ne pas le modifier à la main.",
         "",
         "Prévo range ses données dans **%d fichiers CSV** (format **version %d**), dans le dossier de données"

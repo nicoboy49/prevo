@@ -79,7 +79,7 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 `controles-reserves-ecrans.js` juste après `controles-ecrans.js`, `equipe-habilitations.js` juste après
 `equipe-ecrans.js` et `ordres-habilitations.js` juste après `ordres-impression.js`, §15.1 ; le lot L4 (T450) insère
 les cinq fichiers `garanties-*.js` juste après `controles-reserves-ecrans.js`, puis (T454) `parametres-reglages.js`
-juste avant `parametres.js`, §15.1), `js/app.js` (en dernier).
+juste avant `parametres.js`, §15.1 ; T486 : `import-types.js` juste après `import-regles.js`, §18.1), `js/app.js` (en dernier).
 Langue active (T234, T295) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (le choix du poste, écrit par
 le sélecteur de langue, §24.10) puis « prevo.langue.installation » (la langue de l'installation, §24.11 ; la langue du
 compte viendra plus tard) ; la première des deux déclarée par `js/i18n/langues.js` (sinon le français) est la langue
@@ -1485,6 +1485,8 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   Paramètres, gelé, sorti de `parametres.js` arrivé à 698 lignes, D28) se charge juste avant `parametres.js`, qui le
   lit au chargement (formulaire, carte Mode Solo, `Parametres.reglagesConnus` de l'import ZIP) ;
   `outils/generer_fiche_csv.py` y relit les réglages de sa section 5. Rien ne change à l'écran.
+  Lot L6 (T486) : `import-types.js` (Import.TYPES et Import.REGLES, sortis de `import-regles.js` arrivé à 693 lignes, D28)
+  se charge juste après `import-regles.js`, qui les lit au moment de l'appel ; la fiche technique des CSV le relit.
   Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
   écran de connexion, §22.4) se charge après `acces-textes.js` (ses textes) et avant `accueil.js` ; feuille
   `css/modules/connexion.css`. Lot 7 (T168) : `installation-etapes.js` (objet `InstallationEtapes`, les formulaires des
@@ -2479,8 +2481,9 @@ arrière possible. Format CSV inchangé (`Schema.version` = 2, aucun champ ajout
   ou au premier **modèle .xlsx** demandé, pas à l'ouverture de l'assistant : un CSV ou un collage ne la
   charge jamais.
 - **Module `Import`** (préfixe `import-`, chargé **à la fin** de `js/modules/`, après
-  `parametres-codes.js`, dans cet ordre) : `import-regles.js` (1/7, crée `Import` : types de données,
-  correspondance, conversion, clés naturelles, aperçu — fonctions pures), `import-historique.js` (2/7,
+  `parametres-codes.js`, dans cet ordre) : `import-regles.js` (1/7, crée `Import` :
+  correspondance, conversion, clés naturelles, aperçu — fonctions pures), `import-types.js` (T486 : types de
+  données, `Import.TYPES` et `Import.REGLES`, juste après), `import-historique.js` (2/7,
   règles de l'historique, D92), `import-lecture.js` (3/7, lecture des fichiers et du collage),
   `import-ecritures.js` (4/7, écriture, sauvegarde, annulation), `import-modeles.js` (5/7, modèles à
   remplir), `import-ecrans.js` (6/7, écran, étapes 1 à 3, crée `Import.assistant`) et `import-apercu.js`
@@ -2500,7 +2503,7 @@ arrière possible. Format CSV inchangé (`Schema.version` = 2, aucun champ ajout
 Chaque type liste ses **champs importables** (champs du schéma, plus quelques champs « virtuels »
 propres à l'import), sa **clé naturelle** et ses **références**. Les identifiants Prévo ne sont jamais
 pris dans le fichier (D85). La liste exacte des colonnes reconnues de chaque type, avec leurs autres
-titres, est générée dans `FICHE_TECHNIQUE_CSV.md` (§4 de la fiche, lue dans `import-regles.js`).
+titres, est générée dans `FICHE_TECHNIQUE_CSV.md` (§4 de la fiche, lue dans `import-types.js`, T486).
 
 | Type (`cle`) | Tables écrites | Clé naturelle | Champs virtuels et références |
 | --- | --- | --- | --- |
