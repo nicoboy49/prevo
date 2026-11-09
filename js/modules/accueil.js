@@ -6,8 +6,8 @@
 //   Responsable : tuile de synthèse, « À traiter en premier », compteurs (DI à traiter, OT en retard,
 //                 P1 ouverts, préventifs de la semaine), rapport du mois écoulé, 5 DI à traiter et 5 OT
 //                 en retard, tuiles « à surveiller » (articles à commander ; contrôles sous 30 jours et
-//                 habilitations à renouveler, lot 3 ; suggestions de préventif, lot 3 bis, §16.6), une
-//                 alerte si « Contrôle de la base » signale des erreurs (accueil-bento.js).
+//                 habilitations à renouveler, lot 3 ; suggestions de préventif, lot 3 bis, §16.6 ; garanties
+//                 et contrats, 2.2), une alerte si « Contrôle de la base » signale des erreurs (accueil-bento.js).
 //   Technicien  : gros bouton « Signaler », les trois indicateurs des contrôles et de l'équipe (contrôles
 //                 sous 30 jours, habilitations à renouveler, réserves en retard depuis la 2.2) et la liste
 //                 de ses OT ouverts : d'abord ses préventifs de la semaine (ou la mention qu'il n'en a pas),
@@ -33,6 +33,12 @@
 //                              contrôle, D187 ; 2.2, CS170). Les observations reprises de la 2.1 n'ont pas
 //                              d'échéance saisie : presque toutes le sont au premier lancement, d'où le détail
 //                              « échéance par défaut passée (30 jours après le contrôle) ».
+//   Échéances des garanties  = Garanties.aEcheance() (2.2, CS173 ; responsable seulement) : garanties qui se
+//   et des contrats            terminent dans le délai d'alerte (réglage alerte_echeances_jours, 60 jours par
+//                              défaut, D187), contrats en alerte (« à décider » avant la date limite de
+//                              résiliation, reconduction tacite ; « se termine bientôt » avant la fin, sans
+//                              reconduction tacite : jamais « à décider », T463) et contrats aux dates à mettre
+//                              à jour. Module Garanties absent (pages de test) : null.
 
 const Accueil = (() => {
 
@@ -83,7 +89,8 @@ const Accueil = (() => {
    * { diATraiter, otEnRetard, p1Ouverts, preventifsSemaine } (lignes de demandes et d'OT),
    * articlesACommander (éléments de Magasin.aCommander() : { article, stock, pointCommande, … }),
    * controlesSous30j, habilitationsARenouveler et reservesEnRetard (éléments de
-   * Controles.reservesEnRetard() : { reserve, controle, etat }, l'échéance la plus ancienne d'abord).
+   * Controles.reservesEnRetard() : { reserve, controle, etat }, l'échéance la plus ancienne d'abord),
+   * echeances (Garanties.aEcheance() : { garanties, contrats, aMettreAJour }, lignes ; null sans le module).
    */
   function calculerCompteurs() {
     const aujourdhui = Donnees.aujourdhui();
@@ -101,6 +108,9 @@ const Accueil = (() => {
       habilitationsARenouveler: Equipe.aRenouveler(aujourdhui),
       // 2.2 (CS170) : réserves des contrôles dont l'échéance de levée est passée (controles-reserves.js).
       reservesEnRetard: Controles.reservesEnRetard(aujourdhui),
+      // 2.2 (CS173) : garanties et contrats à échéance (garanties-regles.js, chargé après ce fichier ; absent des
+      // pages de test qui ne chargent pas tous les modules).
+      echeances: typeof Garanties !== 'undefined' ? Garanties.aEcheance(aujourdhui) : null,
     };
   }
 

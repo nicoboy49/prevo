@@ -185,9 +185,9 @@ class TestAccueilLot3(CasNavigateur):
                          [identifiant for identifiant, _ in reserves])
         # Les cinq indicateurs du lot 2 sont toujours là (plus celui du lot 3 bis, §16.6) ; accueil
         # « bento » (T90) : 4 compteurs, 2 tuiles « à surveiller » et les 3 liens de « Contrôles et habilitations »
-        # (réserves en retard depuis la 2.2)
+        # (réserves en retard depuis la 2.2), plus les 3 liens de « Garanties et contrats » (2.2, T485)
         self.assertEqual(self.page.locator(
-            "#contenu #bento :is(a.bento-compteur, a.bento-surveiller, a.bento-sous-lien)").count(), 9)
+            "#contenu #bento :is(a.bento-compteur, a.bento-surveiller, a.bento-sous-lien)").count(), 12)
         # Contrôles, habilitations et réserves réunis dans une tuile
         self.assertEqual(self.page.locator("#contenu .bento-conformite a[href='%s']" % LIEN_CONTROLES).count(), 1)
         self.assertEqual(self.page.locator("#contenu .bento-conformite a[href='%s']" % LIEN_HABILITATIONS).count(), 1)

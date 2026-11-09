@@ -12,7 +12,8 @@
 //     4. rapport du mois écoulé (Rapport.tuileAccueil ; absent → les compteurs s'étendent) ;
 //     5. « Demandes à traiter » (pas au téléphone) et « OT en retard » : 5 lignes au plus ;
 //     6. « à surveiller » : articles à commander, contrôles et habilitations (contrôles sous 30 jours,
-//        habilitations à renouveler, réserves en retard depuis la 2.2), suggestions de préventif.
+//        habilitations à renouveler, réserves en retard depuis la 2.2), suggestions de préventif ; puis, depuis
+//        la 2.2 (CS173), « Garanties et contrats » sur sa propre ligne (accueil.css).
 //   Puis la carte « Connecter un téléphone » (mode serveur, pas au téléphone : accueil.js).
 //   Mode serveur : avertissement « Copie externe des sauvegardes » (D133, §22.11) quand la copie de la nuit a échoué
 //   ou n'a pas été faite depuis plus d'un jour, avec le nombre de jours ; avertissement Tailscale (D128, §22.8) quand
@@ -30,6 +31,10 @@ Object.assign(Accueil, (() => {
   const TONS_IMPACT = { 'sécurité': 'rouge', 'arrêt': 'ambre', 'dégradé': 'bleu' };
   const OPTIONS_DATE = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' };
   const OPTIONS_DATE_COURTE = { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' };
+  // Listes filtrées de l'écran Garanties et contrats (garanties-ecrans.js, filtres de l'onglet)
+  const LIEN_GARANTIES_BIENTOT = '#/garanties?onglet=garanties&filtre=bientot';
+  const LIEN_CONTRATS_A_DECIDER = '#/garanties?onglet=contrats&filtre=a-decider';
+  const LIEN_CONTRATS_A_METTRE_A_JOUR = '#/garanties?onglet=contrats&filtre=a-mettre-a-jour';
 
   // Les chiffres défilent à l'ouverture de l'écran (démarrage, changement d'adresse), pas quand il est
   // réaffiché parce que des données ont changé.
@@ -303,6 +308,61 @@ Object.assign(Accueil, (() => {
     </div>`;
   }
 
+  function sousLien(lien, id, valeur, libelle, detail) {
+    return UI.html`<a class="bento-sous-lien" href="${lien}" id="${id}">${chiffre(valeur)}<span class="bento-sous-texte"><span>${libelle}</span>
+      ${detail}</span>${UI.icone('chevron', 'bento-chevron')}</a>`;
+  }
+
+  // « Garanties et contrats » (2.2, CS173 ; conception L4-L6 §4.1) : sur le modèle de « Contrôles et habilitations »,
+  // une tuile, trois liens vers les listes filtrées de #/garanties (Garanties.aEcheance, Accueil.calculerCompteurs),
+  // le total dans la pastille ; aucun montant :
+  //   garanties qui se terminent dans le délai d'alerte (réglage alerte_echeances_jours) ; détail : la première fin ;
+  //   contrats en alerte, ceux du filtre « à décider » de l'écran : « à décider » (reconduction tacite, avant la date
+  //   limite de résiliation) et « se termine bientôt » (sans reconduction tacite, avant la fin : jamais « à décider »,
+  //   T463) ; le libellé dit lesquels ; détail : la première date limite de résiliation, sinon la première fin ;
+  //   contrats aux dates à mettre à jour (reconduits tacitement, fin enregistrée passée) : un lien à part, car ils ne
+  //   sont pas parmi les contrats « à décider » (un « dont n à mettre à jour » sous ceux-ci compterait faux).
+  // Sans le module Garanties (pages de test) : pas de tuile.
+  function tuileEcheances(compteurs, aujourdhui) {
+    const echeances = compteurs.echeances;
+    if (!echeances) return '';
+    const delai = Garanties.delaiAlerte();
+    const garanties = echeances.garanties.length;
+    const etats = echeances.contrats.map((contrat) => Garanties.etatContrat(contrat, aujourdhui, delai));
+    const aDecider = etats.filter((etat) => etat.statut === 'a_decider');
+    const contrats = etats.length;
+    const aMettreAJour = echeances.aMettreAJour.length;
+    const detailGaranties = garanties
+      ? complement(I18n.t('accueil.tuile_echeances.premiere_fin', { n: garanties,
+        date: UI.dateFr(Garanties.etatGarantie(echeances.garanties[0], aujourdhui, delai).fin) }), 'ambre')
+      : complement(I18n.t('accueil.tuile_echeances.aucune_fin_proche'));
+    let libelleContrats = I18n.t('accueil.tuile_echeances.contrats_a_decider', { n: contrats });
+    let detailContrats = complement(I18n.t('accueil.tuile_echeances.rien_a_decider'));
+    if (aDecider.length) {
+      if (aDecider.length < contrats) libelleContrats = I18n.t('accueil.tuile_echeances.contrats_a_decider_ou_bientot', { n: contrats });
+      detailContrats = complement(I18n.t('accueil.tuile_echeances.a_resilier_au_plus_tard',
+        { n: aDecider.length, date: UI.dateFr(aDecider[0].dateLimite) }), 'rouge');
+    } else if (contrats) {
+      libelleContrats = I18n.t('accueil.tuile_echeances.contrats_bientot', { n: contrats });
+      detailContrats = complement(I18n.t('accueil.tuile_echeances.premiere_fin', { n: contrats, date: UI.dateFr(etats[0].finPeriode) }), 'ambre');
+    }
+    const detailMiseAJour = aMettreAJour
+      ? complement(I18n.t('accueil.tuile_echeances.reconduits_nouvelle_periode', { n: aMettreAJour }), 'ambre')
+      : complement(I18n.t('accueil.tuile_echeances.rien_a_mettre_a_jour'));
+    const jours = I18n.t('accueil.tuile_echeances.jours', { n: delai });
+    return UI.html`<div class="bento-tuile bento-surveiller bento-echeances" id="bento-echeances">
+      <span class="bento-carre bleu">${chiffre(garanties + contrats + aMettreAJour)}</span>
+      <div class="bento-surveiller-corps">
+        <h2 class="lib">${I18n.t('accueil.tuile_echeances.garanties_contrats')}</h2>
+        ${sousLien(LIEN_GARANTIES_BIENTOT, 'bento-garanties-bientot', garanties,
+          I18n.t('accueil.tuile_echeances.garanties_finissent', { n: garanties, jours }), detailGaranties)}
+        ${sousLien(LIEN_CONTRATS_A_DECIDER, 'bento-contrats-a-decider', contrats, libelleContrats, detailContrats)}
+        ${sousLien(LIEN_CONTRATS_A_METTRE_A_JOUR, 'bento-contrats-a-mettre-a-jour', aMettreAJour,
+          I18n.t('accueil.tuile_echeances.contrats_a_mettre_a_jour', { n: aMettreAJour }), detailMiseAJour)}
+      </div>
+    </div>`;
+  }
+
   function tuilesSurveiller(compteurs, aujourdhui) {
     const critiques = compteurs.articlesACommander.filter((a) => a.article.critique === '1').length;
     // Suggestions est chargé après ce fichier : appelé au moment de l'affichage.
@@ -313,7 +373,8 @@ Object.assign(Accueil, (() => {
         critiques ? complement(I18n.t('accueil.tuiles_surveiller.dont_critiques', { n: critiques }), 'rouge') : complement(I18n.t('accueil.tuiles_surveiller.stock_point_commande')))}
       ${tuileConformite(compteurs, aujourdhui)}
       ${surveiller('#/preventif?onglet=suggestions', 'vert', suggestions.length, I18n.t('accueil.tuiles_surveiller.suggestions_preventif'),
-        surA ? complement(I18n.t('accueil.tuiles_surveiller.dont_criticite', { surA }), 'ambre') : complement(I18n.t('accueil.tuiles_surveiller.examiner')))}`;
+        surA ? complement(I18n.t('accueil.tuiles_surveiller.dont_criticite', { surA }), 'ambre') : complement(I18n.t('accueil.tuiles_surveiller.examiner')))}
+      ${tuileEcheances(compteurs, aujourdhui)}`;
   }
 
   // ===========================================================================================

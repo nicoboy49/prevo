@@ -543,8 +543,8 @@ class TestChiffres(CasBento):
                          d["controles"] + d["habilitations"] + len(d["reserves"]))
         self.assertEqual(conformite.locator("a").evaluate_all("l => l.map((a) => a.getAttribute('href'))"),
                          [LIEN_CONTROLES, LIEN_HABILITATIONS, LIEN_RESERVES])
-        # 3 tuiles « à surveiller »
-        self.assertEqual(page.locator("#bento .bento-surveiller").count(), 3)
+        # 4 tuiles « à surveiller » (« Garanties et contrats » depuis la 2.2, T485 : test_accueil_v22.py)
+        self.assertEqual(page.locator("#bento .bento-surveiller").count(), 4)
         # Listes : 5 au plus, la DI de sécurité d'abord, les OT les plus en retard d'abord ; « Tout voir (N) »
         demandes = page.locator("#bento-demandes li a")
         self.assertEqual(demandes.count(), min(5, len(d["di"])))

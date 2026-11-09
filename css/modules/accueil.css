@@ -47,7 +47,7 @@
    Responsable : accueil « bento » (T90, BRIEF_design_accueil.md)
    Grille de 12 colonnes internes (les 6 colonnes du brief), écart 16 px :
      synthèse 8 × 2 rangées · « en premier » 4 × 2 · 4 compteurs de 2 (3 sans la tuile du rapport) ·
-     rapport 4 · listes 6 + 6 · 3 tuiles « à surveiller » de 4.
+     rapport 4 · listes 6 + 6 · 3 tuiles « à surveiller » de 4 · « Garanties et contrats » de 12 (2.2).
    ========================================================================================= */
 
 /* --- en-tête : « Bonjour », date ; mention démo et « Exporter en ZIP » --- */
@@ -217,8 +217,14 @@ a.bento-tuile:hover { transform: translateY(-4px); border-color: var(--bord-bleu
 .bento-carre .chiffre { font-size: 1.625rem; color: inherit; }
 .bento-surveiller-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .bento-chevron { flex: none; width: 20px; height: 20px; color: var(--muted); }
-.bento-conformite { align-items: flex-start; }
-.bento-conformite h2.lib { margin-bottom: 2px; }
+.bento-conformite, .bento-echeances { align-items: flex-start; }
+.bento-conformite h2.lib, .bento-echeances h2.lib { margin-bottom: 2px; }
+/* « Garanties et contrats » (2.2, CS173) : sur sa propre ligne, toute la largeur, ses trois liens côte à côte ; la
+   ligne des trois tuiles d'avant ne change pas */
+.bento-surveiller.bento-echeances { grid-column: span 12; }
+.bento-echeances .bento-surveiller-corps { flex-direction: row; flex-wrap: wrap; column-gap: 24px; }
+.bento-echeances h2.lib { flex: 1 0 100%; }
+.bento-echeances .bento-sous-lien { flex: 1 1 240px; margin: 0; }
 /* Un lien par liste (contrôles, habilitations, réserves en retard) : chiffre, libellé, puis le détail coloré dessous */
 .bento-sous-lien {
   display: flex; align-items: center; gap: 10px; min-height: var(--tactile); margin: 0 -8px; padding: 4px 8px;
@@ -241,14 +247,14 @@ a.bento-tuile:hover { transform: translateY(-4px); border-color: var(--bord-bleu
 /* --- PC étroit et tablette (moins de 1360 px : moins de 1 030 px de contenu) : la grille du brief y
    serrerait trop les compteurs et les tuiles « à surveiller ». Le rapport passe sur sa propre ligne
    (les compteurs gardent la leur), « Articles » et « Suggestions » côte à côte, « Contrôles et
-   habilitations » dessous, sur toute la largeur. --- */
+   habilitations » dessous, puis « Garanties et contrats », sur toute la largeur. --- */
 @media (max-width: 1359.98px) {
   .bento:has(> .bento-rapport) .bento-compteur { grid-column: span 3; }
   .bento-rapport { grid-column: span 12; flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 20px; }
   .bento-rapport-texte { flex: 1 1 320px; min-width: 0; }
   .bento-rapport-actions { margin-top: 0; }
   .bento-surveiller { grid-column: span 6; }
-  .bento-conformite { grid-column: span 12; order: 1; }
+  .bento-conformite, .bento-echeances { grid-column: span 12; order: 1; }
   .bento-conformite .bento-surveiller-corps { flex-direction: row; flex-wrap: wrap; column-gap: 24px; }
   .bento-conformite h2.lib { flex: 1 0 100%; }
   .bento-conformite .bento-sous-lien { flex: 1 1 240px; margin: 0; }
@@ -269,9 +275,9 @@ a.bento-tuile:hover { transform: translateY(-4px); border-color: var(--bord-bleu
 }
 /* Moins de 900 px : les tuiles « à surveiller » l'une sous l'autre, dans l'ordre */
 @media (max-width: 899.98px) {
-  .bento-surveiller, .bento-conformite { grid-column: span 12; order: 0; }
-  .bento-conformite .bento-surveiller-corps { flex-direction: column; }
-  .bento-conformite .bento-sous-lien { flex: none; margin: 0 -8px; }
+  .bento-surveiller, .bento-conformite, .bento-echeances { grid-column: span 12; order: 0; }
+  .bento-conformite .bento-surveiller-corps, .bento-echeances .bento-surveiller-corps { flex-direction: column; }
+  .bento-conformite .bento-sous-lien, .bento-echeances .bento-sous-lien { flex: none; margin: 0 -8px; }
 }
 @media (min-width: 641px) and (max-width: 799.98px) {
   .bento-compteur, .bento:has(> .bento-rapport) .bento-compteur { grid-column: span 6; }
