@@ -1598,6 +1598,29 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   pannes ; « sans code » à part) ; `chargeCapacite(lundi, 4)` (délègue à `Planning.chargeSemaine`).
 - Performance : un index par équipement / par OT construit une fois par calcul (pas de recherche
   linéaire dans une boucle) ; budget CS49.
+- **Coût de l'arrêt** (2.2, D188, CS174 ; `indicateurs-series.js` §8, T470). Périmètre = celui du Pareto des
+  arrêts (`Indicateurs.pannes` : mêmes OT, équipements au rebut ou désactivés compris). Formule : pour chaque
+  équipement, Σ des `duree_arret_h` de ses pannes × `equipements.cout_arret_h` **actuel** de la fiche (pas
+  d'historique de tarif). Calcul **en entiers, sans flottant** : coût horaire en centimes, durée en
+  dix-millièmes d'heure (lus chiffre à chiffre dans la forme normalisée de `Donnees.normaliser.decimal`,
+  arrondi moitié vers le haut au-delà), puis **un seul arrondi au centime par équipement** (moitié vers le
+  haut, division entière exacte) ; le total est la somme des lignes arrondies. Rien n'est estimé : pas de coût
+  horaire par défaut, 0 saisi = chiffré à 0 ; un équipement sans coût lisible (vide, illisible, négatif,
+  introuvable) est **non chiffré**, une panne sans durée est **sans durée** ; les deux sont listés.
+  - `Indicateurs.coutArret(periode, filtres)` → `{ totalCentimes, total (= totalCentimes / 100),
+    parEquipement: [{ equipementId, heures, coutHoraireCentimes, centimes, ots }] (par coût décroissant),
+    nonChiffres: [{ equipementId, heures, ots }] (par heures décroissantes), sansDuree: [{ otId, equipementId,
+    raison }] (« sans durée d'arrêt » si l'OT est clôturé, « non clôturé » sinon), complet }` ; `complet` =
+    rien de non chiffré ni de sans durée.
+  - `Indicateurs.paretoCoutArret(periode, n = 10, filtres)` → `[{ equipementId, valeur (€), centimes, heures,
+    cumulPct, ots }]` : les n premiers équipements chiffrés à plus de 0 €, cumul en % du total chiffré.
+  - Les filtres de criticité et d'atelier s'appliquent comme aux autres graphiques. Fonctions de lecture
+    exposées en `Indicateurs.interne` : `centimesDuCoutHoraire`, `dixMilliemesDHeure`.
+- **Coût horaire de l'équipement** (T471) : champ « coût d'une heure d'arrêt » du formulaire (`parc-regles.js`,
+  vide permis ; sinon positif ou nul, au centime, `MONTANT_AU_CENTIME`) ; ligne de la fiche (`parc-fiche.js`,
+  « 850,00 €/h » ou « non chiffré », `Parc.interne.coutArretHoraire`) montrée au **responsable seul** : le
+  serveur cache la colonne aux autres profils (section serveur), elle ne doit jamais s'y afficher en
+  faux « non chiffré ».
 
 ### 15.4 Indicateurs — écran (`indicateurs-graphiques.js`, `indicateurs-ecrans.js`)
 - `#/indicateurs` : `?periode=mois|mois-precedent|3-mois|12-mois|du-au&du=&au=`, `?criticite=`,
@@ -1608,6 +1631,13 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   `NaN`, `Infinity`, `undefined`. Encadré « Comprendre » : les définitions du §15.3 en français simple.
   Écart retenu (D35, correction de relecture) : sous chaque chiffre qui a des OT sources, une liste
   repliée « n OT sources · n OT exclus » donne un lien par OT (40 au plus) et la raison des exclus.
+- **Coût de l'arrêt** (T474, responsable seul, CS174) : 3ᵉ Pareto « Coût de l'arrêt » (`Indicateurs.paretoCoutArret`,
+  10 premiers, tableau « Voir les valeurs » : heures, coût horaire, coût, cumul) avec en note le total de la
+  période (« non chiffré » quand des pannes existent et qu'aucune n'est chiffrée, jamais un faux 0,00 €) et, si
+  le calcul est incomplet, « Partiel : n équipements non chiffrés, n OT sans durée » ; carte « Non chiffré »
+  (`.indicateurs-non-chiffre`) listant en entier les équipements sans coût horaire avec leurs heures d'arrêt et le
+  lien « Saisir le coût horaire » (formulaire de l'équipement) et les OT sans durée avec leur raison. Filtres de
+  criticité et d'atelier respectés ; l'encadré « Comprendre » ajoute la définition du coût de l'arrêt.
 - Tableau par équipement (repère, criticité, pannes, arrêt, MTBF, MTTR, disponibilité, coût), tri
   par clic, lien vers la fiche.
 - `Indicateurs.graphique(conteneur, { titre, option, colonnes, lignes, nomFichier })` :
@@ -1898,6 +1928,16 @@ le rapport de <mois> » (avec élision : « d'octobre », « d'août ») ; rien 
   si le nom figure déjà dans `rapports_mensuels` (jamais d'écrasement : `ecrireDocument` refuse un
   nom existant) ; puis `rapports_mensuels` complété (`Donnees.modifier('parametres')`) et journal
   (« rapport mensuel figé : … »).
+- **Coût de l'arrêt dans le rapport** (T472, CS174) : `Rapport.donnees` ajoute `paretoCout` (5 premiers,
+  `Indicateurs.paretoCoutArret`) et `coutArret` (le résultat de `Indicateurs.coutArret` du mois plus la
+  `tendance` de la tuile). **4ᵉ tuile** « Coût de l'arrêt », au centime ; sous la valeur, `precision` dit
+  « Partiel : … » (équipements non chiffrés, OT sans durée) ou « aucun arrêt » ; quand le mois a des pannes et
+  qu'aucune n'est chiffrée, la valeur est « non chiffré ». Comparaison au mois précédent et à l'an passé
+  seulement entre deux mois **complets** (sinon « non comparable »). « Non calculable » cite les non chiffrés puis
+  les OT sans durée, 8 repères au plus puis « et n autres » (liste complète à l'écran Indicateurs). Le Pareto par
+  coût vient en 2ᵉ graphique à côté du Pareto des heures et des heures sur 12 mois (trois graphiques à la
+  largeur d'une colonne A4) ; le bloc « Comprendre » définit le coût de l'arrêt ; la mise en page A4 est
+  resserrée (`@page` 11 × 12 mm, « Comprendre » en 8,5 pt) pour tenir toujours sur **une page**.
 - `Rapport.moisAProposer(aujourdhui)` → mois précédent si aucun rapport de ce mois n'est dans
   `rapports_mensuels` et que l'historique couvre ce mois, sinon `null`.
 - `Rapport.texteCourriel(donnees)` → objet et corps (résumé en texte) ; bouton « Préparer un
@@ -1950,6 +1990,9 @@ n'est plus vide (77 lignes au lot 3, au format réel « <description> — <actio
 §15.3 ; le lot 3 bis y ajoute une décision brute « suggestion … ignorée : … », §16.4) ;
 le pont roulant cite aussi « art. 23 » ; la démo garde `delai_p1_h` = 0 (« immédiat ») : la cible P1
 n'affiche donc que la médiane (§15.3).
+2.2 (T475) : `COUTS_ARRET_DEMO` renseigne `cout_arret_h` sur six équipements de criticité A et B (CP-01, PR-01,
+CU-01 à 655,25, AE-01, EM-01, RB-01) ; les autres restent non chiffrés, dont CH-01, nouveau rôle
+`equipement_non_chiffre` (une panne à durée le dernier mois) ; le jeu volumineux n'en renseigne aucun.
 
 ### 15.13 Tests du lot 3
 Un fichier par sujet : `test_socle_lot3.py`, `test_regles_indicateurs.py` (règles des indicateurs,
