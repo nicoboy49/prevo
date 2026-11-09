@@ -668,7 +668,7 @@ const Ordres = (() => {
       texte, nombre, arrondi, aujourdhui, estResponsable, estTechnicien, monTechnicienId,
       equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, libelleArticle, listeCodes,
       lignesDeLOt, operationsDe, placerChamp, champOt, statutDeReprise, quantitesPrevues,
-      habilitationsManquantes, detailManque, refusHabilitation, messageRefusHabilitation,
+      habilitationsManquantes, detailManque, refusHabilitation, messageRefusHabilitation, libelleManquante,
     },
   };
 })();

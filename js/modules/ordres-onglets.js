@@ -1,6 +1,6 @@
 'use strict';
 // Ordres (5/7) — contenu des onglets de la fiche OT (ARCHITECTURE.md §14.2 et §14.6) : Préparation
-// (causes fréquentes, travail, technicien et RG8, opérations, pièces prévues et stock RG3),
+// (causes fréquentes, travail, technicien — RG8 dans ordres-habilitations.js —, opérations, pièces et stock RG3),
 // Exécution (check-list, déroulement, temps passés, pièces sorties de ordres-pieces.js), Compte
 // rendu (causes fréquentes, codes, compte rendu, astuce du lot 6, assistant IA du lot 4, clôture
 // technique RG4, coût RG7) et Historique de l'équipement. Complète l'objet Ordres ; la fiche
@@ -9,11 +9,11 @@
 Object.assign(Ordres, (() => {
 
   // Constantes, outils, règles et écritures des fichiers précédents (ordres-regles.js à ordres-fiche.js).
-  const { estVerrouille, verifierHabilitation, piecesManquantes, cout, nomTechnicien } = Ordres;
+  const { estVerrouille, piecesManquantes, cout, nomTechnicien } = Ordres;
   const { texte, nombre, arrondi, aujourdhui, estResponsable, estTechnicien, monTechnicienId, equipementDe,
     listeTechniciens, libelleArticle, listeCodes, lignesDeLOt, operationsDe, placerChamp, champOt,
     modifierOt, modifierLieeAOt, optionsHtml, boutonsTransitions,
-    declarerFormulaire, apresEnregistrement, pendant, listeErreursHtml, bandeauHabilitation, enteteOnglet,
+    declarerFormulaire, apresEnregistrement, pendant, listeErreursHtml, enteteOnglet,
     lienOt, detailManque, garderLeCompteRendu } = Ordres.interne;
 
   // Fonction du fichier chargé APRÈS celui-ci (ordres-pieces.js) : cherchée au moment de l'appel.
@@ -69,27 +69,17 @@ Object.assign(Ordres, (() => {
     placer('technicien_id', champOt('technicien_id', ot.technicien_id, { liste: listeTechniciens(ot.technicien_id) }));
     placer('date_prevue', champOt('date_prevue', ot.date_prevue));
     placer('temps_prevu_h', champOt('temps_prevu_h', ot.temps_prevu_h));
-    const montrerHabilitation = () => {
-      const valeurs = UI.lireFormulaire(formulaire);
-      const zone = UI.$('.ot-zone-habilitation', formulaire);
-      zone.textContent = '';
-      if (verifierHabilitation(ot.equipement_id, valeurs.technicien_id, valeurs.date_prevue)) {
-        zone.appendChild(bandeauHabilitation(ot.equipement_id, valeurs.technicien_id, valeurs.date_prevue));
-      }
-    };
-    montrerHabilitation();
-    formulaire.addEventListener('change', montrerHabilitation);
+    // RG8 (ordres-habilitations.js) : bandeau du refus en direct, l'OT tel qu'il serait enregistré.
+    Ordres.interne.brancherZoneHabilitation(formulaire, (valeurs) => Object.assign({}, ot, valeurs));
     if (modifiable) {
       const enregistrer = () => enregistrerPreparation(ot, formulaire);
       declarerFormulaire(formulaire, enregistrer);
       formulaire.addEventListener('submit', async (evenement) => {
         evenement.preventDefault();
-        const resultat = await enregistrer();
-        if (!resultat) return;
+        if (!(await enregistrer())) return;
         formulaire.dataset.modifie = '0';
         await apresEnregistrement();
-        if (typeof resultat === 'string') UI.toast(resultat, 'attention');   // avertissement d'habilitation
-        else UI.toast(I18n.t('ordres.preparation.preparation_enregistree'), 'succes');
+        UI.toast(I18n.t('ordres.preparation.preparation_enregistree'), 'succes');
       });
     }
     placerCausesFrequentes(UI.$('.ot-causes', panneau), ot);
@@ -99,8 +89,8 @@ Object.assign(Ordres, (() => {
   }
 
   /**
-   * Enregistre la préparation ; RG8 : avertissement au journal si le technicien n'est pas habilité.
-   * Renvoie false (échec), true (enregistré) ou le texte de l'avertissement d'habilitation (enregistré).
+   * Enregistre la préparation ; renvoie true (enregistré) ou false. RG8 (D186) : un refus d'habilitation ouvre la
+   * fenêtre du responsable (Ordres.avecDerogation, ordres-habilitations.js) ; annulée, rien n'est écrit.
    */
   async function enregistrerPreparation(ot, formulaire) {
     if (UI.verifierFormulaire(formulaire).length) return false;
@@ -109,14 +99,8 @@ Object.assign(Ordres, (() => {
       travail_a_faire: valeurs.travail_a_faire, consignes: valeurs.consignes, technicien_id: valeurs.technicien_id,
       date_prevue: valeurs.date_prevue, temps_prevu_h: valeurs.temps_prevu_h,
     };
-    const changes = await pendant(UI.$('button[type=submit]', formulaire), () => modifierOt(ot.id, changements, I18n.donnees('ordres.enregistrer_preparation.preparation')), I18n.t('ordres.enregistrer_preparation.preparation'));
-    if (changes === undefined) return false;
-    const affectation = changes.includes('technicien_id') || changes.includes('date_prevue');
-    const habilitation = verifierHabilitation(ot.equipement_id, valeurs.technicien_id, valeurs.date_prevue);
-    if (affectation && habilitation) {
-      return I18n.t('ordres.enregistrer_preparation.preparation_enregistree_avertissement_habilitation', { habilitation });
-    }
-    return true;
+    const changes = await pendant(UI.$('button[type=submit]', formulaire), () => Ordres.avecDerogation((options) => modifierOt(ot.id, changements, I18n.donnees('ordres.enregistrer_preparation.preparation'), options)), I18n.t('ordres.enregistrer_preparation.preparation'));
+    return changes !== undefined;
   }
 
   // --- Opérations (ot_operations) : ajoutables et modifiables, jamais supprimées ---

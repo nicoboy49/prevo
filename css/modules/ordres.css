@@ -58,6 +58,12 @@
 .ot-message .alerte .actions .btn { margin-left: 0; }
 .ot-bandeau-etat:empty { display: none; }
 .ot-bandeau-etat { margin-bottom: 18px; }
+.ot-bandeau-etat > * + * { margin-top: 10px; }
+
+/* RG8 (2.2) : fenêtre « Habilitation exigée non valide », passer outre (responsable seul, case et motif obligatoires) */
+.ot-derogation p { margin: 0; overflow-wrap: anywhere; }
+.ot-derogation .ot-derogation-case { font-weight: 600; align-items: flex-start; }
+.ot-fenetre-derogation .ot-passer-outre:disabled { cursor: not-allowed; }
 
 /* =========================================================================================
    3. Onglets : formulaires, tableaux de saisie, temps passés, coût

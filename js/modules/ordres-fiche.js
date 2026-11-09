@@ -9,16 +9,16 @@
 Object.assign(Ordres, (() => {
 
   // Constantes, outils, règles et écritures des fichiers précédents (ordres-regles.js à ordres-liste.js).
-  const { PRIORITES, transitionsPossibles, verifierPassage, verifierHabilitation,
+  const { PRIORITES, transitionsPossibles, verifierPassage,
     piecesManquantes, estVerrouille, datePrevueParDefaut, libelleEquipement, nomTechnicien,
     creer, changerStatut, changerPriorite, creerOtLie } = Ordres;
-  const { ETAPES, STATUTS_CLOTURES, memoire, texte, aujourdhui, estResponsable, estTechnicien,
-    equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, placerChamp, champOt,
-    statutDeReprise, habilitationsManquantes, optionsHtml, badgeRetard,
+  const { ETAPES, STATUTS_CLOTURES, memoire, texte, estResponsable, estTechnicien,
+    equipementDe, cheminLocalisation, listeTechniciens, placerChamp, champOt,
+    statutDeReprise, optionsHtml, badgeRetard,
     badgeAnomalie, origineHtml, changerAnomalie, lireAvertissementGamme, detailManque } = Ordres.interne;
 
-  // Fonctions des fichiers chargés APRÈS celui-ci (ordres-onglets.js, ordres-impression.js) :
-  // elles sont cherchées au moment de l'appel, pas au chargement de ce fichier.
+  // Fonctions des fichiers chargés APRÈS celui-ci (ordres-onglets.js, ordres-impression.js, et RG8 à l'écran :
+  // ordres-habilitations.js) : elles sont cherchées au moment de l'appel, pas au chargement de ce fichier.
   const afficherPreparation = (panneau, ot) => Ordres.interne.afficherPreparation(panneau, ot);
   const afficherExecution = (panneau, ot) => Ordres.interne.afficherExecution(panneau, ot);
   const afficherCompteRendu = (panneau, ot) => Ordres.interne.afficherCompteRendu(panneau, ot);
@@ -81,30 +81,23 @@ Object.assign(Ordres, (() => {
     placer('technicien_id', champOt('technicien_id', technicienParDefaut, { liste: listeTechniciens(technicienParDefaut) }));
     placer('date_prevue', champOt('date_prevue', datePrevueParDefaut(priorite), { aide: I18n.t('ordres.nouveau.defaut_creation_delai_priorite') }));
 
+    formulaire.addEventListener('change', (evenement) => {
+      if (evenement.target.name !== 'priorite') return;
+      UI.$('[name="date_prevue"]', formulaire).value = datePrevueParDefaut(evenement.target.value);
+    });
+    // RG8 en direct (ordres-habilitations.js, chargé après) : l'OT tel qu'il serait créé ; écouteur posé après celui
+    // de la priorité, qui change la date prévue.
+    let revoirHabilitation = () => {};
     const selecteur = UI.selecteurEquipement(UI.$('#ot-nouveau-equipement', formulaire), {
       equipements: Donnees.lignes('equipements'), localisations: Donnees.lignes('localisations'),
-      valeur: requete.get('equipement') || '', surChoix: () => montrerHabilitationNouvelOt(formulaire, selecteur),
+      valeur: requete.get('equipement') || '', surChoix: () => revoirHabilitation(),
     });
-    montrerHabilitationNouvelOt(formulaire, selecteur);
-    formulaire.addEventListener('change', (evenement) => {
-      if (evenement.target.name === 'priorite') {
-        const champDate = UI.$('[name="date_prevue"]', formulaire);
-        champDate.value = datePrevueParDefaut(evenement.target.value);
-      }
-      montrerHabilitationNouvelOt(formulaire, selecteur);
-    });
+    revoirHabilitation = Ordres.interne.brancherZoneHabilitation(formulaire,
+      (valeurs) => Object.assign({}, valeurs, { equipement_id: selecteur.valeur() }));
     formulaire.addEventListener('submit', (evenement) => {
       evenement.preventDefault();
       validerNouvelOt(formulaire, selecteur, urgence, (requete.get('reserve') || '').trim());
     });
-  }
-
-  function montrerHabilitationNouvelOt(formulaire, selecteur) {
-    const valeurs = UI.lireFormulaire(formulaire);
-    const zone = UI.$('.ot-zone-habilitation', formulaire);
-    zone.textContent = '';
-    const message = verifierHabilitation(selecteur.valeur(), valeurs.technicien_id, valeurs.date_prevue);
-    if (message) zone.appendChild(bandeauHabilitation(selecteur.valeur(), valeurs.technicien_id, valeurs.date_prevue));
   }
 
   async function validerNouvelOt(formulaire, selecteur, urgence, reserveId) {
@@ -117,11 +110,12 @@ Object.assign(Ordres, (() => {
     const bouton = UI.$('button[type=submit]', formulaire);
     bouton.disabled = true;
     try {
-      const id = await creer({
+      // RG8 (D186) : un refus d'habilitation ouvre la fenêtre du responsable, qui peut passer outre avec un motif.
+      const id = await Ordres.avecDerogation((options) => creer({
         origine: urgence ? 'urgence' : 'manuel', equipement_id: selecteur.valeur(), titre: valeurs.titre,
         type: urgence ? 'correctif immédiat' : valeurs.type, priorite: urgence ? 'P1' : valeurs.priorite,
         travail_a_faire: valeurs.travail_a_faire, technicien_id: valeurs.technicien_id, date_prevue: valeurs.date_prevue,
-      });
+      }, options), { equipementId: selecteur.valeur() });
       App.marquerSaisie(false);
       // Depuis une réserve (T420) : l'OT créé lui est relié ; un lien refusé (réserve levée ou reliée ailleurs
       // entre-temps) laisse l'OT créé, le toast dit pourquoi (raison : null si relié, ou sans réserve).
@@ -366,6 +360,8 @@ Object.assign(Ordres, (() => {
       <div class="ot-onglets"></div>`);
     const etat = bandeauEtat(ot);
     if (etat) UI.$('.ot-bandeau-etat', racine).appendChild(etat);
+    const derogation = Ordres.interne.bandeauDerogation(ot);      // RG8 : ordres-habilitations.js, chargé après
+    if (derogation) UI.$('.ot-bandeau-etat', racine).appendChild(derogation);
 
     UI.onglets(UI.$('.ot-onglets', racine), [
       { id: 'preparation', libelle: I18n.t('ordres.fiche.preparation'), afficher: (panneau) => afficherPreparation(panneau, ot) },
@@ -455,7 +451,9 @@ Object.assign(Ordres, (() => {
     const complement = await demanderComplement(actuel, cible);
     if (complement === null) { if (sauvegarde.enregistres) await apresEnregistrement(); return; }
     const verification = verifierPassage(Object.assign({}, actuel, complement), cible);
-    if (!verification.ok) {
+    // « Planifier » refusé par RG8 seule : le responsable peut passer outre (fenêtre d'Ordres.avecDerogation).
+    const derogeable = Boolean(verification.habilitation) && verification.erreurs.length === 1 && estResponsable();
+    if (!verification.ok && !derogeable) {
       if (sauvegarde.enregistres) await apresEnregistrement();
       afficherRefus(actuel, cible, verification);
       return;
@@ -463,7 +461,7 @@ Object.assign(Ordres, (() => {
     if (cible === 'Clôturé administrativement' && !(await UI.confirmer(
       I18n.t('ordres.demander_transition.ot_sera_verrouille_plus', { actuelId: actuel.id }),
       { titre: I18n.t('ordres.cloture_administrativement.cloturer_administrativement'), oui: I18n.t('ordres.demander_transition.cloturer_verrouiller') }))) return;
-    const reussi = await pendant(bouton, () => changerStatut(actuel.id, actuel.statut, cible, complement), I18n.t('ordres.demander_transition.changement_statut'));
+    const reussi = await pendant(bouton, () => Ordres.avecDerogation((options) => changerStatut(actuel.id, actuel.statut, cible, complement, options)), I18n.t('ordres.demander_transition.changement_statut'));
     if (reussi === undefined) return;
     await apresEnregistrement();
     // Clôture d'un préventif dont la gamme n'a pas pu être mise à jour (RG5) : l'avertissement
@@ -615,14 +613,6 @@ Object.assign(Ordres, (() => {
     UI.toast(avertissementGamme || I18n.t('ordres.demander_clore.cloture_techniquement_administrativement', { actuelId: actuel.id }), avertissementGamme ? 'attention' : 'succes');
   }
 
-  /** Avertissement RG8 affichable (texte complet, avec le nom du technicien et l'équipement). */
-  function bandeauHabilitation(equipementId, technicienId, date) {
-    const equipement = Donnees.trouver('equipements', equipementId);
-    const jour = texte(date).slice(0, 10) || aujourdhui();
-    const manquantes = habilitationsManquantes(equipement, technicienId, jour);
-    return UI.bandeau('attention', UI.html`${I18n.html('ordres.bandeau_habilitation.avertissement_habilitation_pas_habilitation', { nomTechnicien: nomTechnicien(technicienId), technicienId, join: manquantes.join(', '), jour: UI.dateFr(jour), repereEquipement: repereEquipement(equipementId) })}`);
-  }
-
   // Panneau d'onglet : zone de titre + contenu en lecture seule ou modifiable.
   function enteteOnglet(titre, explication) {
     return UI.html`<div class="entete-carte"><h2>${titre}</h2>${explication ? UI.html`<span class="aide">${explication}</span>` : ''}</div>`;
@@ -679,7 +669,7 @@ Object.assign(Ordres, (() => {
   // Outils prêtés aux fichiers suivants du module (usage interne).
   Object.assign(Ordres.interne, {
     afficherNouveau, afficherFiche, boutonsTransitions, declarerFormulaire, apresEnregistrement, pendant,
-    listeErreursHtml, bandeauHabilitation, enteteOnglet, lienOt,
+    listeErreursHtml, enteteOnglet, lienOt,
     garderLeCompteRendu,
   });
 

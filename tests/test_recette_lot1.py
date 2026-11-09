@@ -643,7 +643,9 @@ class TestRecetteHabilitation(CasRecette):
         page.wait_for_selector("#form-preparation .ot-zone-habilitation .alerte")
         self.assertIn("BR", page.inner_text("#form-preparation .ot-zone-habilitation"))
         page.click("#form-preparation button[type=submit]")
-        # RG8 bloquante (T437, D186) : l'affectation est refusée, rien n'est écrit (passer outre : T438).
+        # RG8 bloquante (T437, D186) : l'affectation est refusée ; la fenêtre « passer outre » du responsable (T438)
+        # est annulée : rien n'est écrit, le refus est redit.
+        page.click("dialog.ot-fenetre-derogation .fenetre-actions .btn-fantome")
         self.attendre_toast("Affectation refusée")
         self.assertIn("(%s) n'a pas d'habilitation valide au %s : BR (échue le " % (
             TECHNICIEN_BR_ECHUE, "/".join(reversed(date_prevue.split("-")))), page.inner_text("#toast"))

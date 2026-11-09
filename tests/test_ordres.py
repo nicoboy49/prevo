@@ -394,8 +394,9 @@ class TestParcours(CasOrdres):
             self.assertRegex(ligne["date_debut"], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
 
     def test_habilitation_refus_affiche_rien_d_ecrit(self):
-        # RG8 bloquante (T437, D186) : l'affectation sans BR valide est refusée par l'écriture ; le message
-        # d'erreur commun le dit (la fenêtre « passer outre » est T438) ; rien n'est écrit, ni l'OT ni le journal.
+        # RG8 bloquante (T437, D186) : l'affectation sans BR valide est refusée par l'écriture ; la fenêtre « passer
+        # outre » du responsable (T438, tests/test_rg8_ecrans.py) est annulée, le message d'erreur commun redit le
+        # refus ; rien n'est écrit, ni l'OT ni le journal.
         page = self.page
         with ServeurPrevo() as serveur:
             self.ouvrir(serveur, "#/ot")
@@ -409,6 +410,7 @@ class TestParcours(CasOrdres):
             self.assertIn("BR", avertissement)
             self.assertIn("TEC-0004", avertissement)
             page.click("#form-preparation button[type=submit]")
+            page.click("dialog.ot-fenetre-derogation .fenetre-actions .btn-fantome")       # Annuler
             page.wait_for_function("document.getElementById('toast').textContent.includes('Affectation refusée')")
             toast = page.inner_text("#toast")
             self.assertIn("(TEC-0004) n'a pas d'habilitation valide au 21/10/2026 : BR (échue le 31/05/2026).", toast)

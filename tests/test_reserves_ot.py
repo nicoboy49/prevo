@@ -192,6 +192,7 @@ class TestServeur(CasReservesOt):
             # RG8 suivie : l'équipement exige la BR, le technicien à la BR échue est refusé, rien n'est écrit
             page.select_option(FORMULAIRE + "[name=technicien_id]", TEC_ECHUE)
             page.click(FORMULAIRE + "button[type=submit]")
+            page.click("dialog.ot-fenetre-derogation .fenetre-actions .btn-fantome")   # « passer outre » (T438) annulé
             self.attendre_toast("Affectation refusée")
             self.assertEqual(page.evaluate("location.hash.split('?')[0]"), "#/ot/nouveau")
             self.assertEqual((dossier / "ordres_travail.csv").read_bytes(), ordres_avant)
