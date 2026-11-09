@@ -16,9 +16,10 @@ jeux de tests/fixtures/formats/ sont copiés dans un dossier temporaire puis éc
     avant-import-zip   documents/ copié aussi (à l'octet, sous-dossiers exclus) et compté dans le manifeste ; une
                        manuelle ne copie pas documents/ ;
     avant-mise-a-jour  application entière (index.html) : premier démarrage sur f2-v1.1.0 (octets d'ORIGINE dans la
-                       sauvegarde, « de » null et « vers », derniere-version.json écrit, passage au format 3 ensuite) et
-                       sur f3-v1.2.0 avec la version « 1.2.0 » notée ; seconde ouverture : rien ; même version notée :
-                       rien ; jeu plus-recent (lecture seule) : aucun octet écrit ; échec : bandeau, l'application
+                       sauvegarde, « de » null et « vers », derniere-version.json écrit, passage au format courant
+                       ensuite) et sur f4-v2.2.0 (format courant : rien à passer) avec la version « 1.2.0 » notée ;
+                       seconde ouverture : rien ; même version notée, sur f4-v2.2.0 : rien ; jeu plus-recent (lecture
+                       seule) : aucun octet écrit ; échec : bandeau, l'application
                        continue, rien n'est noté, nouvel essai réussi à l'ouverture suivante ; base vide : version notée,
                        aucune sauvegarde « avant-mise-a-jour » ;
     libellés           Paramètres › Sauvegardes : « Avant un import ZIP », « Avant la mise à jour de Prévo ».
@@ -50,7 +51,8 @@ DATE_HEURE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 MOTIF_QUOTIDIENNE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MOTIF_MANUELLE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 MOTIF_AVANT_MISE_A_JOUR = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-mise-a-jour$")
-MOTIF_AVANT_FORMAT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v3$")
+MOTIF_AVANT_FORMAT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v%d$" % FORMAT_COURANT)
+JEU_AU_FORMAT_COURANT = "f4-v2.2.0"          # base de la 2.2 : rien à passer au format courant à l'ouverture
 HORLOGE = "2026-04-10T10:00:00"
 AUJOURDHUI = datetime.date(2026, 4, 10)
 
@@ -336,7 +338,7 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
 
 class TestAvantMiseAJour(CasSauvegardesDossier):
 
-    def test_premier_demarrage_f2_v1_1_0_sauvegarde_d_origine_note_puis_passage_au_format_3(self):
+    def test_premier_demarrage_f2_v1_1_0_sauvegarde_d_origine_note_puis_passage_au_format_courant(self):
         origine = fichiers_du_jeu("f2-v1.1.0")
         self.assertNotIn(DERNIERE_VERSION, origine)
         csv_origine = csv_de_la_racine(origine)
@@ -354,7 +356,8 @@ class TestAvantMiseAJour(CasSauvegardesDossier):
                                 complements=[("de", None), ("vers", VERSION_APPLI)])
         self.verifier_note(apres)
 
-        # Puis le passage au format 3 (T186) : sa sauvegarde « avant-format-v3 » vient après, avec les mêmes octets.
+        # Puis le passage au format courant (T186) : sa sauvegarde « avant-format-vN » vient après, avec les mêmes
+        # octets.
         self.assertIn(b"version_schema;'%d" % FORMAT_COURANT, apres["parametres.csv"])
         avant_format = [nom for nom in dossiers if MOTIF_AVANT_FORMAT.match(nom)]
         self.assertEqual(len(avant_format), 1, dossiers)
@@ -363,21 +366,23 @@ class TestAvantMiseAJour(CasSauvegardesDossier):
             self.assertTrue(nom in maj + avant_format or MOTIF_QUOTIDIENNE.match(nom), dossiers)
             copie = contenu_sauvegarde(apres, nom)
             self.assertEqual({c: o for c, o in copie.items() if c != MANIFESTE}, csv_origine, nom)
+        # Le passage au format 4 crée reserves_controle.csv : un contrôle de f2-v1.1.0 a des observations, reprises en
+        # réserves (D183, CONCEPTION-L1 §3.2) ; garanties et contrats_prestataires restent absentes (§3.3).
         nouveaux = {chemin for chemin in set(apres) - set(origine) if not chemin.startswith("sauvegardes/")}
-        self.assertEqual(nouveaux, {VERROU, DERNIERE_VERSION})
+        self.assertEqual(nouveaux, {VERROU, DERNIERE_VERSION, "reserves_controle.csv"})
 
         # Seconde ouverture : rien n'est écrit (verrou.txt mis à part).
         self.rouvrir_app()
         self.assertEqual(sans_verrou(self.instantane()), sans_verrou(apres))
 
-    def test_premier_demarrage_f3_v1_2_0_version_notee_differente(self):
-        origine = fichiers_du_jeu("f3-v1.2.0")
+    def test_premier_demarrage_f4_v2_2_0_version_notee_differente(self):
+        origine = fichiers_du_jeu(JEU_AU_FORMAT_COURANT)
         origine[DERNIERE_VERSION] = b'{"version": "1.2.0", "depuis": "2026-01-05T08:00:00"}\r\n'
         csv_origine = csv_de_la_racine(origine)
         self.ouvrir_app(origine)
         apres = self.instantane()
 
-        # Seule la sauvegarde « avant-mise-a-jour » (rien à passer au format 3, aucune écriture de CSV).
+        # Seule la sauvegarde « avant-mise-a-jour » (rien à passer au format courant, aucune écriture de CSV).
         dossiers = dossiers_de_sauvegarde(apres)
         self.assertEqual(len(dossiers), 1, dossiers)
         self.assertRegex(dossiers[0], MOTIF_AVANT_MISE_A_JOUR)
@@ -393,7 +398,7 @@ class TestAvantMiseAJour(CasSauvegardesDossier):
         self.assertEqual(sans_verrou(self.instantane()), sans_verrou(apres))
 
     def test_meme_version_notee_rien_n_est_ecrit(self):
-        origine = fichiers_du_jeu("f3-v1.2.0")
+        origine = fichiers_du_jeu(JEU_AU_FORMAT_COURANT)
         origine[DERNIERE_VERSION] = json.dumps({"version": VERSION_APPLI, "depuis": "2026-10-28T09:00:00"}).encode("utf-8")
         self.ouvrir_app(origine)
         self.assertEqual(sans_verrou(self.instantane()), origine)

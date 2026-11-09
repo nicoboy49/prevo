@@ -46,8 +46,8 @@ import re
 import unittest
 
 from commun import ServeurPrevo
-from test_recette_socle import (EQUIPEMENT, NOM_DOSSIER, CasRecetteSocle, csv_de_la_racine, fichiers_de,
-                                fichiers_du_jeu, lire_table)
+from test_recette_socle import (EQUIPEMENT, ERREUR_TABLE_DU_FORMAT_4_ABSENTE, NOM_DOSSIER, CasRecetteSocle,
+                                csv_de_la_racine, fichiers_de, fichiers_du_jeu, lire_table)
 
 JEU = "f3-v1.2.0"
 FICHIER = "equipements.csv"
@@ -219,6 +219,8 @@ class TestVerrouServeur(CasFichierVerrouille):
 
     def test_csv_ouvert_ailleurs_message_saisie_gardee_rien_ecrit_puis_nouvel_essai(self):
         self.autoriser_erreur(ERREUR_423)
+        # Jeu au format 3 : le passage au format 4 ne crée ni garanties ni contrats_prestataires (CONCEPTION-L1 §3.3).
+        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)
         with ServeurPrevo(source=self.jeu(JEU)) as serveur:
             self.ouvrir_serveur(serveur.url, "responsable")
             saisie = self.ouvrir_le_formulaire()

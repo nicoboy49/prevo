@@ -20,8 +20,12 @@ de panne faite par QR code :
     b. TestDeclarationDossier : mode dossier (OPFS simulé), profil demandeur, même jeu, même déclaration.
     c. TestTechnicienDossier : mode dossier, technicien TEC-0001, ordres_travail.csv abîmé (OT-2025-0006 remis
        « En cours » à son nom dans la copie) : compte rendu enregistré puis clôture technique depuis la fiche de l'OT.
+       Base au format 4 (f4-v2.2.0) : sur une base au format 3, le passage laisserait ordres_travail.csv tel quel, avec
+       son propre bandeau (« Fichier abîmé laissé tel quel », le même pour tous les profils).
     d. TestResponsableDossier : mode dossier, responsable, equipements.csv abîmé : « Modifier l'équipement » → message
-       du responsable (fichier, sauvegarde du jour, ZIP, Contrôle de la base), saisie gardée, fichier identique.
+       du responsable (fichier, sauvegarde du jour, ZIP, Contrôle de la base), saisie gardée, fichier identique. Base
+       au format 4 (f4-v2.2.0) : sans passage, le bandeau de l'ouverture est celui des fichiers abîmés (T206 ; sur une
+       base au format 3, le passage laisserait equipements.csv tel quel, avec son propre bandeau).
 
 Règle numéro un : jamais de données réelles (copies des jeux de tests/fixtures/formats/ dans des dossiers temporaires,
 ou dans l'OPFS du navigateur de test).
@@ -36,8 +40,9 @@ import unittest
 
 from commun import ServeurPrevo
 from test_demandes import fichier_png
-from test_recette_socle import (DESIGNATION, EQUIPEMENT, ERREUR_SANS_SESSION, NOTER_TOASTS_JS, SERVEUR, BOM,
-                                CasRecetteSocle, fichiers_de, fichiers_du_jeu, lignes_en_dictionnaires)
+from test_recette_socle import (DESIGNATION, EQUIPEMENT, ERREUR_SANS_SESSION, ERREUR_TABLE_DU_FORMAT_4_ABSENTE,
+                                NOTER_TOASTS_JS, SERVEUR, BOM, CasRecetteSocle, fichiers_de, fichiers_du_jeu,
+                                lignes_en_dictionnaires)
 
 # Textes attendus (consigne de T201).
 MESSAGE_NON_RESPONSABLE = ("Fichier abîmé : prévenez le responsable. Rien n'a été enregistré ; votre saisie est restée "
@@ -211,6 +216,8 @@ class TestQrServeurComptes(CasSaisieGardee):
     def test_declaration_par_qr_sur_demandes_abime_saisie_gardee_puis_bandeau_du_responsable(self):
         self.autoriser_erreur(ERREUR_SANS_SESSION)                    # sonde avant la connexion (comptes exigés)
         self.autoriser_erreur(ERREUR_TABLES_DU_DEMANDEUR)
+        # Jeu au format 3 : le passage au format 4 ne crée ni garanties ni contrats_prestataires (CONCEPTION-L1 §3.3).
+        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)
         source = self.jeu("f3-v1.2.0")
         (source / "demandes.csv").write_bytes(avec_valeur_en_trop((source / "demandes.csv").read_bytes()))
         with ServeurPrevo(source=source, comptes=True) as serveur:
@@ -286,7 +293,7 @@ class TestTechnicienDossier(CasSaisieGardee):
         self.demarrer_statique()
 
     def test_compte_rendu_et_cloture_sur_ordres_abime_saisie_gardee_fichier_identique(self):
-        fichiers = fichiers_du_jeu("f3-v1.2.0")
+        fichiers = fichiers_du_jeu("f4-v2.2.0")
         fichiers["ordres_travail.csv"] = avec_valeur_en_trop(
             ot_remis_en_cours(fichiers["ordres_travail.csv"], OT_DU_TECHNICIEN, TECHNICIEN))
         self.ouvrir_dossier(fichiers, "technicien", technicien_id=TECHNICIEN)
@@ -332,7 +339,7 @@ class TestResponsableDossier(CasSaisieGardee):
         self.demarrer_statique()
 
     def test_modification_d_equipement_sur_fichier_abime_message_du_responsable_saisie_gardee(self):
-        fichiers = fichiers_du_jeu("f3-v1.2.0")
+        fichiers = fichiers_du_jeu("f4-v2.2.0")
         fichiers["equipements.csv"] = avec_valeur_en_trop(fichiers["equipements.csv"])
         self.ouvrir_dossier(fichiers, "responsable")
         bandeaux = [b for b in self.page.evaluate(BANDEAUX_JS) if "abîmé" in b]

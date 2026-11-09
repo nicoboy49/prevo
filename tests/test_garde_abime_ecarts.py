@@ -8,11 +8,14 @@
        fichiers n'ont pas pu passer au format » en plus).
     2. TestCelluleLongueServeur (sans navigateur) : un fichier sain dont une cellule a 200 000 caractères (plus que
        la limite par défaut du module csv, 131 072) n'est pas un fichier abîmé : raisons_fichier_abime vide, PUT 200.
+       Base au format 4 (f4-v2.2.0) : le démarrage n'a rien à passer au format courant, le fichier reste tel quel.
     3. TestSauvegardeDuJourAvantGardeDossier (navigateur) : mode dossier. T204 disait « garde AVANT la sauvegarde du
        jour : un refus n'écrit rien, pas même la sauvegarde » ; inversé par T206 (règle de Nicolas : un fichier abîmé
        bloque l'écriture, jamais la sauvegarde quotidienne) : un refus de enregistrer et de ajouter fait la sauvegarde
        du jour si elle manque (jour sans sauvegarde au départ), les CSV abîmés y sont marqués « abime » dans le
-       manifeste, et les CSV des données restent identiques à l'octet.
+       manifeste, et les CSV des données restent identiques à l'octet. Base au format 4 (f4-entete-tronque, T404) :
+       sur entete-tronque (format 3), le passage au format 4 écrirait les autres tables à l'ouverture, donc ferait
+       déjà la sauvegarde du jour.
 
 Règle numéro un : jamais de données réelles (copies des jeux de tests/fixtures/formats/ dans des dossiers temporaires,
 ou dans l'OPFS du navigateur de test).
@@ -83,7 +86,7 @@ class TestCelluleLongueServeur(CasCopies):
         return ecrire_tableau(entete, lignes)
 
     def test_cellule_de_200000_caracteres_fichier_sain_put_accepte(self):
-        source = self.jeu("f3-v1.2.0")
+        source = self.jeu("f4-v2.2.0")
         chemin_source = source / "ordres_travail.csv"
         long_a = self.avec_cellule_longue(chemin_source.read_bytes(), "a")
         long_b = self.avec_cellule_longue(chemin_source.read_bytes(), "b")
@@ -121,7 +124,7 @@ class TestSauvegardeDuJourAvantGardeDossier(CasRecetteSocle):
         return sorted(nom for nom in sauvegardes(self.instantane()) if MOTIF_QUOTIDIENNE.match(nom))
 
     def test_refus_sur_fichier_abime_fait_la_sauvegarde_du_jour(self):
-        origine = fichiers_du_jeu("entete-tronque")                  # ordres_travail.csv abîmé
+        origine = fichiers_du_jeu("f4-entete-tronque")               # ordres_travail.csv abîmé, sans passage
         origine["journal.csv"] = avec_ligne_coupee(origine["journal.csv"])
         self.ouvrir_dossier(origine, "demandeur")
         self.assertEqual(self.sauvegardes_du_jour(), [], "jour déjà sauvegardé au départ")

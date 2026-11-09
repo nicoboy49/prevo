@@ -75,8 +75,9 @@ def jour(decalage, depart=J0):
 
 
 def jeu_de_depart():
-    """f3-v1.2.0 (format courant), version de l'appli déjà notée : aucune sauvegarde « avant-… » à l'ouverture."""
-    fichiers = fichiers_du_jeu("f3-v1.2.0")
+    """f4-v2.2.0 (format courant, 2.2), version de l'appli déjà notée : aucune sauvegarde « avant-… » à l'ouverture
+    (une base au format 3 serait d'abord passée au format 4, CSV réécrits)."""
+    fichiers = fichiers_du_jeu("f4-v2.2.0")
     fichiers[DERNIERE_VERSION] = json.dumps({"version": VERSION_APPLI, "depuis": "2026-01-01T08:00:00"}).encode()
     return fichiers
 
@@ -281,7 +282,7 @@ class TestFichiersAbimesJson(CasAbimesDossier):
 class TestBandeauServeur(CasRecetteSocle):
 
     def test_bandeau_du_responsable_depuis_api_info(self):
-        source = self.jeu("f3-v1.2.0")
+        source = self.jeu("f4-v2.2.0")          # format courant : rien à passer au format 4, aucune table absente
         (source / "demandes.csv").write_bytes(avec_valeur_en_trop((source / "demandes.csv").read_bytes()))
         vu_le = datetime.date.today() - datetime.timedelta(days=12)
         date = vu_le.isoformat() + "T08:00:00"

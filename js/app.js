@@ -107,6 +107,10 @@ const App = (() => {
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
   let tablesLaissees = [];          // tables laissées par le passage au format (déjà dites par leur bandeau, T197)
   const tablesDitesAbimees = new Set();   // tables dont le bandeau « Fichier abîmé » est déjà posé (T197, T200)
+  // T406 : à l'ouverture, avant le choix du profil (passage au format), un bandeau « Fichier abîmé » ne peut pas encore
+  // être posé (son texte dépend du profil, T201) : la table est notée ici, et dite avec celles de l'ouverture.
+  let profilPose = false;
+  const abimesAvantProfil = new Set();
   let depuisAbimes = {};            // T206 : { table: 'AAAA-MM-JJTHH:MM:SS' }, depuis quand chaque table est abîmée
   let formatEnAttente = null;      // mode serveur : état du format (Donnees.etatDuFormat) d'une base pas au format courant
 
@@ -459,6 +463,8 @@ const App = (() => {
     mode = nouvelAdaptateur.mode;
     formatEnAttente = null;
     tablesDitesAbimees.clear();
+    abimesAvantProfil.clear();
+    profilPose = false;
     Donnees.initialiser(adaptateur, { poste, profil: '' });
     // Lot 7 (§22.4) : comptes exigés → connexion (ou mot de passe à choisir) AVANT toute lecture de table, sinon
     // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide). T298 : la page
@@ -503,9 +509,11 @@ const App = (() => {
     let profilChoisi = session ? profilDepuisSession(session) : lireProfilMemorise();
     if (!session && !profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
     appliquerProfil(profilChoisi);
+    profilPose = true;
     if (formatEnAttente && estResponsable()) alertesCoque.push(bandeauFormatEnAttente(formatEnAttente));
-    // Fichiers abîmés (T197) : jamais réécrits ; on le dit tout de suite, avant qu'une écriture soit refusée.
-    const abimes = lectureSeule ? [] : Donnees.tablesAbimees()
+    // Fichiers abîmés (T197) : jamais réécrits ; on le dit tout de suite, avant qu'une écriture soit refusée. T406 : avec
+    // ceux qu'une écriture du passage au format a trouvés (abimesAvantProfil : ligne de journal refusée).
+    const abimes = lectureSeule ? [] : Array.from(new Set(Donnees.tablesAbimees().concat(Array.from(abimesAvantProfil))))
       .filter((t) => !tablesLaissees.includes(t) && !tablesDitesAbimees.has(t));
     depuisAbimes = await lireDepuisAbimes(lectureSeule, abimes.length > 0);
     abimes.forEach((t) => tablesDitesAbimees.add(t));
@@ -694,6 +702,7 @@ const App = (() => {
   // découverte pendant l'usage), T201 (génération des OT préventifs refusée à l'ouverture).
   function direFichierAbime(nomTable) {
     if (!nomTable || tablesLaissees.includes(nomTable) || tablesDitesAbimees.has(nomTable)) return;
+    if (!profilPose) { abimesAvantProfil.add(nomTable); return; }      // T406 : dite après le choix du profil
     tablesDitesAbimees.add(nomTable);
     alertesCoque.push(bandeauFichiersAbimes([nomTable]));
     if (coqueVisible()) afficherAlertesCoque();

@@ -14,8 +14,8 @@ Donnees (ajout au journal, écritures directes de l'adaptateur).
        ErreurFichierAbime, fichier identique ; avec { remplacerFichierAbime: true } → écrit. App.adaptateur.ajouter
        sur un journal à guillemet ouvert → ErreurFichierAbime, fichier identique.
     c. TestImportZipDossier, TestImportZipServeur (mixin ParcoursImportZip) : l'import ZIP (une des deux dérogations)
-       remplace la base entete-tronque par un ZIP sain ; en mode serveur, chaque PUT de l'import porte l'en-tête
-       X-Prevo-Remplacer-Abime: 1.
+       remplace la base f4-entete-tronque par un ZIP sain (f4-v2.2.0 : bases au format 4, sans passage ni à
+       l'ouverture ni à l'import) ; en mode serveur, chaque PUT de l'import porte l'en-tête X-Prevo-Remplacer-Abime: 1.
     d. TestTraductionServeur : réponses simulées (page.route) ; 409 { code: "fichier_abime", table } →
        Donnees.ErreurFichierAbime (jamais ErreurConflit), en-tête seulement pour remplacerFichierAbime === true ;
        Donnees.ajouter ne se replie pas sur modifier, et l'événement « fichierAbime » n'est émis qu'une fois par table.
@@ -34,8 +34,8 @@ import re
 import unittest
 
 from commun import RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, charger_scripts
-from test_recette_socle import (DESIGNATION, ECRIRE_OPFS_JS, EQUIPEMENT, NOM_DOSSIER, CasRecetteSocle, fichiers_de,
-                                fichiers_du_jeu, lignes_en_dictionnaires)
+from test_recette_socle import (DESIGNATION, ECRIRE_OPFS_JS, EQUIPEMENT, ERREUR_TABLE_DU_FORMAT_4_ABSENTE, NOM_DOSSIER,
+                                CasRecetteSocle, fichiers_de, fichiers_du_jeu, lignes_en_dictionnaires)
 from test_zip_import import (BOUTON_REMPLACER, MOTIF_AVANT_IMPORT_ZIP, contenu_sauvegarde, ecrire_zip, lire_csv,
                              sans_apostrophe, sauvegardes_de)
 
@@ -43,6 +43,8 @@ from test_zip_import import (BOUTON_REMPLACER, MOTIF_AVANT_IMPORT_ZIP, contenu_s
 LIGNE_COUPEE = 'J-20261104120000-ABCD;2026-11-04 12:00;"Poste coupé'.encode("utf-8")
 ENTETE_REMPLACER = "x-prevo-remplacer-abime"
 CHEMIN_PAGE_SERVEUR = "/tests/fixtures/page-stockage-serveur.html"
+JEU_ZIP_SAIN = "f4-v2.2.0"                   # import ZIP (c) : base au format 4, rien à passer au format courant
+JEU_ZIP_ABIME = "f4-entete-tronque"          # la même, ordres_travail.csv à l'en-tête coupé (T404)
 
 # Chromium note en console.error toute réponse HTTP >= 400 : seules celles-ci sont attendues.
 ERREUR_REFUS_JOURNAL = re.compile(r"status of 409.*/api/csv/journal/ajout")    # serveur : ajout refusé (T200b)
@@ -184,6 +186,8 @@ class TestJournalCoupeServeur(ParcoursJournalCoupe, CasRecetteSocle):
     def setUp(self):
         super().setUp()
         self.autoriser_erreur(ERREUR_REFUS_JOURNAL)
+        # Jeu au format 3 : le passage au format 4 ne crée ni garanties ni contrats_prestataires (CONCEPTION-L1 §3.3).
+        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)
         self.ecritures = []
         self.page.on("request", self.noter_ecriture)
 
@@ -261,9 +265,9 @@ class ParcoursImportZip:
     """La classe fille donne ouvrir_parametres(fichiers), apres() et verifier_entetes(ecritures de l'import)."""
 
     def test_import_zip_sain_remplace_le_fichier_abime(self):
-        zip_csv = {c: o for c, o in fichiers_du_jeu("f3-v1.2.0").items() if c.endswith(".csv")}
+        zip_csv = {c: o for c, o in fichiers_du_jeu(JEU_ZIP_SAIN).items() if c.endswith(".csv")}
         chemin_zip = ecrire_zip(self.temporaire / "sain.zip", zip_csv)
-        origine = fichiers_du_jeu("entete-tronque")
+        origine = fichiers_du_jeu(JEU_ZIP_ABIME)
         self.ouvrir_parametres(origine)
         self.assertIn("ordres_travail", self.page.evaluate("Donnees.tablesAbimees()"))
         self.page.set_input_files("#fichier-import-zip", str(chemin_zip))
@@ -334,7 +338,7 @@ class TestImportZipServeur(ParcoursImportZip, CasRecetteSocle):
     def verifier_entetes(self, ecritures):
         """Chaque table remplacée par l'import (PUT) porte l'en-tête de la dérogation ; l'ajout au journal non."""
         remplacees = [e for e in ecritures if e[0] == "PUT"]
-        self.assertEqual(sorted(e[1] for e in remplacees), sorted(c[:-4] for c in fichiers_du_jeu("f3-v1.2.0")
+        self.assertEqual(sorted(e[1] for e in remplacees), sorted(c[:-4] for c in fichiers_du_jeu(JEU_ZIP_SAIN)
                                                                    if c.endswith(".csv")))
         self.assertEqual([e for e in remplacees if e[2] != "1"], [])
         self.assertEqual([e for e in ecritures if e[0] == "POST" and e[2] is not None], [])
