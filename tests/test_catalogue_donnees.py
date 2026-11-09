@@ -3,6 +3,7 @@
     py -X utf8 -m unittest discover -s tests -p "test_catalogue_donnees.py" -v
 """
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -14,7 +15,9 @@ RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "outils"))
 import generer_catalogue  # noqa: E402
 
-VALIDE = Path("C:/sync/nicolas/sites internet/gmao/.chantier/v2.2/L0/valide")
+# Dossier du catalogue validé au L0 (hors dépôt) : donné par la variable d'environnement PREVO_CATALOGUE_VALIDE ;
+# sans elle, la comparaison avec le fichier validé est sautée (aucun chemin de machine dans le dépôt).
+VALIDE = Path(os.environ.get("PREVO_CATALOGUE_VALIDE", "")) if os.environ.get("PREVO_CATALOGUE_VALIDE") else None
 CHAMPS = {
     "controles": ["id", "famille", "nature", "equipements", "periodicite_mois", "periodicite_texte", "nature_source",
                   "reference", "liens", "qui_verifie", "a_confirmer", "relu_le"],
@@ -80,8 +83,8 @@ class Genere(unittest.TestCase):
         self.assertNotIn(b"\r", (RACINE / "js" / "catalogue" / "fr.js").read_bytes())
 
     def test_conforme_au_fichier_valide(self):
-        if not VALIDE.is_dir():
-            self.skipTest("dossier .chantier absent")
+        if VALIDE is None or not VALIDE.is_dir():
+            self.skipTest("PREVO_CATALOGUE_VALIDE absent (dossier du catalogue validé, hors dépôt)")
         for nom, champs in CHAMPS.items():
             with open(VALIDE / ("catalogue-%s.json" % nom), encoding="utf-8") as f:
                 source = json.load(f)
