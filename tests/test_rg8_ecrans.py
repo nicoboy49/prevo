@@ -10,6 +10,11 @@ dérogation notée vaut pour l'acte suivant (préparer puis « Planifier » ne r
 bandeaux, jamais la case ni le bouton : aucune fenêtre ne lui est ouverte, même par l'API. Un OT sans exigence ne
 montre ni bandeau ni fenêtre.
 
+T440 (D191, CS180) : champ « Habilitation exigée par l'OT » (ordres_travail.habilitation_requise) au nouvel OT et à la
+préparation, avec sa liste et son aide ; posée sur un OT dont l'équipement n'exige rien, elle bloque l'affectation d'un
+technicien qui ne l'a pas (refus en direct, fenêtre « Cet OT l'exige (OT) ») ; retirée, elle ne bloque plus ; l'en-tête
+de la fiche et le bon de travail disent « Habilitation exigée : BR (équipement), H0V (OT) ».
+
 Aucun identifiant du jeu de démo écrit en dur (rôles de tests/fixtures/demo-scenarios.json) ; date fixe 20/11/2026 ;
 un serveur pour la classe, chaque test sur ses propres OT.
 
@@ -141,8 +146,10 @@ class TestRg8Ecrans(CasNavigateur):
             self.page.click(".onglet[data-onglet='%s']" % onglet)
 
     def attendre_toast(self, texte):
+        # text_content, pas inner_text : le toast entre par une transition de visibility (css/style.css §10), et
+        # inner_text d'un élément encore « hidden » au premier instant rend '' (échec au hasard des délais).
         self.page.wait_for_function("(t) => document.getElementById('toast').textContent.includes(t)", arg=texte)
-        return self.page.inner_text("#toast")
+        return self.page.text_content("#toast")
 
     def attendre_fenetre(self):
         """La fenêtre du responsable : titre, constat, exigence ; « Passer outre » inactif à l'ouverture."""
@@ -384,6 +391,146 @@ class TestRg8Ecrans(CasNavigateur):
         self.assertEqual((ligne["statut"], ligne["technicien_id"], ligne["date_prevue"]), ("Planifié", nouveau, DATE))
         self.assertFalse(any("dérogation" in j["action"] or "habilitation" in j["action"]
                              for j in self.entrees(OT_A_PLANIFIER)))
+
+    # -- habilitation exigée par l'OT (T440 ; D191, CS180) -------------------------------------------
+
+    def equipement_sans_exigence(self):
+        equipement = self.ot(OT_A_PLANIFIER)["equipement_id"]
+        ligne = next(e for e in lire_csv(self.dossier, "equipements.csv") if e["id"] == equipement)
+        self.assertEqual(brut(ligne["habilitation_requise"]), "")
+        return equipement
+
+    def technicien_sans_habilitation(self, prenom):
+        return self.appeler("([v]) => Equipe.creerTechnicien(v)", {"nom": "Sans habilitation", "prenom": prenom})
+
+    def saisir_exigence(self, formulaire, valeur):
+        self.page.fill(formulaire + " [name=habilitation_requise]", valeur)
+        self.page.dispatch_event(formulaire + " [name=habilitation_requise]", "change")
+
+    def aide_exigence(self, formulaire):
+        return self.page.inner_text(formulaire + " [data-champ=habilitation_requise] .aide")
+
+    def attendre_sans_refus(self, zone):
+        self.page.wait_for_function("(z) => !document.querySelector(z + ' .alerte')", arg=zone)
+
+    def habilitation_du_bon(self, ot_id):
+        """La ligne « Habilitation exigée » du bon de travail (bonDeTravailHtml, sans lancer l'impression)."""
+        return self.appeler("""([id]) => {
+            const bon = UI.element(Ordres.bonDeTravailHtml(Donnees.trouver('ordres_travail', id)));
+            const dt = Array.from(bon.querySelectorAll('.bt-equipement dt')).find((d) => d.textContent === 'Habilitation exigée');
+            return dt ? dt.nextElementSibling.textContent : null; }""", ot_id)
+
+    def test_nouvel_ot_exigence_de_l_ot_bloque_sans_exigence_de_l_equipement_retiree_ne_bloque_plus(self):
+        equipement = self.equipement_sans_exigence()
+        self.ouvrir()
+        technicien = self.technicien_sans_habilitation("Nouvel OT")
+        self.aller("#/ot/nouveau?equipement=" + equipement)
+        page = self.page
+        formulaire = "#form-nouvel-ot"
+        page.wait_for_selector(formulaire + " [name=habilitation_requise]")
+        page.fill(formulaire + " [name=titre]", "T440 — nouvel OT, exigence de l'OT")
+        self.assertEqual(page.inner_text(formulaire + " [data-champ=habilitation_requise] .libelle"),
+                         "Habilitation exigée par l'OT")
+        self.assertEqual(self.aide_exigence(formulaire),
+                         "L'équipement n'en exige aucune. Plusieurs : séparez par des virgules.")
+        propositions = page.eval_on_selector_all(formulaire + " datalist option", "(os) => os.map((o) => o.value)")
+        self.assertIn("BR", propositions)                                   # intitulé connu (équipements, habilitations)
+        page.fill(formulaire + " [name=habilitation_requise]", "BR, ")
+        self.assertIn("BR, H0V", page.eval_on_selector_all(formulaire + " datalist option", "(os) => os.map((o) => o.value)"))
+        self.saisir_exigence(formulaire, "")
+        self.choisir_affectation(formulaire, technicien, DATE)
+        self.assertEqual(page.locator(ZONE_NOUVEL_OT + " .alerte").count(), 0)   # l'équipement n'exige rien
+
+        # Exigence posée sur l'OT : refus en direct, puis la fenêtre (l'OT l'exige) ; Annuler n'écrit rien.
+        self.saisir_exigence(formulaire, "H0V")
+        bandeau = page.wait_for_selector(ZONE_NOUVEL_OT + " .alerte.important").inner_text()
+        self.assertIn("(%s) n'a pas d'habilitation valide au %s pour : H0V (absente)." % (technicien, date_fr(DATE)), bandeau)
+        avant_ot, avant_journal = self.nombre_ot(), len(self.journal())
+        page.click(formulaire + " button[type=submit]")
+        self.assertIn("Cet OT l'exige (OT). L'affectation est refusée.", page.wait_for_selector(FENETRE).inner_text())
+        self.annuler()
+        self.attendre_toast("Affectation refusée")
+        self.assertEqual((self.nombre_ot(), len(self.journal())), (avant_ot, avant_journal))
+
+        # Exigence retirée : plus de refus, l'OT est créé sans fenêtre ni dérogation.
+        self.saisir_exigence(formulaire, "")
+        self.attendre_sans_refus(ZONE_NOUVEL_OT)
+        page.click(formulaire + " button[type=submit]")
+        page.wait_for_selector(".ot-fiche .ot-numero")
+        ot_id = page.inner_text(".ot-fiche .ot-numero")
+        self.assertEqual(page.locator("dialog").count(), 0)
+        ligne = self.ot(ot_id)
+        self.assertEqual((ligne["technicien_id"], ligne["date_prevue"], brut(ligne["habilitation_requise"])),
+                         (technicien, DATE, ""))
+        self.assertEqual([j["action"] for j in self.entrees(ot_id)], ["création — création de l'OT (manuel)"])
+        self.assertEqual(page.locator(".ot-entete .ot-habilitation-exigee").count(), 0)
+        self.assertEqual(self.habilitation_du_bon(ot_id), "aucune")
+
+    def test_preparation_exigence_de_l_ot_bloque_passer_outre_puis_retiree_ne_bloque_plus(self):
+        equipement = self.equipement_sans_exigence()
+        self.ouvrir()
+        technicien = self.technicien_sans_habilitation("Préparation")
+        ot_id = self.nouvel_ot_par_api("T440 — préparation, exigence de l'OT", equipement_id=equipement)
+        self.preparer_par_api(ot_id)
+        self.ouvrir_fiche(ot_id, "preparation")
+        page = self.page
+        formulaire = "#form-preparation"
+        page.wait_for_selector(formulaire + " [name=habilitation_requise]")
+        self.assertEqual(page.input_value(formulaire + " [name=habilitation_requise]"), "")
+        self.choisir_affectation(formulaire, technicien, DATE)
+        self.assertEqual(page.locator(ZONE_PREPARATION + " .alerte").count(), 0)
+
+        # Exigence posée : refus en direct, fenêtre, le responsable passe outre ; l'exigence et la dérogation sont écrites.
+        self.saisir_exigence(formulaire, "H0V")
+        bandeau = page.wait_for_selector(ZONE_PREPARATION + " .alerte.important").inner_text()
+        self.assertIn("pour : H0V (absente).", bandeau)
+        page.click(formulaire + " button[type=submit]")
+        texte = page.wait_for_selector(FENETRE).inner_text()
+        self.assertIn("(%s) n'a pas d'habilitation valide au %s pour : H0V (absente)." % (technicien, date_fr(DATE)), texte)
+        self.assertIn("Cet OT l'exige (OT). L'affectation est refusée.", texte)
+        self.passer_outre()
+        self.attendre_toast("Préparation enregistrée.")
+        ligne = self.ot(ot_id)
+        self.assertEqual((ligne["technicien_id"], ligne["date_prevue"], brut(ligne["habilitation_requise"])),
+                         (technicien, DATE, "H0V"))
+        derniere = self.entrees(ot_id)[-1]
+        self.assertTrue(derniere["action"].endswith(" ; " + marqueur(technicien, DATE, "H0V (absente)")), derniere["action"])
+        page.wait_for_selector(".ot-entete .ot-habilitation-exigee")
+        self.assertEqual(page.inner_text(".ot-entete .ot-habilitation-exigee"), "Habilitation exigée : H0V (OT)")
+        self.assertEqual(self.habilitation_du_bon(ot_id), "H0V (OT)")
+
+        # Exigence retirée : plus de refus ni de fenêtre ; vide dans le fichier, plus rien dans l'en-tête.
+        page.wait_for_selector(formulaire + " [name=habilitation_requise]")
+        self.assertEqual(page.input_value(formulaire + " [name=habilitation_requise]"), "H0V")
+        self.saisir_exigence(formulaire, "")
+        self.attendre_sans_refus(ZONE_PREPARATION)
+        page.click(formulaire + " button[type=submit]")
+        page.wait_for_function("(id) => Donnees.trouver('ordres_travail', id).habilitation_requise === ''", arg=ot_id)
+        page.wait_for_function("() => !document.querySelector('.ot-entete .ot-habilitation-exigee')")
+        self.assertEqual(page.locator("dialog").count(), 0)
+        self.assertEqual((brut(self.ot(ot_id)["habilitation_requise"]), self.ot(ot_id)["technicien_id"]), ("", technicien))
+        self.assertNotIn("dérogation", self.entrees(ot_id)[-1]["action"])
+        self.assertEqual(page.locator(BANDEAU_DEROGATION).count(), 0)
+
+    def test_en_tete_et_bon_de_travail_disent_l_exigence_et_son_origine(self):
+        self.ouvrir()
+        ot_id = self.nouvel_ot_par_api("T440 — en-tête et bon", habilitation_requise="H0V")
+        self.ouvrir_fiche(ot_id, "preparation")
+        page = self.page
+        self.assertEqual(page.inner_text(".ot-entete .ot-habilitation-exigee"), "Habilitation exigée : BR (équipement), H0V (OT)")
+        self.assertEqual(self.habilitation_du_bon(ot_id), "BR (équipement), H0V (OT)")
+        page.wait_for_selector("#form-preparation [name=habilitation_requise]")
+        self.assertEqual(page.input_value("#form-preparation [name=habilitation_requise]"), "H0V")
+        self.assertEqual(self.aide_exigence("#form-preparation"),
+                         "En plus de celle de l'équipement (BR). Plusieurs : séparez par des virgules.")
+        # Doublon (casse ignorée) réuni sous la première écriture, avec ses deux origines ; « / » sépare aussi.
+        self.assertEqual(self.appeler("([ot]) => Ordres.interne.libelleExigences(ot)",
+                                      {"equipement_id": EQ_BR, "habilitation_requise": "H0V / br"}),
+                         "BR (équipement, OT), H0V (OT)")
+        # OT sans exigence : ni badge ni exigence au bon (« aucune »).
+        self.ouvrir_fiche(OT_A_PLANIFIER)
+        self.assertEqual(page.locator(".ot-entete .ot-habilitation-exigee").count(), 0)
+        self.assertEqual(self.habilitation_du_bon(OT_A_PLANIFIER), "aucune")
 
 
 if __name__ == "__main__":

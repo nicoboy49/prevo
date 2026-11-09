@@ -51,7 +51,7 @@ Object.assign(Ordres, (() => {
           <div class="large" data-place="travail_a_faire"></div>
           <div class="large" data-place="consignes"></div>
           <div data-place="technicien_id"></div><div data-place="date_prevue"></div>
-          <div data-place="temps_prevu_h"></div>
+          <div data-place="temps_prevu_h"></div><div data-place="habilitation_requise"></div>
           <div class="large ot-zone-habilitation"></div>
         </fieldset>
         ${modifiable ? UI.html`<div class="actions"><span class="espace"></span><button type="submit" class="btn btn-secondaire">${UI.icone('valider')}${I18n.t('ordres.preparation.enregistrer_preparation')}</button></div>` : ''}
@@ -69,8 +69,8 @@ Object.assign(Ordres, (() => {
     placer('technicien_id', champOt('technicien_id', ot.technicien_id, { liste: listeTechniciens(ot.technicien_id) }));
     placer('date_prevue', champOt('date_prevue', ot.date_prevue));
     placer('temps_prevu_h', champOt('temps_prevu_h', ot.temps_prevu_h));
-    // RG8 (ordres-habilitations.js) : bandeau du refus en direct, l'OT tel qu'il serait enregistré.
-    Ordres.interne.brancherZoneHabilitation(formulaire, (valeurs) => Object.assign({}, ot, valeurs));
+    // RG8 (ordres-habilitations.js) : champ « Habilitation exigée par l'OT » et refus en direct, l'OT tel qu'il serait enregistré.
+    Ordres.interne.brancherZoneHabilitation(formulaire, (valeurs) => Object.assign({}, ot, valeurs), ot);
     if (modifiable) {
       const enregistrer = () => enregistrerPreparation(ot, formulaire);
       declarerFormulaire(formulaire, enregistrer);
@@ -97,7 +97,7 @@ Object.assign(Ordres, (() => {
     const valeurs = UI.lireFormulaire(formulaire);
     const changements = {
       travail_a_faire: valeurs.travail_a_faire, consignes: valeurs.consignes, technicien_id: valeurs.technicien_id,
-      date_prevue: valeurs.date_prevue, temps_prevu_h: valeurs.temps_prevu_h,
+      date_prevue: valeurs.date_prevue, temps_prevu_h: valeurs.temps_prevu_h, habilitation_requise: Ordres.interne.exigenceSaisie(valeurs.habilitation_requise),
     };
     const changes = await pendant(UI.$('button[type=submit]', formulaire), () => Ordres.avecDerogation((options) => modifierOt(ot.id, changements, I18n.donnees('ordres.enregistrer_preparation.preparation'), options)), I18n.t('ordres.enregistrer_preparation.preparation'));
     return changes !== undefined;

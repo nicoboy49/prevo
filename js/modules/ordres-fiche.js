@@ -61,6 +61,7 @@ Object.assign(Ordres, (() => {
         <div data-place="type"></div><div data-place="priorite"></div>
         <div class="large" data-place="travail_a_faire"></div>
         <div data-place="technicien_id"></div><div data-place="date_prevue"></div>
+        <div class="large" data-place="habilitation_requise"></div>
         <div class="large ot-zone-habilitation"></div>
         <div class="actions">
           <a class="btn btn-fantome" href="#/ot">${I18n.t('commun.bouton.annuler')}</a><span class="espace"></span>
@@ -85,8 +86,8 @@ Object.assign(Ordres, (() => {
       if (evenement.target.name !== 'priorite') return;
       UI.$('[name="date_prevue"]', formulaire).value = datePrevueParDefaut(evenement.target.value);
     });
-    // RG8 en direct (ordres-habilitations.js, chargé après) : l'OT tel qu'il serait créé ; écouteur posé après celui
-    // de la priorité, qui change la date prévue.
+    // RG8 en direct et champ « Habilitation exigée par l'OT » (ordres-habilitations.js, chargé après) : l'OT tel qu'il
+    // serait créé ; écouteur posé après celui de la priorité, qui change la date prévue.
     let revoirHabilitation = () => {};
     const selecteur = UI.selecteurEquipement(UI.$('#ot-nouveau-equipement', formulaire), {
       equipements: Donnees.lignes('equipements'), localisations: Donnees.lignes('localisations'),
@@ -115,6 +116,7 @@ Object.assign(Ordres, (() => {
         origine: urgence ? 'urgence' : 'manuel', equipement_id: selecteur.valeur(), titre: valeurs.titre,
         type: urgence ? 'correctif immédiat' : valeurs.type, priorite: urgence ? 'P1' : valeurs.priorite,
         travail_a_faire: valeurs.travail_a_faire, technicien_id: valeurs.technicien_id, date_prevue: valeurs.date_prevue,
+        habilitation_requise: Ordres.interne.exigenceSaisie(valeurs.habilitation_requise),
       }, options), { equipementId: selecteur.valeur() });
       App.marquerSaisie(false);
       // Depuis une réserve (T420) : l'OT créé lui est relié ; un lien refusé (réserve levée ou reliée ailleurs
@@ -191,6 +193,7 @@ Object.assign(Ordres, (() => {
           <h1><span class="ot-numero">${ot.id}</span> ${ot.titre}</h1>
           <div class="ot-badges">${UI.badgePriorite(ot.priorite)} ${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}
             <span class="badge neutre">${Schema.libelleValeur('ordres_travail', 'type', ot.type)}</span>
+            ${Ordres.interne.badgeExigences(ot)}
             ${equipement ? UI.html`<a class="ot-lien-equipement" href="#/equipement/${encodeURIComponent(equipement.id)}">${libelleEquipement(equipement.id)}</a>` : ''}
           </div>
         </div>

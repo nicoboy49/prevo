@@ -5,18 +5,110 @@
 //   d'ordres-onglets.js), l'information « dérogation du responsable le … » sur la fiche, la fenêtre « Habilitation
 //   exigée non valide » (Ordres.demanderDerogation) et Ordres.avecDerogation (nouvel OT, préparation, bouton
 //   « Planifier » ; le planning, T439) ;
-// - T440 : le champ « Habilitation exigée pour cet OT » (nouvel OT et préparation ; ordres-onglets.js, à 700 lignes,
-//   ne grandit pas : la logique d'habilitation de la préparation est ici).
+// - T440 : le champ « Habilitation exigée par l'OT » (ot.habilitation_requise, D191 : nouvel OT et préparation ;
+//   ordres-onglets.js, près de 700 lignes, ne grandit pas : la logique d'habilitation de la préparation est ici), sa liste
+//   (intitulés connus et proposés par le catalogue), son aide « En plus de celle de l'équipement (BR)… », et
+//   « Habilitation exigée : BR (équipement), H0V (OT) » dans l'en-tête de la fiche et sur le bon de travail.
 // Le technicien voit les bandeaux, jamais la case ni le bouton « passer outre » : aucune fenêtre ne lui est ouverte.
 // Chargé juste après ordres-impression.js (qui enregistre les écrans du module). Complète l'objet Ordres ; les écrans
-// d'ordres-fiche.js et d'ordres-onglets.js appellent ce fichier par Ordres et Ordres.interne, au moment de l'appel.
+// d'ordres-fiche.js, d'ordres-onglets.js et le bon (ordres-impression.js) appellent ce fichier par Ordres et
+// Ordres.interne, au moment de l'appel.
 
 Object.assign(Ordres, (() => {
 
   // Règles et outils de ordres-regles.js (RG8 pure : T436, T437).
-  const { controleHabilitation, derogationAccordee, lireDerogation, nomTechnicien } = Ordres;
+  const { controleHabilitation, derogationAccordee, lireDerogation, nomTechnicien, habilitationsExigees } = Ordres;
   const { texte, estResponsable, repereEquipement, refusHabilitation, messageRefusHabilitation,
-    libelleManquante } = Ordres.interne;
+    libelleManquante, placerChamp, champOt } = Ordres.interne;
+  // Intitulé comparable (casse et espaces ignorés) : la fonction d'Equipe (equipe-regles.js, chargé après).
+  const cleIntitule = (intitule) => Equipe.interne.cleIntitule(intitule);
+
+  // ===========================================================================================
+  // Champ « Habilitation exigée par l'OT » (T440 ; D191, conception L2-L3 §7.6) : nouvel OT et préparation
+  // ===========================================================================================
+
+  /** Intitulés d'une colonne habilitation_requise lus par la règle de RG8 (« , » ou « / », doublons réunis). */
+  function intitulesSaisis(valeur) {
+    return habilitationsExigees({ habilitation_requise: valeur }).map((exigence) => exigence.intitule);
+  }
+
+  /** Valeur écrite : la saisie sans séparateur ni espace en tête ou en fin (« BR, » laissé par la liste → « BR »). */
+  function exigenceSaisie(valeur) {
+    return texte(valeur).replace(/^[\s,/]+|[\s,/]+$/g, '');
+  }
+
+  /** Intitulés connus (habilitations des techniciens, exigences des équipements et des OT) et proposés par le
+   *  catalogue (« CACES R489 ») : un par intitulé (casse et espaces ignorés, première écriture gardée), triés. */
+  function intitulesConnus() {
+    const parCle = new Map();
+    const garder = (intitule) => { const cle = cleIntitule(intitule); if (cle && !parCle.has(cle)) parCle.set(cle, texte(intitule)); };
+    Donnees.lignes('habilitations').forEach((h) => garder(h.intitule));
+    ['equipements', 'ordres_travail'].forEach((table) => Donnees.lignes(table)
+      .forEach((ligne) => intitulesSaisis(ligne.habilitation_requise).forEach(garder)));
+    Equipe.typesHabilitation().forEach((type) => garder(Equipe.intitulePropose(type)));
+    return Array.from(parCle.values()).sort((a, b) => UI.comparerTextes(a, b));
+  }
+
+  /** Propositions de la liste d'après la saisie : « H0V », ou, après « BR, », « BR, H0V » (intitulés déjà saisis ôtés). */
+  function proposer(saisie, liste, connus) {
+    const debut = saisie.value.replace(/[^,/]*$/, '');
+    const prefixe = debut ? debut.replace(/\s*$/, ' ') : '';
+    const saisis = new Set(intitulesSaisis(debut).map(cleIntitule));
+    UI.remplir(liste, connus.filter((intitule) => !saisis.has(cleIntitule(intitule)))
+      .map((intitule) => UI.html`<option value="${prefixe + intitule}"></option>`));
+  }
+
+  /** Aide : « En plus de celle de l'équipement (BR). Plusieurs : séparez par des virgules. » (ou : il n'en exige aucune). */
+  function aideExigence(equipementId) {
+    const equipement = Donnees.trouver('equipements', texte(equipementId));
+    if (!equipement) return I18n.t('ordres.habilitation_exigee.aide_sans_equipement');
+    const siennes = intitulesSaisis(equipement.habilitation_requise);
+    return siennes.length ? I18n.t('ordres.habilitation_exigee.aide_equipement', { n: siennes.length, liste: siennes.join(', ') })
+      : I18n.t('ordres.habilitation_exigee.aide_sans_exigence');
+  }
+
+  /**
+   * Place le champ dans data-place="habilitation_requise" du formulaire (s'il y est) : valeur ot.habilitation_requise
+   * (ot null au nouvel OT : vide), liste revue à chaque frappe, aide selon l'équipement. Rend revoir(equipementId).
+   */
+  function placerChampExigence(formulaire, ot) {
+    if (!UI.$('[data-place="habilitation_requise"]', formulaire)) return () => {};
+    const idListe = UI.identifiantUnique('ot-intitules');
+    const bloc = champOt('habilitation_requise', texte(ot && ot.habilitation_requise), {
+      aide: aideExigence(ot && ot.equipement_id), placeholder: I18n.t('ordres.habilitation_exigee.exemple'),
+      attributs: { list: idListe, autocomplete: 'off' },
+    });
+    const liste = UI.element(UI.html`<datalist id="${idListe}"></datalist>`);
+    bloc.appendChild(liste);
+    placerChamp(formulaire, 'habilitation_requise', bloc);
+    const saisie = UI.$('[name="habilitation_requise"]', bloc);
+    const connus = intitulesConnus();
+    saisie.addEventListener('input', () => proposer(saisie, liste, connus));
+    proposer(saisie, liste, connus);
+    const aide = UI.$('.aide', bloc);
+    return (equipementId) => { aide.textContent = aideExigence(equipementId); };
+  }
+
+  // ===========================================================================================
+  // « Habilitation exigée : BR (équipement), H0V (OT) » : en-tête de la fiche et bon de travail
+  // ===========================================================================================
+
+  /** « BR (équipement), H0V (OT) » : habilitations exigées par l'OT (celle de son équipement, puis
+   *  ot.habilitation_requise), chacune avec son origine ; '' quand l'OT n'exige rien. */
+  function libelleExigences(ot) {
+    const origines = {
+      equipement: I18n.t('ordres.habilitation_exigee.origine_equipement'), ot: I18n.t('ordres.habilitation_exigee.origine_ot'),
+    };
+    return habilitationsExigees(ot).map((exigence) => I18n.t('ordres.habilitation_exigee.intitule_origines', {
+      intitule: exigence.intitule, origines: exigence.origines.map((origine) => origines[origine]).join(', '),
+    })).join(', ');
+  }
+
+  /** Badge de l'en-tête de la fiche : « Habilitation exigée : BR (équipement), H0V (OT) » ; '' sans exigence. */
+  function badgeExigences(ot) {
+    const liste = libelleExigences(ot);
+    return liste ? UI.html`<span class="badge attention ot-habilitation-exigee">${I18n.t('ordres.habilitation_exigee.entete', { liste })}</span>` : '';
+  }
 
   // ===========================================================================================
   // Bandeaux : refus en direct (nouvel OT, préparation) et dérogation de l'affectation actuelle (fiche)
@@ -35,14 +127,18 @@ Object.assign(Ordres, (() => {
   /**
    * Bandeau RG8 en direct dans la zone .ot-zone-habilitation d'un formulaire (nouvel OT, préparation), revu à chaque
    * changement : otDuFormulaire(valeurs) rend l'OT tel qu'il serait écrit (equipement_id, technicien_id, date_prevue,
-   * habilitation_requise). Rien quand l'OT n'exige rien, que le technicien est habilité ou qu'une dérogation est déjà
-   * notée pour ce même OT, technicien, date et habilitations. Rend la fonction qui revoit la zone.
+   * habilitation_requise saisie). Rien quand l'OT n'exige rien, que le technicien est habilité ou qu'une dérogation est
+   * déjà notée pour ce même OT, technicien, date et habilitations. Place d'abord le champ « Habilitation exigée par
+   * l'OT » (valeur de ot, l'OT préparé ; null au nouvel OT), dont l'aide suit l'équipement. Rend la fonction qui revoit.
    */
-  function brancherZoneHabilitation(formulaire, otDuFormulaire) {
+  function brancherZoneHabilitation(formulaire, otDuFormulaire, ot) {
     const zone = UI.$('.ot-zone-habilitation', formulaire);
+    const revoirChamp = placerChampExigence(formulaire, ot || null);
     const montrer = () => {
       const valeurs = UI.lireFormulaire(formulaire);
-      const refus = refusHabilitation(otDuFormulaire(valeurs), valeurs.technicien_id, valeurs.date_prevue);
+      const ligne = otDuFormulaire(valeurs);
+      revoirChamp(ligne.equipement_id);
+      const refus = refusHabilitation(ligne, valeurs.technicien_id, valeurs.date_prevue);
       zone.textContent = '';
       if (refus) zone.appendChild(bandeauRefus(refus));
     };
@@ -149,8 +245,9 @@ Object.assign(Ordres, (() => {
     }
   }
 
-  // Outils prêtés aux écrans du module (ordres-fiche.js, ordres-onglets.js), cherchés au moment de l'appel.
-  Object.assign(Ordres.interne, { brancherZoneHabilitation, bandeauDerogation });
+  // Outils prêtés aux écrans du module (ordres-fiche.js, ordres-onglets.js, ordres-impression.js), cherchés au moment
+  // de l'appel.
+  Object.assign(Ordres.interne, { brancherZoneHabilitation, bandeauDerogation, exigenceSaisie, libelleExigences, badgeExigences });
 
   return { demanderDerogation, avecDerogation };
 })());
