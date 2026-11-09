@@ -2249,6 +2249,7 @@ I18n.ajouter('pt-PT', {
   'garanties.noter_resiliation.date_future': 'A data de envio da carta não pode estar no futuro.',
   'garanties.noter_resiliation.date_illisible': 'Data de envio ilegível: DD/MM/AAAA.',
   'garanties.noter_resiliation.date_obligatoire': 'Introduza a data de envio da carta.',
+  'garanties.noter_resiliation.reconduire_d_abord': 'Renove primeiro o contrato para o período em curso: a data de fim registada ({fin}) já passou.',
   'garanties.onglets.contrats': 'Contratos',
   'garanties.onglets.garanties': 'Garantias',
   'garanties.onglets.libelle': 'Garantias ou contratos',

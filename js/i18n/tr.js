@@ -2249,6 +2249,7 @@ I18n.ajouter('tr', {
   'garanties.noter_resiliation.date_future': 'Mektubun gönderilme tarihi gelecekte olamaz.',
   'garanties.noter_resiliation.date_illisible': 'Gönderilme tarihi okunamıyor: GG/AA/YYYY.',
   'garanties.noter_resiliation.date_obligatoire': 'Mektubun gönderilme tarihini girin.',
+  'garanties.noter_resiliation.reconduire_d_abord': 'Önce sözleşmeyi içinde bulunulan döneme yenileyin: kayıtlı bitiş tarihi ({fin}) geçti.',
   'garanties.onglets.contrats': 'Sözleşmeler',
   'garanties.onglets.garanties': 'Garantiler',
   'garanties.onglets.libelle': 'Garantiler veya sözleşmeler',

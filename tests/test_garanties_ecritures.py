@@ -202,6 +202,28 @@ class TestServeur(CasGaranties):
             self.assertEqual(chemin.read_bytes(), octets)
             self.assertEqual(len(journal(dossier, "garanties", gar)), 4)
 
+    def test_resiliation_refusee_si_fin_passee_puis_acceptee_apres_reconduction(self):
+        """T464 : contrat tacite « dates à mettre à jour » : la lettre est refusée, rien n'est écrit."""
+        with ServeurPrevo() as serveur:
+            self.ouvrir_serveur(serveur)
+            dossier = serveur.dossier
+            chemin = dossier / "contrats_prestataires.csv"
+            _eq1, _eq2, fou = equipements_et_fournisseur(dossier)
+            jour = self.aujourdhui()
+            ctp = self.accepte("creerContrat", {"fournisseur_id": fou, "objet": "Contrat échu", "date_debut": "2020-01-01",
+                                                "date_fin": "2020-12-31", "preavis_mois": "3", "reconduction_tacite": True})
+            octets = chemin.read_bytes()
+            entrees = len(journal(dossier, "contrats_prestataires", ctp))
+            self.refuse("Reconduisez d'abord le contrat à sa période en cours", "noterResiliation", ctp,
+                        {"date": jour.isoformat()})
+            self.assertEqual(chemin.read_bytes(), octets)
+            self.assertEqual(len(journal(dossier, "contrats_prestataires", ctp)), entrees)
+            self.assertEqual(ligne_de(dossier, "contrats_prestataires.csv", ctp)["reconduction_tacite"], "1")
+            # Reconduit à une période en cours (fin dans le futur) : la lettre est acceptée
+            futur = (jour + datetime.timedelta(days=400)).isoformat()
+            self.accepte("reconduireContrat", ctp, {"date_debut": jour.isoformat(), "date_fin": futur})
+            self.assertEqual(self.accepte("noterResiliation", ctp, {"date": jour.isoformat()}), ["reconduction_tacite"])
+
     def test_contrat_reconduit_resiliation_notee_et_retire(self):
         with ServeurPrevo() as serveur:
             self.ouvrir_serveur(serveur)

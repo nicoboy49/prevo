@@ -2247,6 +2247,7 @@ I18n.ajouter('en', {
   'garanties.noter_resiliation.date_future': 'The date the letter was sent cannot be in the future.',
   'garanties.noter_resiliation.date_illisible': 'Sending date unreadable: DD/MM/YYYY.',
   'garanties.noter_resiliation.date_obligatoire': 'Enter the date the letter was sent.',
+  'garanties.noter_resiliation.reconduire_d_abord': 'Renew the contract to its current period first: its recorded end date ({fin}) has passed.',
   'garanties.onglets.contrats': 'Contracts',
   'garanties.onglets.garanties': 'Warranties',
   'garanties.onglets.libelle': 'Warranties or contracts',

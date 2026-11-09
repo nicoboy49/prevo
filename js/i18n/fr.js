@@ -2245,6 +2245,7 @@ I18n.ajouter('fr', {
   'garanties.noter_resiliation.date_future': 'La date d\'envoi de la lettre ne peut pas être dans le futur.',
   'garanties.noter_resiliation.date_illisible': 'Date d\'envoi illisible : JJ/MM/AAAA.',
   'garanties.noter_resiliation.date_obligatoire': 'Saisissez la date d\'envoi de la lettre.',
+  'garanties.noter_resiliation.reconduire_d_abord': 'Reconduisez d\'abord le contrat à sa période en cours : sa fin enregistrée ({fin}) est passée.',
   'garanties.onglets.contrats': 'Contrats',
   'garanties.onglets.garanties': 'Garanties',
   'garanties.onglets.libelle': 'Garanties ou contrats',

@@ -630,13 +630,16 @@ Object.assign(Garanties, (() => {
     const resiliation = Garanties.resiliationNotee(contrat);
     const complement = resiliation && UI.html`<p class="garanties-resiliation">${I18n.t('garanties.fiche_contrat.resiliation_notee',
       { notee: UI.dateFr(resiliation.notee), lettre: UI.dateFr(resiliation.lettre), fin: UI.dateFr(etat.finPeriode) })}</p>`;
+    // Fin enregistrée passée : « Noter la résiliation » est refusé, l'écran guide vers « Reconduire » (T464).
+    const aReconduire = actif && tacite && etat.statut === 'a_mettre_a_jour'
+      && UI.html`<p class="garanties-resiliation">${I18n.t('garanties.noter_resiliation.reconduire_d_abord', { fin: UI.dateFr(etat.fin) })}</p>`;
     App.definirTitre(titre);
     UI.remplir(conteneur, UI.html`<div class="garanties garanties-fiche" data-contrat="${contrat.id}">
       ${enteteFiche('contrats', titre, etat, actif ? UI.html`
         <a class="btn btn-primaire" id="contrat-modifier" href="${Garanties.adresseModification(contrat.id)}">${I18n.t('commun.bouton.modifier')}</a>
-        ${tacite ? UI.html`<button type="button" class="btn btn-secondaire" id="contrat-resiliation">${I18n.t('garanties.fiche_contrat.noter_resiliation')}</button>
+        ${tacite ? UI.html`${etat.statut === 'a_mettre_a_jour' ? '' : UI.html`<button type="button" class="btn btn-secondaire" id="contrat-resiliation">${I18n.t('garanties.fiche_contrat.noter_resiliation')}</button>`}
         <button type="button" class="btn btn-secondaire" id="contrat-reconduire">${I18n.t('garanties.fiche_contrat.reconduire')}</button>` : ''}
-        <button type="button" class="btn btn-secondaire" id="contrat-retirer">${I18n.t('garanties.fiche_contrat.retirer')}</button>` : '', complement)}
+        <button type="button" class="btn btn-secondaire" id="contrat-retirer">${I18n.t('garanties.fiche_contrat.retirer')}</button>` : '', complement || aReconduire)}
       ${actif ? bandeauContrat(contrat, etat) : UI.html`<div class="alertes"><div class="alerte attention" role="status">${UI.icone('alerte')}<div class="alerte-texte">${I18n.t('garanties.fiche_contrat.retire')}</div></div></div>`}
       <article class="carte"><h2>${I18n.t('garanties.fiche_contrat.carte')}</h2>${valeursContrat(contrat, etat, lu.adresse)}</article>
       ${carteHistorique('contrats_prestataires', contrat.id)}</div>`);
