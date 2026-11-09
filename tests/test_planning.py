@@ -208,6 +208,9 @@ class TestPlanning(CasPlanning):
         avant = self.journal_de(ot_id)
         page = self.ouvrir("#/planning?semaine=" + lundi)
         page.drag_and_drop(".pl-a-planifier " + self.carte(ot_id), self.case(technicien, jour))
+        # Le responsable voit la fenêtre « passer outre » (T439) ; Annuler redit le refus (le reste : test_rg8_planning.py).
+        page.wait_for_selector("dialog.ot-fenetre-derogation")
+        page.click("dialog.ot-fenetre-derogation .fenetre-actions .btn-fantome")
         message = page.wait_for_selector("#pl-message .alerte.important").inner_text()
         self.assertIn("n'a pas été planifié", message)
         self.assertIn("Affectation refusée : ", message)

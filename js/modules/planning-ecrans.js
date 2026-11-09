@@ -206,7 +206,8 @@ Object.assign(Planning, (() => {
   async function placer(conteneur, otId, statutAttendu, technicienId, date) {
     let resultat;
     try {
-      resultat = await Planning.planifier(otId, statutAttendu, technicienId, date);
+      // RG8 : refus d'habilitation → fenêtre du responsable (Ordres.avecDerogation), puis planification avec la dérogation.
+      resultat = await Ordres.avecDerogation((options) => Planning.planifier(otId, statutAttendu, technicienId, date, options));
     } catch (erreur) {
       if (erreur instanceof Donnees.ErreurValidation) afficherRefus(conteneur, otId, erreur);
       else App.signalerErreur(erreur, 'planification de ' + otId);
