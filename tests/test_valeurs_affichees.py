@@ -10,8 +10,10 @@ Dans Chromium, application de démonstration en file:// (profil responsable), la
     - fiche d'un OT « En cours » : badge de statut au libellé de la langue d'essai, couleur gardée (ton de la valeur
       brute), type d'OT traduit ; la donnée reste « En cours » ;
     - liste des OT : colonne Statut (badges) et colonne Type au libellé de la langue d'essai, ligne par ligne ;
-    - historique d'un contrôle : marqueurs du journal (« modification : … — contrôle réalisé le … ») traduits, action
-      inconnue telle quelle ; statut calculé du contrôle traduit (« réserves à lever (1) », nombre compris) ;
+    - historique d'un contrôle : marqueurs du journal (« modification : … — contrôle réalisé le … », avec les
+      observations d'avant la 2.2 ou « 2 réserves » depuis T418 ; « réserve levée le … » d'une de ses réserves, table
+      reserves_controle) traduits, action inconnue telle quelle ; statut calculé du contrôle traduit (« réserves à
+      lever (1) », nombre compris) ;
     - retour au français : texte de chaque écran identique à celui d'avant le changement de langue.
 
 Lancer depuis la racine du projet :
@@ -47,7 +49,9 @@ TEXTES_ESSAI = dict(
        ("controles.journal.realise_le_par", "xx-réalisé {date} / {organisme}"),
        ("controles.journal.realisation", "{realise} | {rapport} | {observations}"),
        ("controles.journal.sans_rapport", "xx-sans-rapport"),
-       ("controles.journal.sans_observation", "xx-sans-observation")]
+       ("controles.journal.sans_observation", "xx-sans-observation"),
+       ("controles.journal.reserves_n", {"one": "xx-{n} réserve", "other": "xx-{n} réserves"}),     # 2.2 (T418)
+       ("controles.journal.reserve_levee", "xx-levée {date} / {commentaire}")]
     + [("controles.statut_calcule." + cle, "xx-" + cle) for cle in CLES_STATUT_CONTROLE.values()]
     + [("controles.statut_calcule.reserves_a_lever_n", "xx-reserves_a_lever_n ({n})")])     # 2.2 : nombre de réserves
 
@@ -67,6 +71,11 @@ LIGNES_LISTE_OT_JS = """() => Array.from(document.querySelectorAll('.ot-liste-ta
 
 ACTION_REALISATION = ("modification : derniere_date, prochaine_date, observations_levees — contrôle réalisé le "
                       "12/03/2026 par Bureau Alpin ; sans rapport joint ; sans observation")
+# Depuis la 2.2 (T418) : la réalisation dit le nombre de réserves ; la levée d'une réserve est au journal de la réserve.
+ACTION_REALISATION_RESERVES = ("modification : derniere_date, prochaine_date — contrôle réalisé le 14/04/2026 par "
+                               "Bureau Alpin ; sans rapport joint ; 2 réserves")
+ACTION_RESERVE_LEVEE = ("modification : levee, date_levee, commentaire_levee — réserve levée le 05/05/2026 : "
+                        "Purgeur remplacé")
 ACTION_INCONNUE = "action écrite par un autre outil"
 
 
@@ -152,13 +161,21 @@ class TestValeursAffichees(CasNavigateur):
         self.assertEqual(self.texte(".ot-liste-tableau"), tableau_francais)
 
     def test_historique_d_un_controle_marqueurs_du_journal_traduits(self):
-        for action in (ACTION_REALISATION, ACTION_INCONNUE):
+        for action in (ACTION_REALISATION, ACTION_REALISATION_RESERVES, ACTION_INCONNUE):
             self.assertTrue(self.page.evaluate("(action) => Donnees.journaliser('controles_reglementaires', %r, action)"
                                                % CONTROLE, action))
+        reserve = self.page.evaluate("(id) => Object.assign({}, Donnees.lignes('reserves_controle')"
+                                     ".find((r) => r.controle_id === id))", CONTROLE)
+        self.assertTrue(self.page.evaluate("([id, action]) => Donnees.journaliser('reserves_controle', id, action)",
+                                           [reserve["id"], ACTION_RESERVE_LEVEE]))
         self.aller("#/controles/" + CONTROLE, ".controles-historique .controles-action")
         actions = ".controles-historique .controles-action"
         francais = self.page.eval_on_selector_all(actions, "(liste) => liste.map((e) => e.textContent)")
-        self.assertEqual(sorted(francais), sorted([ACTION_REALISATION, ACTION_INCONNUE]))
+        # L'entrée de la réserve : son marqueur seul, traduit, et le texte de la réserve concernée en dessous
+        self.assertEqual(sorted(francais), sorted([ACTION_REALISATION, ACTION_REALISATION_RESERVES, ACTION_INCONNUE,
+                                                   "Réserve levée le 05/05/2026 : Purgeur remplacé"]))
+        concernee = self.texte(".controles-historique .controles-reserve-concernee")
+        self.assertTrue(concernee and reserve["texte"].startswith(concernee), concernee)
         statut = ".controles-statuts .badge.statut"
         etat = self.page.evaluate("Controles.etat(Donnees.trouver('controles_reglementaires', %r))" % CONTROLE)
         self.assertEqual((etat["statut"], etat["reservesALever"]), ("réserves à lever", 1))     # rôle de la démo (T417)
@@ -175,6 +192,9 @@ class TestValeursAffichees(CasNavigateur):
         self.assertEqual(sorted(essai), sorted([
             "xx-modif : derniere_date, prochaine_date, observations_levees // xx-réalisé 12/03/2026 / Bureau Alpin"
             " | xx-sans-rapport | xx-sans-observation",
+            "xx-modif : derniere_date, prochaine_date // xx-réalisé 14/04/2026 / Bureau Alpin | xx-sans-rapport"
+            " | xx-2 réserves",
+            "xx-levée 05/05/2026 / Purgeur remplacé",
             ACTION_INCONNUE]))
         # Le journal garde le texte français écrit par Prévo (D156).
         self.assertIn(ACTION_REALISATION, self.page.evaluate("Donnees.lignes('journal').map((l) => l.action)"))

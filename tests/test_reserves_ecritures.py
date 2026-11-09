@@ -7,8 +7,8 @@ Par l'API (Controles.*) dans l'application ouverte, sans passer par les fenêtre
                les garde en trois lignes (puces retirées, même date, même échéance, levee 0) ; un second envoi
                identique ne crée rien (fichiers identiques à l'octet) ; en lever une laisse les deux autres ouvertes ;
                une nouvelle réalisation n'en efface ni n'en modifie aucune (« observations » lu comme synonyme) ;
-               transition jusqu'à T418 : observations et observations_levees encore écrites ; marqueurs du journal
-               (D156). Refus sans rien écrire : contrôle ou réserve introuvable, dates (absente, illisible, future,
+               depuis T418, observations et observations_levees ne sont plus écrites et le journal de la
+               réalisation dit « 3 réserves » ; marqueurs du journal (D156). Refus sans rien écrire : contrôle ou réserve introuvable, dates (absente, illisible, future,
                avant le contrôle), texte sans réserve, gravité inconnue, levée d'une réserve levée, commentaire vide,
                OT introuvable ou d'un autre équipement, correction d'une réserve levée, second OT relié ;
     demo     : index.html en file://, écran en anglais (prevo.langue = en) : un 2e et un 3e rapport du même contrôle et
@@ -140,17 +140,19 @@ class TestServeur(CasReserves):
                                   r["commentaire_levee"], r["ot_id"], r["gravite"]),
                                  (d1.isoformat(), echeance.isoformat(), "0", "", "", "", ""))
             self.assertTrue(chemin_reserves.read_bytes().lstrip(b"\xef\xbb\xbf").startswith(ENTETE_RESERVES))
-            # Transition jusqu'à T418 : observations encore écrites comme avant
+            # Depuis T418 : observations et observations_levees ne sont plus écrites (valeurs de la création)
             ligne = controle_de(dossier, controle)
-            self.assertEqual((ligne["derniere_date"], ligne["organisme"], ligne["observations_levees"]),
-                             (d1.isoformat(), "Organisme T413", "0"))
-            self.assertEqual(ligne["observations"], SAISIE_TROIS.strip().replace("\r\n", "\n"))   # relu en texte
-            # Journal (D156) : une entrée par réserve créée ; celle du contrôle inchangée
+            self.assertEqual((ligne["derniere_date"], ligne["organisme"], ligne["observations"], ligne["observations_levees"]),
+                             (d1.isoformat(), "Organisme T413", "", "1"))
+            # Journal (D156) : une entrée par réserve créée ; celle du contrôle dit le nombre de réserves
             actions = journal(dossier, "reserves_controle", rendu["reserves"])
             self.assertEqual(len(actions), 3, actions)
             self.assertTrue(all(a == "création — réserves relevées au contrôle du %s : 3" % fr(d1) for a in actions), actions)
-            self.assertTrue(any("contrôle réalisé le %s par Organisme T413" % fr(d1) in a
-                                for a in journal(dossier, "controles_reglementaires", [controle])))
+            realisation = [a for a in journal(dossier, "controles_reglementaires", [controle]) if "contrôle réalisé" in a]
+            self.assertEqual(len(realisation), 1, realisation)
+            self.assertTrue(realisation[0].endswith(" — contrôle réalisé le %s par Organisme T413 ; sans rapport joint ; "
+                                                    "3 réserves" % fr(d1)), realisation)
+            self.assertNotIn("observations", realisation[0])
 
             # Second envoi identique (essai après un échec, double clic) : rien de recréé, fichiers identiques
             octets = (chemin_reserves.read_bytes(), chemin_controles.read_bytes())
@@ -193,7 +195,7 @@ class TestServeur(CasReserves):
             self.assertEqual(len(apres), 5)
             self.assertEqual((apres[4]["id"], apres[4]["texte"], apres[4]["date_controle"]),
                              (rendu["reserves"][0], "Garde-corps à refixer", d3.isoformat()))
-            # Réalisation sans réserve : rien n'est ajouté ni changé dans les réserves ; observations vidées comme avant
+            # Réalisation sans réserve : rien n'est ajouté ni changé dans les réserves ; journal « sans réserve »
             octets = chemin_reserves.read_bytes()
             rendu = self.accepte("enregistrerRealisation", controle, {"date": jour.isoformat()})
             self.assertEqual(rendu["reserves"], [])
@@ -201,6 +203,8 @@ class TestServeur(CasReserves):
             ligne = controle_de(dossier, controle)
             self.assertEqual((ligne["derniere_date"], ligne["observations"], ligne["observations_levees"]),
                              (jour.isoformat(), "", "1"))
+            self.assertTrue(journal(dossier, "controles_reglementaires", [controle])[-1].endswith(
+                "contrôle réalisé le %s ; sans rapport joint ; sans réserve" % fr(jour)))
             self.assertEqual([r["levee"] for r in reserves_de(dossier, controle)], ["1", "0", "0", "0", "0"])
             # Doublons exacts d'une même saisie gardés (le rapport peut les répéter), une seule fois même rejoués
             doubles = self.accepte("ajouterReserves", controle, {"date_controle": d3.isoformat(),

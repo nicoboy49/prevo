@@ -1,7 +1,7 @@
 /* Prévo — contrôles réglementaires (js/modules/controles-*.js, ARCHITECTURE.md §15.7) : liste,
-   fiche d'un contrôle, fenêtres « contrôle réalisé » et « lever les observations », carte de la fiche
-   équipement, catalogue Prévo et phrase D182 (T416). Uniquement des variables de la charte
-   (css/style.css) : aucune couleur codée en dur.
+   fiche d'un contrôle, fenêtre « contrôle réalisé » (réserves relevées, T418), carte « Réserves » de la
+   fiche (T418), carte de la fiche équipement, catalogue Prévo et phrase D182 (T416). Uniquement des
+   variables de la charte (css/style.css) : aucune couleur codée en dur.
    Sommaire : 1 liste et filtres · 2 statuts · 3 fiche · 4 téléphone. */
 
 /* =========================================================================================
@@ -37,7 +37,6 @@
 .controles-fiche h1 { overflow-wrap: anywhere; }
 .controles-badges { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; margin: .2rem 0 0; }
 .controles-raison { color: var(--texte-2); }
-.controles-observations { white-space: pre-line; margin-right: .4rem; }
 .controles-liens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
 .controles-liens li { display: flex; flex-wrap: wrap; gap: .2rem .6rem; align-items: center; overflow-wrap: anywhere; }
 .controles-liens li .muted { margin: 0; font-size: .9375rem; }
@@ -49,7 +48,25 @@
 .controles-journal .muted { grid-column: 2; margin: 0; font-size: .875rem; }
 .controles-quand { color: var(--texte-2); font-size: .9375rem; }
 .controles-action { overflow-wrap: anywhere; }
+.controles-journal .controles-reserve-concernee { grid-column: 2; font-size: .875rem; color: var(--texte-2); overflow-wrap: anywhere; }
 .controles-fenetre p { margin: 0; }
+.controles-apercu-reserves:empty { display: none; }
+
+/* Carte « Réserves » (2.2, T418) : un groupe par réalisation, les levées repliées */
+.controles-reserves-groupe + .controles-reserves-groupe { margin-top: 1rem; padding-top: .9rem; border-top: 1px solid var(--trait); }
+.controles-reserves-groupe h3 { margin: 0 0 .5rem; }
+.controles-reserves-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .7rem; }
+.controles-reserve { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.controles-reserve p { margin: 0; }
+.controles-reserve-texte { white-space: pre-line; overflow-wrap: anywhere; }
+.controles-reserve-meta { display: flex; flex-wrap: wrap; gap: .25rem .8rem; align-items: center; font-size: .9375rem; color: var(--texte-2); }
+.controles-reserve-meta .badge { margin: 0; }
+.controles-reserve-ot { display: inline-flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.controles-reserve-ot a { font-weight: 700; }
+.controles-reserve-commentaire { font-size: .9375rem; color: var(--texte-2); overflow-wrap: anywhere; }
+.controles-reserves-levees { margin-top: .6rem; }
+.controles-reserves-levees summary { cursor: pointer; color: var(--texte-bleu); min-height: 32px; display: flex; align-items: center; }
+.controles-reserves-levees[open] summary { margin-bottom: .5rem; }
 .controles-fenetre .encadre { margin: 0; }
 .controles-fenetre input[type=file] { max-width: 100%; }
 .parc-controles .entete-carte .btn { flex: 0 0 auto; }
@@ -80,7 +97,9 @@
   .controles-liens li { min-height: 48px; }
   .controles-liens a { min-height: 48px; display: inline-flex; align-items: center; }
   .controles-journal li { grid-template-columns: minmax(0, 1fr); }
-  .controles-journal .muted { grid-column: 1; }
+  .controles-journal .muted, .controles-journal .controles-reserve-concernee { grid-column: 1; }
+  .controles-reserves-levees summary { min-height: var(--tactile); }
+  .controles-reserve-ot a { min-height: 48px; display: inline-flex; align-items: center; }
   .controles-fiche .actions .btn, .parc-controles .entete-carte .btn { flex: 1 1 100%; }
   .controles-catalogue-liens a { min-height: 48px; display: inline-flex; align-items: center; }
   .controles-mise-a-jour .btn { flex: 1 1 100%; }

@@ -24,9 +24,10 @@ Familles (le nom du test le dit) :
     parc         : carte « Contrôles réglementaires » de la fiche équipement (selon le profil ; réserves
                    à lever comptées) ;
     profils      : technicien en lecture (aucun bouton d'écriture), demandeur renvoyé à l'accueil ;
-    demo         : parcours en file:// (statuts des rôles, contrôle réalisé avec une photo et une réserve) ;
-La levée des observations (bouton « Lever les observations ») est retirée de l'écran par T412 : la levée se fait
-réserve par réserve (tests/test_reserves.py, T418-T419).
+    demo         : parcours en file:// (statuts des rôles, contrôle réalisé avec une photo et une réserve, colonnes
+                   anciennes observations / observations_levees plus écrites depuis T418) ;
+La levée des observations (bouton « Lever les observations ») est retirée de l'écran par T412 et leverObservations
+par T418 : la levée se fait réserve par réserve (tests/test_reserves.py, T418-T419).
     telephone    : 375 px sans défilement horizontal, zones tactiles de 48 px.
 
 Lancer depuis la racine du projet :
@@ -476,7 +477,7 @@ class TestRealisation(CasControles):
             self.assertEqual(ligne["derniere_date"], date.isoformat())
             self.assertEqual(ligne["prochaine_date"], attendue.isoformat())
             self.assertEqual(ligne["organisme"], "Organisme du test")
-            self.assertEqual((ligne["observations"], ligne["observations_levees"]), ("", "1"))
+            self.assertEqual((ligne["observations"], ligne["observations_levees"]), ("", "1"))   # plus écrites (T418)
             # Nom imposé par le serveur devant le nom demandé (audit F4, T159)
             self.assertRegex(ligne["rapport"], r"^\d{8}-\d{6}-controle-%s-%s(-\d+)?\.pdf$" % (EN_RETARD, date.isoformat()))
             self.assertEqual((documents / ligne["rapport"]).read_bytes(), PDF["buffer"])
@@ -668,12 +669,13 @@ class TestDemoEtTelephone(CasControles):
         page.click("#controle-realise")
         page.wait_for_selector("dialog [name=date]")
         page.set_input_files("dialog input[type=file]", files=[{"name": "rapport.png", "mimeType": "image/png", "buffer": PNG}])
-        page.fill("dialog [name=observations]", "Prise de terre à reprendre")
+        page.fill("dialog [name=reserves]", "Prise de terre à reprendre")
         self.valider_fenetre()
-        self.attendre_toast("Contrôle réalisé enregistré")
+        self.attendre_toast("Contrôle réalisé enregistré, 1 réserve relevée.")
         ligne = page.evaluate("(id) => Object.assign({}, Donnees.trouver('controles_reglementaires', id))", AVEC_RESERVES)
         self.assertEqual(ligne["derniere_date"], page.evaluate("Donnees.aujourdhui()"))
-        self.assertEqual((ligne["observations"], ligne["observations_levees"]), ("Prise de terre à reprendre", "0"))
+        # 2.2 (T418) : les colonnes anciennes ne sont plus écrites (la réserve est une ligne de reserves_controle)
+        self.assertEqual((ligne["observations"], ligne["observations_levees"]), ("", "1"))
         self.assertTrue(ligne["rapport"].startswith("controle-" + AVEC_RESERVES))
         page.wait_for_selector("#controle-rapport")
         self.assertTrue(page.get_attribute("#controle-rapport", "href").startswith("blob:"))

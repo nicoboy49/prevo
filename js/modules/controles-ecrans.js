@@ -6,6 +6,9 @@
 // OT réglementaires de l'équipement, historique au journal) ; puis l'enregistrement des écrans auprès d'App.
 // Catalogue Prévo (2.2, T416) : bloc du formulaire de création et source du contrôle sur sa fiche, construits par
 // controles-catalogue.js (Controles.interne.blocCatalogue, blocSourceControle) ; phrase D182 sur les trois écrans.
+// Réserves (2.2, T418) : carte « Réserves » de la fiche, champs des réserves de la fenêtre « contrôle réalisé » et
+// entrées du journal des réserves dans l'historique, construits par controles-reserves-ecrans.js (chargé après :
+// Controles.interne.carteReserves, champsReservesRealisation, entreesJournalReserves, cherchés à l'appel).
 // Profils : le responsable a tous les boutons ; le technicien consulte (aucun bouton d'écriture
 // n'est rendu) ; le demandeur n'a pas accès (App le renvoie à l'accueil).
 // Le module ne crée jamais d'OT : « Créer un OT » ouvre #/ot/nouveau pré-rempli (type
@@ -362,15 +365,19 @@ Object.assign(Controles, (() => {
       <p class="erreur-champ" id="${id}-erreur" role="alert" hidden></p></div>`);
   }
 
+  /** Fenêtre « Enregistrer le contrôle réalisé » : date, organisme, rapport, puis les réserves relevées (une ligne
+   *  par réserve, échéance commune facultative, aperçu ; controles-reserves-ecrans.js). Les réserves des contrôles
+   *  précédents ne changent pas (CS170). */
   async function ouvrirRealisation(controle) {
     const jour = Donnees.aujourdhui();
     const champDate = UI.champ({ nom: 'date', type: 'date', libelle: I18n.t('controles.ouvrir_realisation.date_controle') }, jour, { obligatoire: true, attributs: { max: jour } });
     const fichier = champFichierRapport();
+    let message = '';
     const fait = await UI.fenetreAction({ classe: 'controles-fenetre',
       titre: I18n.t('controles.ouvrir_realisation.enregistrer_controle_realise'),
       introduction: UI.html`<p>${I18n.t('controles.ouvrir_realisation.prochaine_date_sera_calculee', { nature: controle.nature, libelleEquipement: libelleEquipement(controle), n: controle.periodicite_mois || '?' })}</p>`,
       champs: [champDate, UI.champ(definitionChamp('organisme'), controle.organisme), fichier,
-        UI.champ(definitionChamp('observations'), '', { aide: I18n.t('controles.ouvrir_realisation.vide_aucune_observation_sinon') })],
+        ...Controles.interne.champsReservesRealisation(controle)],
       libelleValider: I18n.t('commun.bouton.enregistrer'),
       verifier(valeurs) {
         const erreurs = verifierRealisation(Donnees.trouver('controles_reglementaires', controle.id) || controle, valeurs);
@@ -382,9 +389,10 @@ Object.assign(Controles, (() => {
         const document = UI.$('input[type=file]', fichier).files[0];
         const rapport = document ? await Controles.ecrireRapport(controle.id, valeurs.date, document) : '';
         await Controles.enregistrerRealisation(controle.id, Object.assign({}, valeurs, { rapport }));
+        message = Controles.interne.messageRealisation(valeurs.reserves);
       },
     });
-    if (fait) await apresEcriture(I18n.t('controles.ouvrir_realisation.controle_realise_enregistre'));
+    if (fait) await apresEcriture(message);
   }
 
   async function apresEcriture(message) {
@@ -410,14 +418,15 @@ Object.assign(Controles, (() => {
         ? UI.html`<a id="controle-rapport" href="${adresseRapport}" target="_blank" rel="noopener">${UI.icone('document')} ${controle.rapport}</a>`
         : UI.html`${I18n.html('controles.carte_dernier_controle.fichier_introuvable', { rapport: controle.rapport })}`;
     }
-    // Texte des observations tel qu'enregistré (2.2 : ce qui reste à lever est dit par les réserves, CS170).
-    let observations = UI.html`<span class="muted">${I18n.t('controles.carte_dernier_controle.aucune_observation')}</span>`;
-    if (texte(controle.observations)) observations = UI.html`<span class="controles-observations">${controle.observations}</span>`;
-    return UI.html`<article class="carte"><h2>${I18n.t('controles.carte_dernier_controle.dernier_controle')}</h2><dl class="valeurs">
+    // Réserves relevées à ce contrôle (2.2, CS170 : la carte « Réserves » les détaille ; les colonnes anciennes
+    // observations ne sont plus affichées, reprises en réserves par D183).
+    const reserves = Controles.interne.reservesDuDernierControle(controle);
+    return UI.html`<article class="carte controles-dernier"><h2>${I18n.t('controles.carte_dernier_controle.dernier_controle')}</h2><dl class="valeurs">
       <dt>${I18n.t('commun.champ.date')}</dt><dd>${controle.derniere_date ? UI.dateFr(controle.derniere_date) : I18n.t('controles.carte_dernier_controle.non_renseignee')}</dd>
       <dt>${I18n.t('controles.colonnes_liste.organisme')}</dt><dd>${controle.organisme}</dd>
       <dt>${I18n.t('controles.carte_dernier_controle.rapport')}</dt><dd>${rapport}</dd>
-      <dt>${I18n.t('controles.carte_dernier_controle.observations')}</dt><dd>${observations}</dd></dl></article>`;
+      <dt>${I18n.t('controles.carte_dernier_controle.reserves_relevees')}</dt><dd class="controles-dernier-reserves">${reserves ? String(reserves)
+    : UI.html`<span class="muted">${I18n.t('controles.carte_dernier_controle.aucune_reserve')}</span>`}</dd></dl></article>`;
   }
 
   /** Carte de description (technicien) : le contrôle, puis sa source (provenance, liens, mention, phrase D182). */
@@ -449,12 +458,21 @@ Object.assign(Controles, (() => {
 
   // Action d'une ligne du journal (D156) : écrite en français par Prévo (Donnees.modifier : « création » ou
   // « modification : champs », puis « — » et le complément de controles-ecritures.js ou de l'import). Ces marqueurs
-  // fixes sont traduits ici, à l'affichage ; une action inconnue s'affiche telle quelle.
-  const MOTIF_REALISATION = /^contrôle réalisé le (.+?)(?: par (.+?))? ; (?:rapport : (.+?)|(sans rapport joint)) ; (?:observations : ([\s\S]+)|(sans observation))$/;
+  // fixes sont traduits ici, à l'affichage ; une action inconnue s'affiche telle quelle. Réalisation : depuis la 2.2
+  // (T418), « 3 réserves » / « sans réserve » ; avant, « observations : … » / « sans observation » (entrées gardées).
+  const MOTIF_REALISATION = /^contrôle réalisé le (.+?)(?: par (.+?))? ; (?:rapport : (.+?)|(sans rapport joint)) ; (?:observations : ([\s\S]+)|(sans observation)|(\d+) réserves?|(sans réserve))$/;
   const MOTIF_LEVEE = /^observations levées le (.+?) : ([\s\S]*)$/;
   const MOTIF_IMPORT = /^import (.+)$/;
   // Valeurs du catalogue reprises sur un clic (appliquerMiseAJourCatalogue, T415) : « … C14 relu le 01/03/2027 … ».
   const MOTIF_CATALOGUE = /^valeurs du catalogue (\S+)(?: relu le (.+?))? reprises$/;
+
+  /** Fin d'une entrée « contrôle réalisé » : réserves (2.2) ou observations (entrées d'avant la 2.2). */
+  function reservesDeLaRealisation(trouve) {
+    if (trouve[7]) return I18n.t('controles.journal.reserves_n', { n: Number(trouve[7]) });
+    if (trouve[8]) return I18n.t('controles.journal.sans_reserve');
+    return trouve[6] ? I18n.t('controles.journal.sans_observation')
+      : I18n.t('controles.journal.observations', { observations: trouve[5] });
+  }
 
   function complementJournal(complement) {
     if (complement === 'création du contrôle réglementaire') return I18n.t('controles.journal.creation_controle');
@@ -465,8 +483,7 @@ Object.assign(Controles, (() => {
         realise: trouve[2] ? I18n.t('controles.journal.realise_le_par', { date: trouve[1], organisme: trouve[2] })
           : I18n.t('controles.journal.realise_le', { date: trouve[1] }),
         rapport: trouve[4] ? I18n.t('controles.journal.sans_rapport') : I18n.t('controles.journal.rapport', { rapport: trouve[3] }),
-        observations: trouve[6] ? I18n.t('controles.journal.sans_observation')
-          : I18n.t('controles.journal.observations', { observations: trouve[5] }),
+        observations: reservesDeLaRealisation(trouve),
       });
     }
     trouve = MOTIF_LEVEE.exec(complement);
@@ -492,14 +509,20 @@ Object.assign(Controles, (() => {
     return complement === null ? brute : I18n.t('controles.journal.action_complement', { action: base, complement });
   }
 
+  /** Historique : entrées du journal du contrôle et de ses réserves (2.2 : une écriture de plusieurs réserves fait
+   *  une entrée ; detail = la réserve concernée), la plus récente d'abord. */
   function carteHistorique(controle) {
     const entrees = Donnees.lignes('journal')
       .filter((entree) => entree.table === 'controles_reglementaires' && entree.id_ligne === controle.id)
+      .map((entree) => ({ id: entree.id, date_heure: entree.date_heure, profil: entree.profil, poste: entree.poste,
+        action: actionJournal(entree.action), detail: '' }))
+      .concat(Controles.interne.entreesJournalReserves(controle, actionJournal))
       .sort((a, b) => texte(b.date_heure).localeCompare(texte(a.date_heure)) || texte(b.id).localeCompare(texte(a.id)));
     return UI.html`<article class="carte controles-historique"><h2>${I18n.html('controles.carte_historique.historique_nb_entrees', { nbEntrees: entrees.length })}</h2>
       ${entrees.length ? UI.html`<ol class="controles-journal">${entrees.slice(0, LIMITE_HISTORIQUE).map((entree) => UI.html`<li>
         <span class="controles-quand">${UI.dateHeureFr(entree.date_heure)}</span>
-        <span class="controles-action">${actionJournal(entree.action)}</span>
+        <span class="controles-action">${entree.action}</span>
+        ${entree.detail ? UI.html`<span class="controles-reserve-concernee">${entree.detail}</span>` : ''}
         <span class="muted">${[entree.profil, entree.poste].filter(Boolean).join(' · ')}</span></li>`)}</ol>
         ${entrees.length > LIMITE_HISTORIQUE ? UI.html`<p class="note">${I18n.t('controles.carte_historique.plus_recentes_reste_journal', { limite: LIMITE_HISTORIQUE, nbEntrees: entrees.length })}</p>` : ''}`
         : UI.html`<p class="muted">${I18n.t('controles.carte_historique.aucune_modification_enregistree_prevo')}</p>`}
@@ -547,6 +570,8 @@ Object.assign(Controles, (() => {
         ${carteHistorique(controle)}
       </div>`);
     const zone = UI.$('.controles-zone-controle', conteneur);
+    // Carte « Réserves » en tête (technicien et responsable, CS170 ; controles-reserves-ecrans.js).
+    zone.appendChild(Controles.interne.carteReserves(controle));
     if (responsable) {
       const carte = UI.element(UI.html`<article class="carte"><h2>${I18n.t('controles.colonnes_liste.controle')}</h2></article>`);
       carte.appendChild(Controles.interne.blocSourceControle(controle, true));
@@ -554,7 +579,7 @@ Object.assign(Controles, (() => {
       zone.appendChild(carte);
       UI.$('#controle-realise', conteneur).addEventListener('click', () => ouvrirRealisation(controle));
     } else {
-      UI.remplir(zone, carteDescription(controle, etatCalcule.prochaine));
+      zone.appendChild(carteDescription(controle, etatCalcule.prochaine));
     }
   }
 

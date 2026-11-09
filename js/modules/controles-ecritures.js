@@ -1,8 +1,10 @@
 'use strict';
 // Controles (2/3) — écritures des contrôles réglementaires (ARCHITECTURE.md §15.7 ; brief RG9, E10) :
 // création, modification, contrôle réalisé (dates recalculées, rapport joint, réserves relevées ajoutées par
-// Controles.ajouterReserves de controles-reserves.js, 2.2), levée des observations ; source de la périodicité et
-// mise à jour du catalogue reprise sur un clic (2.2, CS171 ; règles de controles-catalogue.js, chargé avant).
+// Controles.ajouterReserves de controles-reserves.js, 2.2) ; source de la périodicité et mise à jour du catalogue
+// reprise sur un clic (2.2, CS171 ; règles de controles-catalogue.js, chargé avant). 2.2 (T418) : les colonnes
+// anciennes observations et observations_levees ne sont plus écrites (gardées à l'octet, CS169) ; la levée se fait
+// réserve par réserve (Controles.leverReserve), la levée des observations est retirée.
 //
 // Règles communes à toutes les fonctions de ce fichier :
 // - toute écriture passe par Donnees.modifier('controles_reglementaires') ; les contrôles sont
@@ -16,13 +18,13 @@
 Object.assign(Controles, (() => {
 
   // Outils de controles-regles.js.
-  const { texte, dateIso, dateDuJour, periodicite, observationsALever } = Controles.interne;
+  const { texte, dateIso, dateDuJour, periodicite } = Controles.interne;
   // Outils de controles-reserves.js (chargé avant ce fichier).
   const { refuserSiErreurs, erreursDate, erreursEcheance } = Controles.interne;
   const { ajouterMois } = Controles;
 
-  // Champs du formulaire d'un contrôle (création et modification). Le rapport, les observations
-  // et leur levée viennent des actions « contrôle réalisé » et « lever les observations ».
+  // Champs du formulaire d'un contrôle (création et modification). Le rapport vient de l'action « contrôle
+  // réalisé » ; les réserves relevées sont des lignes de reserves_controle (controles-reserves.js).
   // 2.2 (CS171) : nature_source est saisie (ou copiée du catalogue) ; source_periodicite, catalogue_id et
   // catalogue_relu_le (CHAMPS_PROVENANCE) sont tenus par l'écriture elle-même (sourceAvantEcriture).
   const CHAMPS_CONTROLE = ['equipement_id', 'nature', 'texte_reference', 'periodicite_mois', 'organisme',
@@ -224,7 +226,7 @@ Object.assign(Controles, (() => {
   }
 
   // ===========================================================================================
-  // 6. Contrôle réalisé et levée des observations
+  // 6. Contrôle réalisé
   // ===========================================================================================
 
   /**
@@ -252,26 +254,30 @@ Object.assign(Controles, (() => {
    * écritures, dans un ordre sûr (D18) :
    * 1. le contrôle : derniere_date = date, prochaine_date = date + périodicité (même jour, ramené à
    *    la fin du mois), organisme (s'il est donné), rapport (nom d'un document déjà écrit par
-   *    ecrireRapport ; vide si aucun) ; transition jusqu'à T418 : observations = texte des réserves,
-   *    observations_levees = '0' s'il y en a, sinon '1' (le statut d'avant T412 reste juste) ;
+   *    ecrireRapport ; vide si aucun). Les colonnes anciennes observations et observations_levees ne
+   *    sont plus écrites (2.2, T418 : gardées telles quelles, CS169) ;
    * 2. les réserves relevées (une par ligne du texte), AJOUTÉES par Controles.ajouterReserves avec
    *    cette date et l'échéance donnée : aucune réserve existante n'est effacée ni modifiée (CS170 ;
    *    celles des contrôles précédents restent ouvertes). Rejouable : renvoyer la même saisie après
    *    un échec de la 2e écriture ne recrée pas les réserves déjà écrites.
-   * `observations` est lu comme synonyme de `reserves` (ancienne fenêtre, jusqu'à T418). Renvoie
+   * Journal du contrôle : « contrôle réalisé le JJ/MM/AAAA par … ; rapport : … ; 3 réserves » (« sans
+   * réserve »). `observations` reste lu comme synonyme de `reserves` (appelants d'avant la 2.2). Renvoie
    * { derniere_date, prochaine_date, reserves: identifiants créés }.
    */
   async function enregistrerRealisation(controleId, valeurs) {
     const v = valeurs || {};
     const saisie = {
       date: texte(v.date), organisme: texte(v.organisme), rapport: texte(v.rapport),
-      observations: texte(v.reserves !== undefined && v.reserves !== null ? v.reserves : v.observations),
+      reserves: texte(v.reserves !== undefined && v.reserves !== null ? v.reserves : v.observations),
       echeance_levee: texte(v.echeance_levee),
     };
+    const nombre = Controles.lignesDeReserves(saisie.reserves).length;
+    // Journal (D156 : texte français fixe, traduit à l'affichage par la fiche) : « 1 réserve », « 3 réserves »,
+    // « sans réserve ».
     const action = 'contrôle réalisé le ' + UI.dateFr(saisie.date)
       + (saisie.organisme ? ' par ' + saisie.organisme : '')
       + (saisie.rapport ? ' ; rapport : ' + saisie.rapport : ' ; sans rapport joint')
-      + (saisie.observations ? ' ; observations : ' + saisie.observations : ' ; sans observation');
+      + (nombre ? ' ; ' + nombre + (nombre === 1 ? ' réserve' : ' réserves') : ' ; sans réserve');
     const dates = await Donnees.modifier('controles_reglementaires', (lignes, outils) => {
       const ligne = ligneDuControle(lignes, controleId);
       refuserSiErreurs(verifierRealisation(ligne, saisie, outils.aujourdhui()));
@@ -279,46 +285,13 @@ Object.assign(Controles, (() => {
       ligne.prochaine_date = ajouterMois(saisie.date, periodicite(ligne));
       if (saisie.organisme) ligne.organisme = saisie.organisme;
       ligne.rapport = saisie.rapport;                     // le rapport précédent reste nommé au journal
-      ligne.observations = saisie.observations;
-      ligne.observations_levees = saisie.observations ? '0' : '1';
       return { derniere_date: ligne.derniere_date, prochaine_date: ligne.prochaine_date };
     }, { action });
-    const reserves = Controles.lignesDeReserves(saisie.observations).length
-      ? await Controles.ajouterReserves(controleId, { date_controle: saisie.date, texte: saisie.observations,
+    const reserves = nombre
+      ? await Controles.ajouterReserves(controleId, { date_controle: saisie.date, texte: saisie.reserves,
         echeance_levee: saisie.echeance_levee })
       : [];
     return Object.assign(dates, { reserves });
-  }
-
-  /** Contrôle d'une levée d'observations : [{ nom, message }]. */
-  function verifierLevee(controle, valeurs, aujourdhui) {
-    if (!observationsALever(controle)) return [{ nom: 'commentaire', message: I18n.t('controles.verifier_levee.controle_pas_observation_lever') }];
-    const jour = dateDuJour(aujourdhui);
-    const date = texte(valeurs.date);
-    const erreurs = date ? erreursDate('date', date, jour, true, I18n.t('controles.verifier_levee.date_levee'))
-      : [{ nom: 'date', message: I18n.t('controles.verifier_levee.indiquez_date_laquelle_observations') }];
-    const derniere = dateIso(controle.derniere_date);
-    if (!erreurs.length && derniere && date < derniere) {
-      erreurs.push({ nom: 'date', message: I18n.t('controles.verifier_levee.observations_datent_controle_levee', { derniere: UI.dateFr(derniere) }) });
-    }
-    if (!texte(valeurs.commentaire)) {
-      erreurs.push({ nom: 'commentaire', message: I18n.t('controles.verifier_levee.decrivez_ete_fait_ex') });
-    }
-    return erreurs;
-  }
-
-  /**
-   * Lève les observations du dernier contrôle (observations_levees = '1', le texte est gardé) ;
-   * journal « observations levées le JJ/MM/AAAA : commentaire ».
-   */
-  async function leverObservations(controleId, valeurs) {
-    const saisie = { date: texte(valeurs && valeurs.date), commentaire: texte(valeurs && valeurs.commentaire) };
-    return Donnees.modifier('controles_reglementaires', (lignes, outils) => {
-      const ligne = ligneDuControle(lignes, controleId);
-      refuserSiErreurs(verifierLevee(ligne, saisie, outils.aujourdhui()));
-      ligne.observations_levees = '1';
-      return true;
-    }, { action: 'observations levées le ' + UI.dateFr(saisie.date) + ' : ' + saisie.commentaire });
   }
 
   // ===========================================================================================
@@ -374,11 +347,11 @@ Object.assign(Controles, (() => {
   }
 
   // Contrôles prêtés aux écrans du module (erreurs affichées sous les champs avant d'écrire).
-  Object.assign(Controles.interne, { verifierRealisation, verifierLevee, verifierFichierRapport, EXTENSIONS_RAPPORT });
+  Object.assign(Controles.interne, { verifierRealisation, verifierFichierRapport, EXTENSIONS_RAPPORT });
 
   return {
     // écritures (ARCHITECTURE.md §15.7)
-    verifierControle, creerControle, modifierControle, enregistrerRealisation, leverObservations, ecrireRapport,
+    verifierControle, creerControle, modifierControle, enregistrerRealisation, ecrireRapport,
     // catalogue des contrôles (CONCEPTION-L2-L3 §4.2)
     appliquerMiseAJourCatalogue,
   };
