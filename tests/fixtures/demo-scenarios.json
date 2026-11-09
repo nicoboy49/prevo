@@ -48,6 +48,7 @@
   "di_statut_refusee": "DI-2026-0108",
   "di_statut_regroupee": "DI-2026-0122",
   "equipement_br": "EQ-0012",
+  "equipement_non_chiffre": "EQ-0030",
   "equipement_panne_unique": "EQ-0029",
   "equipements_calcul_main": [
     "EQ-0001",

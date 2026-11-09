@@ -99,6 +99,7 @@ du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncé
   Parc, techniciens
     equipement_br                    AE-03 : habilitation BR requise
     equipement_panne_unique          BA-01 : une seule panne dans tout l'historique
+    equipement_non_chiffre           CH-01 : sans coût d'arrêt, avec une panne à durée le dernier mois (L5)
     technicien_br_valide             TEC-0001 : BR valide à la date de référence
     technicien_br_echue              TEC-0004 : BR échue à la date de référence
   2.2 (T444) : habilitations (CONCEPTION-L2-L3 §6)
@@ -887,6 +888,10 @@ VALEURS_REMPLACEMENT_DEMO = {
     'CV-02.M': 1450, 'CV-03': 10900, 'EM-01': 68000, 'ET-01': 24000, 'RB-01': 145000, 'BA-01': 12500,
     'CH-01': 28500, 'PE-01': 2400,
 }
+
+# Coût d'une heure d'arrêt (€ / h) de six équipements de criticité A et B (L5, D188) ; les autres restent sans
+# coût (« non chiffrés »), dont CH-01 (rôle equipement_non_chiffre : une panne avec durée le dernier mois).
+COUTS_ARRET_DEMO = {'CP-01': 850, 'PR-01': 1200, 'CU-01': 655.25, 'AE-01': 400, 'EM-01': 900, 'RB-01': 1500}
 
 # Fourchettes de valeur de remplacement (€ HT) par famille, pour le jeu de charge.
 FOURCHETTES_VALEUR = {
@@ -1871,7 +1876,8 @@ def generer_equipements(ctx):
             habilitation_requise=entree['hab'],
             consignation=texte_consignation(entree['energies'], entree['precision']),
             actif=0 if entree['statut'] == 'rebut' else 1,
-            valeur_remplacement=entree.get('valeur') or VALEURS_REMPLACEMENT_DEMO[entree['repere']])
+            valeur_remplacement=entree.get('valeur') or VALEURS_REMPLACEMENT_DEMO[entree['repere']],
+            cout_arret_h='' if ctx.volume else COUTS_ARRET_DEMO.get(entree['repere'], ''))
         meta = dict(entree, id=ligne['id'], ligne=ligne)
         ctx.equipements.append(meta)
         ctx.equipement[entree['repere']] = meta
@@ -4543,6 +4549,7 @@ def scenarios_du_jeu(ctx):
         scenarios[role] = [a for a in base['achats'] if a['statut'] == statut][position]['id']
     scenarios['equipement_br'] = ctx.equipement['AE-03']['id']
     scenarios['equipement_panne_unique'] = ctx.equipement['BA-01']['id']
+    scenarios['equipement_non_chiffre'] = ctx.equipement['CH-01']['id']
     scenarios['technicien_br_valide'] = ctx.techniciens[0]['id']
     scenarios['technicien_br_echue'] = ctx.techniciens[3]['id']
     scenarios['technicien_caces_sans_autorisation'] = ctx.techniciens[3]['id']

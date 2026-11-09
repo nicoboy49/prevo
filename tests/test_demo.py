@@ -1092,8 +1092,18 @@ class TestContenuDemo(unittest.TestCase):
         for c in controles:                      # alignés sur le catalogue validé (T417, D193)
             self.assertEqual((c['source_periodicite'], c['nature_source'], c['catalogue_relu_le']),
                              ('catalogue', 'norme' if c['catalogue_id'] == 'C27' else 'obligation', '2026-11-08'))
+        chiffres = {l['repere'].lstrip("'"): l['cout_arret_h'] for l in self.t['equipements'] if l['cout_arret_h']}
+        self.assertEqual(len(chiffres), 6)       # T475 : six équipements chiffrés, tous de criticité A ou B
+        self.assertEqual(chiffres['CU-01'], '655.25')
         for ligne in self.t['equipements']:
-            self.assertEqual(ligne['cout_arret_h'], '', 'equipements.cout_arret_h')
+            if ligne['cout_arret_h']:
+                self.assertIn(ligne['criticite'], ('A', 'B'))
+                self.assertGreaterEqual(float(ligne['cout_arret_h']), 0)
+        non_chiffre = [l for l in self.t['equipements'] if l['id'] == scenarios_demo()['equipement_non_chiffre']][0]
+        self.assertEqual(non_chiffre['cout_arret_h'], '')
+        recentes = [o for o in self.t['ordres_travail'] if o['equipement_id'] == non_chiffre['id']
+                    and o['duree_arret_h'] and o['date_fin'] >= '2026-09-19']
+        self.assertTrue(recentes, 'equipement_non_chiffre : une panne à durée le dernier mois')
         for ligne in self.t['habilitations']:         # le justificatif reste vide : aucun document en démo
             self.assertEqual(ligne['justificatif'], '', 'habilitations.justificatif')
         exigees = [o['id'] for o in self.t['ordres_travail'] if o['habilitation_requise']]
