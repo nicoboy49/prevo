@@ -253,10 +253,11 @@ class TestAccueil(CasParametres):
             self.assertEqual(cartes.count(), len(siens))
             identifiants = [cartes.nth(i).locator("b").first.inner_text() for i in range(cartes.count())]
             self.assertEqual(sorted(identifiants), sorted(o["id"] for o in siens))
-            # Aucun compteur du responsable ; depuis le lot 3 (§15.9), seulement les deux indicateurs
-            # de conformité (contrôles sous 30 j, habilitations à renouveler).
+            # Aucun compteur du responsable ; depuis le lot 3 (§15.9), les indicateurs de conformité :
+            # contrôles sous 30 j, habilitations à renouveler et, depuis la 2.2 (T421), réserves en retard.
             liens = page.eval_on_selector_all("#contenu .instruments a", "l => l.map(a => a.getAttribute('href'))")
-            self.assertEqual(sorted(liens), ["#/controles?filtre=30j", "#/equipe?filtre=a-renouveler"])
+            self.assertEqual(sorted(liens), ["#/controles?filtre=30j", "#/controles?filtre=reserves-en-retard",
+                                             "#/equipe?filtre=a-renouveler"])
             self.assertEqual(page.locator("#contenu .instruments:not(.accueil-instruments-technicien)").count(), 0)
             signaler = page.locator("#contenu a.btn-gros")
             self.assertIn("Signaler un problème", signaler.inner_text())
