@@ -15,8 +15,8 @@
 //   garanties-regles.js       CE FICHIER, qui crée l'objet Garanties : règles PURES (T451)
 //                               1. Constantes et petits outils (textes, dates ISO, délai d'alerte, montants)
 //                               2. Garanties : état, sous garantie, garanties d'un équipement
-//                               3. Contrats : date limite de résiliation, état, équipements, reconduction proposée,
-//                                  total des montants
+//                               3. Contrats : date limite de résiliation, état, résiliation notée (journal),
+//                                  équipements, reconduction proposée, total des montants
 //                               4. Échéances (accueil, compteurs de l'écran)
 //                               5. Vérification des valeurs saisies ou importées, avertissements
 //   garanties-ecritures.js    créer, modifier, retirer, reconduire, noter la résiliation, document joint (T452)
@@ -44,7 +44,7 @@ const Garanties = (() => {
   /** Statuts calculés d'une garantie, dans l'ordre de priorité : le premier vrai est le statut (conception §2.2).
    *  Des codes, jamais affichés tels quels : le libellé est garanties.statut.<code> (libelleStatut). */
   const STATUTS_GARANTIE = Object.freeze(['fin_inconnue', 'a_venir', 'terminee', 'bientot', 'en_cours']);
-  /** Statuts calculés d'un contrat, dans l'ordre de priorité (conception §2.2, QUESTIONS L4-L6 Q1 et Q3). */
+  /** Statuts calculés d'un contrat, dans l'ordre de priorité (conception §2.2, QUESTIONS L4-L6 Q1 et Q3, T463). */
   const STATUTS_CONTRAT = Object.freeze(['fin_inconnue', 'a_decider', 'a_mettre_a_jour', 'bientot',
     'preavis_depasse', 'termine', 'en_cours']);
   const [FIN_INCONNUE, A_VENIR, TERMINEE, BIENTOT, EN_COURS] = STATUTS_GARANTIE;
@@ -294,28 +294,22 @@ const Garanties = (() => {
     const fin = UI.dateFr(etatCalcule.fin);
     const finPeriode = UI.dateFr(etatCalcule.finPeriode);
     const limite = UI.dateFr(etatCalcule.dateLimite);
-    const avecPreavis = etatCalcule.dateLimite !== etatCalcule.finPeriode;
+    // Sans reconduction tacite, la date limite de résiliation ne compte pas : la raison dit la fin seulement.
+    const avecPreavis = etatCalcule.tacite && etatCalcule.dateLimite !== etatCalcule.finPeriode;
     switch (statut) {
       case FIN_INCONNUE: return I18n.t('garanties.raison_contrat.fin_inconnue');
-      case A_DECIDER:
+      case A_DECIDER:                                   // reconduction tacite seulement (T463)
         if (etatCalcule.periodeCalculee) {
           return I18n.t('garanties.raison_contrat.a_decider_periode_calculee',
             { limite, quand: quand(etatCalcule.joursAvantLimite), fin });
         }
-        if (etatCalcule.tacite) {
-          return I18n.t('garanties.raison_contrat.a_decider_tacite',
-            { limite, quand: quand(etatCalcule.joursAvantLimite), fin: finPeriode });
-        }
-        // sans reconduction tacite ni préavis, la date limite est la fin : la raison dit la fin
-        return avecPreavis ? I18n.t('garanties.raison_contrat.a_decider',
-          { limite, quand: quand(etatCalcule.joursAvantLimite), fin: finPeriode })
-          : I18n.t('garanties.raison_contrat.bientot', { quand: quand(etatCalcule.joursAvantFin), fin: finPeriode });
+        return I18n.t('garanties.raison_contrat.a_decider_tacite',
+          { limite, quand: quand(etatCalcule.joursAvantLimite), fin: finPeriode });
       case A_METTRE_A_JOUR: return I18n.t('garanties.raison_contrat.a_mettre_a_jour', { fin });
       case BIENTOT:
         return I18n.t('garanties.raison_contrat.bientot', { quand: quand(etatCalcule.joursAvantFin), fin: finPeriode });
-      case PREAVIS_DEPASSE:
-        return I18n.t(etatCalcule.tacite ? 'garanties.raison_contrat.preavis_depasse_tacite'
-          : 'garanties.raison_contrat.preavis_depasse', { limite, fin: finPeriode });
+      case PREAVIS_DEPASSE:                             // reconduction tacite seulement (T463)
+        return I18n.t('garanties.raison_contrat.preavis_depasse_tacite', { limite, fin: finPeriode });
       case TERMINE: return I18n.t('garanties.raison_contrat.termine', { fin });
       default:
         return avecPreavis ? I18n.t('garanties.raison_contrat.en_cours_preavis', { fin: finPeriode, limite })
@@ -330,11 +324,15 @@ const Garanties = (() => {
    * la fin de la période reconduite, calculée (periodeCalculee, rien n'est écrit) ; dateLimite, joursAvantLimite et
    * joursAvantFin portent sur cette période. statut = le premier vrai de STATUTS_CONTRAT :
    *   « fin inconnue » (fin vide ou illisible) ;
-   *   « à décider » (0 ≤ date limite − jour ≤ délai : alerte) ;
+   *   « à décider » (reconduction tacite, 0 ≤ date limite − jour ≤ délai : alerte) ;
    *   « dates à mettre à jour » (fin enregistrée passée et reconduction tacite : le contrat continue) ;
    *   « se termine bientôt » (sans reconduction tacite, 0 ≤ fin − jour ≤ délai : alerte, la prestation s'arrête) ;
-   *   « préavis dépassé » (date limite < jour ≤ fin) ; « terminé » (fin passée, sans reconduction) ; « en cours ».
-   * CS173 (délai 60) : fin 31/12/2026, préavis 3 mois → à décider du 01/08/2026 au 30/09/2026.
+   *   « préavis dépassé » (reconduction tacite, date limite < jour ≤ fin) ; « terminé » (fin passée, sans
+   *   reconduction tacite) ; « en cours ».
+   * Sans reconduction tacite (dont un contrat dont la résiliation est notée : reconduction_tacite à 0), rien n'est à
+   * décider : la date limite de résiliation ne compte pas, jamais « à décider » ni « préavis dépassé » (T463, décision
+   * de l'orchestrateur qui remplace QUESTIONS L4-L6 Q1 pour ces contrats) ; « se termine bientôt » avant la fin.
+   * CS173 (délai 60, reconduction tacite) : fin 31/12/2026, préavis 3 mois → à décider du 01/08/2026 au 30/09/2026.
    */
   function etatContrat(contrat, aujourdhui, delai) {
     const jour = dateDuJour(aujourdhui);
@@ -350,16 +348,44 @@ const Garanties = (() => {
       const joursAvantLimite = joursEntre(jour, dateLimite);
       const joursAvantFin = joursEntre(jour, finPeriode);
       let statut = EN_COURS;
-      if (joursAvantLimite >= 0 && joursAvantLimite <= jours) statut = A_DECIDER;
+      if (tacite && joursAvantLimite >= 0 && joursAvantLimite <= jours) statut = A_DECIDER;
       else if (tacite && fin < jour) statut = A_METTRE_A_JOUR;
       else if (!tacite && joursAvantFin >= 0 && joursAvantFin <= jours) statut = BIENTOT;
-      else if (joursAvantLimite < 0 && joursAvantFin >= 0) statut = PREAVIS_DEPASSE;
+      else if (tacite && joursAvantLimite < 0 && joursAvantFin >= 0) statut = PREAVIS_DEPASSE;
       else if (joursAvantFin < 0) statut = TERMINE;
       Object.assign(resultat, { statut, finPeriode, periodeCalculee: Boolean(reconduite), dateLimite,
         joursAvantLimite, joursAvantFin, alerte: statut === A_DECIDER || statut === BIENTOT });
     }
     resultat.raison = raisonContrat(resultat.statut, resultat);
     return resultat;
+  }
+
+  // Entrées du journal d'un contrat (écrites par garanties-ecritures.js en français fixe, D156).
+  const MOTIF_RESILIATION_NOTEE = /(?:^| — )résiliation notée : lettre du (\d{2}\/\d{2}\/\d{4})/;
+  const MOTIF_CHAMPS_MODIFIES = /^modification : (.+?)(?: — |$)/;
+
+  /**
+   * Résiliation notée d'un contrat (fiche : « Résiliation notée le … », T463) : { notee, lettre } (dates ISO : jour
+   * de l'entrée du journal, date de la lettre), ou null. La dernière entrée « résiliation notée : lettre du … » du
+   * journal, si le contrat ne se reconduit plus tacitement et si sa date de fin n'a pas changé depuis (une période
+   * saisie après la lettre n'est pas résiliée). Lit le journal, n'écrit rien.
+   */
+  function resiliationNotee(contrat) {
+    const id = texte(contrat && contrat.id);
+    if (!id || estTacite(contrat)) return null;
+    let trouvee = null;
+    Donnees.lignes('journal').forEach((entree) => {
+      if (texte(entree.table) !== 'contrats_prestataires' || texte(entree.id_ligne) !== id) return;
+      const action = texte(entree.action);
+      const lettre = MOTIF_RESILIATION_NOTEE.exec(action);
+      const champs = MOTIF_CHAMPS_MODIFIES.exec(action);
+      if (lettre) {
+        trouvee = { notee: dateIso(entree.date_heure), lettre: dateIso(Donnees.normaliser.date(lettre[1]).valeur) };
+      } else if (champs && champs[1].split(', ').includes('date_fin')) {
+        trouvee = null;
+      }
+    });
+    return trouvee;
   }
 
   /** Identifiants des équipements cités par un contrat (equipement_ids : séparés par « ; », « , » ou des espaces),
@@ -571,7 +597,8 @@ const Garanties = (() => {
     STATUTS_GARANTIE, STATUTS_CONTRAT, PARAMETRE_DELAI, libelleStatut, delaiAlerte,
     // règles pures (conception L4 §2.6)
     etatGarantie, garantiesDeLEquipement, sousGarantie,
-    dateLimiteResiliation, etatContrat, equipementsDuContrat, contratsDeLEquipement, propositionReconduction,
+    dateLimiteResiliation, etatContrat, resiliationNotee, equipementsDuContrat, contratsDeLEquipement,
+    propositionReconduction,
     totalMontants, aEcheance, verifierGarantie, verifierContrat, avertissementsContrat,
     // Usage interne au module (pas une API) : complété par les fichiers suivants.
     interne: { texte, dateIso, dateDuJour, ajouterJours, joursEntre, centimes, estActif, estTacite, preavisMois,

@@ -5,15 +5,16 @@
 //   #/garanties                 compteurs, puis onglets Garanties et Contrats ; l'adresse garde l'onglet et ses
 //                               filtres : ?onglet=garanties|contrats, ?filtre=, ?fournisseur=, ?recherche=.
 //                               ?filtre= : garanties → sous-garantie (en cours ou se termine bientôt), bientot,
-//                               a-venir, terminee, fin-inconnue ; contrats → a-decider (en alerte : à décider ou se
-//                               termine bientôt, QUESTIONS L4-L6 Q1), a-mettre-a-jour, preavis-depasse, en-cours,
-//                               termine, fin-inconnue. Pied des contrats : total des montants annuels des contrats en
-//                               cours, ceux sans montant comptés à part, jamais estimés (D190).
+//                               a-venir, terminee, fin-inconnue ; contrats → a-decider (en alerte : à décider avec
+//                               reconduction tacite, se termine bientôt sans, T463), a-mettre-a-jour, preavis-depasse,
+//                               en-cours, termine, fin-inconnue. Pied des contrats : total des montants annuels des
+//                               contrats en cours, ceux sans montant comptés à part, jamais estimés (D190).
 //   #/garanties/garantie/<id>   fiche : statut et raison, équipement, fournisseur (tel:, mailto:), conditions,
 //                               document, historique du journal ; « Modifier », « Retirer la garantie » (confirmée).
 //   #/garanties/contrat/<id>    fiche : bandeau de l'échéance avec « Écrire au prestataire » (mailto: : Prévo n'envoie
 //                               rien), « Modifier », « Noter la résiliation » et « Reconduire » (reconduction tacite),
-//                               « Retirer le contrat » (confirmé), historique du journal.
+//                               « Retirer le contrat » (confirmé), historique du journal ; « Résiliation notée le … »
+//                               sous le statut quand le journal la porte (Garanties.resiliationNotee, T463).
 // Phrase D182 sous le titre des trois écrans (garanties.principe.texte) ; aucun texte ne dit « conforme » (CS175).
 // Montant annuel : écrans du responsable seulement (le technicien n'y entre pas ; le serveur lui cache la colonne,
 // T453, D126). Ligne retirée (actif = 0) : absente de la liste et des compteurs ; sa fiche reste lisible, sans bouton.
@@ -459,11 +460,12 @@ Object.assign(Garanties, (() => {
       ${UI.vide(message, I18n.t('commun.message.saisi_sur_autre_poste'), 'document')}</div>`);
   }
 
-  /** Entête commune : fil, titre, statut et raison, phrase D182, boutons (ligne active seulement). */
-  function enteteFiche(onglet, titre, etat, boutons) {
+  /** Entête commune : fil, titre, statut et raison (puis le complément, s'il y en a un), phrase D182, boutons (ligne
+   *  active seulement). */
+  function enteteFiche(onglet, titre, etat, boutons, complement) {
     return UI.html`<div class="entete-page"><div>
         <div class="fil">${fil(onglet)}</div><h1>${titre}</h1>
-        <p class="garanties-badges">${badge(etat.statut)} <span class="garanties-raison">${etat.raison}</span></p>
+        <p class="garanties-badges">${badge(etat.statut)} <span class="garanties-raison">${etat.raison}</span></p>${complement || ''}
         <p class="note garanties-principe">${I18n.t('garanties.principe.texte')}</p></div>
       ${boutons ? UI.html`<div class="actions">${boutons}</div>` : ''}</div>`;
   }
@@ -534,11 +536,9 @@ Object.assign(Garanties, (() => {
     const valeurs = { fin: UI.dateFr(etat.finPeriode), limite: UI.dateFr(etat.dateLimite) };
     let message = '';
     let ecrire = false;
-    if (etat.statut === 'a_decider' && etat.tacite) {
+    if (etat.statut === 'a_decider') {                 // reconduction tacite seulement (T463)
       message = I18n.t('garanties.fiche_contrat.bandeau_a_decider_tacite', Object.assign(valeurs, { quand: quand(etat.joursAvantLimite) }));
       ecrire = true;
-    } else if (etat.statut === 'a_decider') {
-      message = I18n.t('garanties.fiche_contrat.bandeau_a_decider', Object.assign(valeurs, { quand: quand(etat.joursAvantLimite) }));
     } else if (etat.statut === 'bientot') {
       message = I18n.t('garanties.fiche_contrat.bandeau_bientot', { fin: valeurs.fin, quand: quand(etat.joursAvantFin) });
     } else if (etat.statut === 'a_mettre_a_jour') {
@@ -626,13 +626,17 @@ Object.assign(Garanties, (() => {
     const tacite = estTacite(contrat);
     const etat = Garanties.etatContrat(contrat);
     const titre = I18n.t('garanties.fiche_contrat.titre', { objet: texte(contrat.objet) || contrat.id });
+    // Sans reconduction tacite, la décision est prise : « Résiliation notée le … » si le journal la porte (T463).
+    const resiliation = Garanties.resiliationNotee(contrat);
+    const complement = resiliation && UI.html`<p class="garanties-resiliation">${I18n.t('garanties.fiche_contrat.resiliation_notee',
+      { notee: UI.dateFr(resiliation.notee), lettre: UI.dateFr(resiliation.lettre), fin: UI.dateFr(etat.finPeriode) })}</p>`;
     App.definirTitre(titre);
     UI.remplir(conteneur, UI.html`<div class="garanties garanties-fiche" data-contrat="${contrat.id}">
       ${enteteFiche('contrats', titre, etat, actif ? UI.html`
         <a class="btn btn-primaire" id="contrat-modifier" href="${Garanties.adresseModification(contrat.id)}">${I18n.t('commun.bouton.modifier')}</a>
         ${tacite ? UI.html`<button type="button" class="btn btn-secondaire" id="contrat-resiliation">${I18n.t('garanties.fiche_contrat.noter_resiliation')}</button>
         <button type="button" class="btn btn-secondaire" id="contrat-reconduire">${I18n.t('garanties.fiche_contrat.reconduire')}</button>` : ''}
-        <button type="button" class="btn btn-secondaire" id="contrat-retirer">${I18n.t('garanties.fiche_contrat.retirer')}</button>` : '')}
+        <button type="button" class="btn btn-secondaire" id="contrat-retirer">${I18n.t('garanties.fiche_contrat.retirer')}</button>` : '', complement)}
       ${actif ? bandeauContrat(contrat, etat) : UI.html`<div class="alertes"><div class="alerte attention" role="status">${UI.icone('alerte')}<div class="alerte-texte">${I18n.t('garanties.fiche_contrat.retire')}</div></div></div>`}
       <article class="carte"><h2>${I18n.t('garanties.fiche_contrat.carte')}</h2>${valeursContrat(contrat, etat, lu.adresse)}</article>
       ${carteHistorique('contrats_prestataires', contrat.id)}</div>`);

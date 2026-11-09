@@ -1,4 +1,4 @@
-"""Recette du L4 de la 2.2 « garanties et contrats de prestataires » (T461 ; CDC §3.4, CS173, CS175 côté Garanties et
+"""Recette du L4 de la 2.2 « garanties et contrats de prestataires » (T461, T463 ; CDC §3.4, CS173, CS175 côté Garanties et
 contrats, CS177 côté réseau ; décisions D182, D187, D190 ; QUESTIONS-L2-L6 : L4-L6 Q1, Q3, Q6, Q7, Q12, et réponse
 PROVISOIRE n° 3 pour les contrats signés, à confirmer par Nicolas). De bout en bout, à l'écran, comme un responsable
 puis comme un technicien, horloge du navigateur figée (jamais la date réelle) ; les tests de chaque partie
@@ -25,7 +25,10 @@ Le parcours (CasRecette.parcours), le même dans trois modes :
     15/01/2027  fin passée sans rien faire, reconduction tacite : « dates à mettre à jour », rien d'écrit ;
     31/08/2027  période reconduite calculée : « à décider » avant le 30/09/2027, rien d'écrit (Q3) ; « Reconduire »
                 (01/01/2027-31/12/2027 : écrit, journal) ; « Noter la résiliation » (reconduction tacite à non,
-                journal) ; retrait d'une garantie terminée de E (avec son document) et d'un autre contrat de E : actif
+                journal) ; T463 : le contrat résilié n'est plus « à décider » (« en cours », « Résiliation notée le
+                31/08/2027 » sur la fiche, hors du filtre « à décider »), « se termine bientôt » le 01/12/2027 (30 jours
+                avant sa fin, jamais « préavis dépassé »), « terminé » le 01/01/2028 ; retrait d'une garantie terminée
+                de E (avec son document) et d'un autre contrat de E : actif
                 à 0, ligne inchangée sinon, document gardé, journal gardé ; ni l'une ni l'autre dans les listes ni sur
                 la fiche de E (Q12) ; fiche de E : badge « Sous garantie jusqu'au 31/05/2028 », carte « Garanties et
                 contrats » (liens du responsable, aucun montant) ; OT correctif créé depuis la fiche de E : rappel
@@ -134,6 +137,7 @@ VALEUR_FICHE_JS = """(libelle) => { const dt = Array.from(document.querySelector
   .find((d) => d.textContent.trim() === libelle); return dt ? dt.nextElementSibling.textContent.trim() : null; }"""
 ETAT_CONTRAT_JS = """(id) => { const e = Garanties.etatContrat(Donnees.trouver('contrats_prestataires', id));
   return [e.statut, e.finPeriode, e.dateLimite, e.periodeCalculee]; }"""
+STATUT_CONTRAT_LE_JS = "([id, jour]) => Garanties.etatContrat(Donnees.trouver('contrats_prestataires', id), jour).statut"
 
 
 def brut(valeur):
@@ -502,6 +506,42 @@ class CasRecette(Ecran, CasNavigateur):
         self.assertEqual(page.locator("#contrat-reconduire").count(), 0)
         self.assertEqual(self.js(VALEUR_FICHE_JS, "Reconduction tacite"), "Non")
         self.verifier_principe("fiche du contrat résilié", ".garanties-fiche")
+        self.contrat_resilie(ctp)
+
+    # -- 31/08/2027 : le contrat résilié n'a plus rien à décider (T463) ------------------------------
+
+    def contrat_resilie(self, ctp):
+        """La décision est prise : jamais plus « à décider » (avant le correctif T463, il le restait jusqu'au
+        30/09/2027) ; « Résiliation notée le … » sur la fiche ; « se termine bientôt » dans le délai (30 jours)
+        avant sa fin, sans « préavis dépassé » entre les deux ; « terminé » après."""
+        page = self.page
+        self.assertEqual(self.statut_fiche(), "en_cours")
+        self.assertEqual(self.texte(".garanties-fiche .garanties-raison"), "jusqu'au 31/12/2027")
+        self.assertEqual(self.texte(".garanties-fiche .garanties-resiliation"),
+                         "Résiliation notée le 31/08/2027 (lettre du 31/08/2027) : le contrat se termine le 31/12/2027.")
+        self.assertEqual(page.locator(".garanties-bandeau, #contrat-ecrire").count(), 0)
+        self.assertEqual(self.statut_contrat(J4, ctp), "en_cours")
+        self.assertIn("jusqu'au 31/12/2027", self.ligne_liste("contrats", ctp))
+        page.click(".garanties-compteurs a[data-compteur='a-decider']")
+        page.wait_for_function("location.hash === '#/garanties?onglet=contrats&filtre=a-decider'")
+        # l'écran redessiné avec le filtre (le compteur le dit), pas la liste d'avant le clic
+        page.wait_for_function("() => document.querySelector(\".garanties-compteurs a[data-compteur='a-decider']\")"
+                               ".textContent.includes('Filtre appliqué')")
+        self.assertEqual(page.locator(PANNEAU % "contrats" + " a.garanties-lien[href='%s']" % fiche(ctp)).count(), 0)
+        for jour, statut in (("2027-09-30", "en_cours"), ("2027-10-01", "en_cours"), ("2027-11-30", "en_cours"),
+                             ("2027-12-01", "bientot"), ("2027-12-31", "bientot"), ("2028-01-01", "termine")):
+            with self.subTest(jour=jour):
+                self.assertEqual(self.js(STATUT_CONTRAT_LE_JS, [ctp, jour]), statut)
+        # À l'écran, le premier jour du délai : la fiche dit la fin et garde la résiliation notée, puis la liste.
+        self.page.clock.set_fixed_time(heure("2027-12-01"))
+        self.ouvrir_fiche(ctp)
+        self.assertEqual(self.statut_fiche(), "bientot")
+        self.assertEqual(self.texte(".garanties-bandeau p"), "La prestation s'arrête le 31/12/2027 (dans 30 jours) : "
+                                                             "pour la garder, renouvelez le contrat avec le prestataire.")
+        self.assertIn("Résiliation notée le 31/08/2027", self.texte(".garanties-fiche .garanties-resiliation"))
+        self.assertEqual(self.statut_contrat("2027-12-01", ctp), "bientot")
+        self.assertIn("se termine dans 30 jours, le 31/12/2027", self.ligne_liste("contrats", ctp))
+        self.page.clock.set_fixed_time(heure(J4))
 
     # -- 31/08/2027 : retraits (actif à 0, rien d'effacé) --------------------------------------------
 

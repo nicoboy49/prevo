@@ -77,8 +77,19 @@ def valeurs_langue(code):
     return {cle: [decoder(b) for b in (v.values() if isinstance(v, dict) else [v])] for cle, (_, v, _) in entrees.items()}
 
 
+def vider_garanties_et_contrats(dossier):
+    """La copie de la démo porte ses garanties et ses contrats (T460) : le test part de ces deux tables vides (la
+    ligne d'en-tête gardée à l'octet près)."""
+    for nom in ("garanties.csv", "contrats_prestataires.csv"):
+        chemin = Path(dossier) / nom
+        octets = chemin.read_bytes()
+        chemin.write_bytes(octets[:octets.index(b"\n") + 1])
+
+
 def jeu(dossier):
-    """Garanties et contrats du test (01/08/2026, délai 60 jours) ; renvoie (équipements, fournisseurs)."""
+    """Garanties et contrats du test (01/08/2026, délai 60 jours), seuls dans leurs tables ; renvoie (équipements,
+    fournisseurs)."""
+    vider_garanties_et_contrats(dossier)
     equipements = [e for e in lignes(dossier, "equipements.csv") if e.get("actif") != "0"][:3]
     fournisseurs = lignes(dossier, "fournisseurs.csv")[:2]
     eq = [e["id"] for e in equipements]
@@ -192,6 +203,7 @@ class TestListe(CasEcrans):
     def test_liste_vides_expliques_menu_et_phrase(self):
         page = self.page
         with ServeurPrevo() as serveur:
+            vider_garanties_et_contrats(serveur.dossier)
             self.ouvrir(serveur, "#/garanties")
             page.wait_for_selector(".garanties-ecran")
             self.assertEqual(page.inner_text("#menu a[data-ecran='garanties'] .libelle"), "Garanties et contrats")

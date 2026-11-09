@@ -2,7 +2,9 @@
 
 Jeu écrit à la main dans ce fichier (aucune donnée réelle), date passée en argument. Règles : conception L4 §2.2 et
 §2.6, QUESTIONS L4-L6 Q1 (alerte avant la fin sans reconduction tacite) et Q3 (période reconduite calculée avec
-reconduction_mois, rien d'écrit).
+reconduction_mois, rien d'écrit) ; T463 (décision de l'orchestrateur, remplace Q1 pour ces contrats) : sans
+reconduction tacite, dont un contrat dont la résiliation est notée, jamais « à décider » ni « préavis dépassé »,
+seulement « se termine bientôt » avant la fin ; la résiliation notée se lit au journal (Garanties.resiliationNotee).
 
 Lancer depuis la racine du projet (navigateur : au travers du verrou) :
     py -X utf8 -m unittest discover -s tests -p "test_garanties_regles.py" -v
@@ -70,6 +72,29 @@ CONTRATS = csv("id;fournisseur_id;objet;equipement_ids;perimetre;date_debut;date
     "CTP-0009;FOU-0001;Dépannage;;;2026-01-01;2026-12-31;3;0;;2000;;1",
 ])
 
+# Journal des contrats (T463) : CTP-0010 à CTP-0012 ne sont pas dans la table (la règle reçoit la ligne en argument).
+JOURNAL = csv("id;date_heure;poste;profil;table;id_ligne;action", [
+    "J-0001;2026-01-05 08:00;Poste test;Responsable test;contrats_prestataires;CTP-0010;création — contrat enregistré",
+    "J-0002;2026-07-30 10:15;Poste test;Responsable test;contrats_prestataires;CTP-0010;\"modification : "
+    "reconduction_tacite — résiliation notée : lettre du 29/07/2026 ; Lettre recommandée\"",
+    # résiliation notée, puis une nouvelle période saisie : elle n'est plus résiliée
+    "J-0003;2026-03-01 09:00;Poste test;Responsable test;contrats_prestataires;CTP-0011;modification : "
+    "reconduction_tacite — résiliation notée : lettre du 01/03/2026",
+    "J-0004;2026-04-01 09:00;Poste test;Responsable test;contrats_prestataires;CTP-0011;modification : "
+    "date_debut, date_fin — modification du contrat",
+    # deux lettres (la seconde sur un contrat déjà sans reconduction tacite), puis le montant modifié
+    "J-0005;2026-09-10 09:00;Poste test;Responsable test;contrats_prestataires;CTP-0012;modification : "
+    "reconduction_tacite — résiliation notée : lettre du 09/09/2026",
+    "J-0006;2026-09-16 14:00;Poste test;Responsable test;contrats_prestataires;CTP-0012;\"résiliation notée : "
+    "lettre du 15/09/2026 ; seconde lettre\"",
+    "J-0007;2026-09-20 09:00;Poste test;Responsable test;contrats_prestataires;CTP-0012;modification : "
+    "montant_annuel — modification du contrat",
+    # CTP-0001 se reconduit tacitement (la résiliation a été annulée par « Modifier ») ; une garantie au même numéro
+    "J-0008;2026-08-02 09:00;Poste test;Responsable test;contrats_prestataires;CTP-0001;résiliation notée : "
+    "lettre du 01/08/2026",
+    "J-0009;2026-08-02 09:00;Poste test;Responsable test;garanties;CTP-0002;résiliation notée : lettre du 01/08/2026",
+])
+
 
 class CasGaranties(CasNavigateur):
     PARAMETRES = None
@@ -78,7 +103,7 @@ class CasGaranties(CasNavigateur):
         super().setUp()
         charger_scripts(self.page, SCRIPTS)
         tables = {"equipements": EQUIPEMENTS, "fournisseurs": FOURNISSEURS, "garanties": GARANTIES,
-                  "contrats_prestataires": CONTRATS}
+                  "contrats_prestataires": CONTRATS, "journal": JOURNAL}
         if self.PARAMETRES is not None:
             tables["parametres"] = csv("cle;valeur", self.PARAMETRES)
         self.page.evaluate("""async (tables) => {
@@ -214,35 +239,39 @@ class TestDateLimite(CasGaranties):
 class TestEtatContrat(CasGaranties):
 
     def test_preavis_vide_alerte_avant_la_fin(self):
-        # préavis vide : date limite = fin, l'alerte vient avant la fin (statut « à décider », raison : la fin)
+        # sans reconduction tacite, préavis vide : date limite = fin ; « se termine bientôt » avant la fin (T463)
         etat = self.etat_contrat("CTP-0002", "2026-11-01", 60)
-        self.assertEqual(etat["statut"], "a_decider")
+        self.assertEqual(etat["statut"], "bientot")
+        self.assertTrue(etat["alerte"])
         self.assertEqual(etat["dateLimite"], "2026-12-31")
         self.assertEqual(etat["raison"], "se termine dans 60 jours, le 31/12/2026")
-        # préavis connu, sans reconduction tacite : la raison dit le préavis et la fin
-        self.assertEqual(self.etat_contrat("CTP-0009", "2026-08-16", 60)["raison"],
-                         "préavis jusqu'au 30/09/2026 (dans 45 jours) ; le contrat se termine le 31/12/2026")
+        # préavis connu, sans reconduction tacite : la date limite ne compte pas, la raison dit la fin seulement
+        self.assertEqual(self.etat_contrat("CTP-0009", "2026-08-16", 60)["raison"], "jusqu'au 31/12/2026")
         self.assertEqual(self.etat_contrat("CTP-0002", "2026-10-31", 60)["statut"], "en_cours")
         self.assertEqual(self.etat_contrat("CTP-0002", "2026-10-31", 60)["raison"], "jusqu'au 31/12/2026")
         self.assertEqual(self.etat_contrat("CTP-0002", "2027-01-01", 60)["statut"], "termine")
 
     def test_sans_reconduction_tacite_toutes_les_etapes(self):
-        # Q1 : sans reconduction tacite, alerte avant la date limite puis avant la fin
-        attendus = [("2026-07-31", "en_cours"), ("2026-08-01", "a_decider"), ("2026-09-30", "a_decider"),
-                    ("2026-10-01", "preavis_depasse"), ("2026-10-31", "preavis_depasse"),
+        # T463 : sans reconduction tacite, rien à décider : ni « à décider » ni « préavis dépassé » autour de la date
+        # limite (30/09/2026) ; « se termine bientôt » dans le délai avant la fin, puis « terminé »
+        attendus = [("2026-07-31", "en_cours"), ("2026-08-01", "en_cours"), ("2026-09-30", "en_cours"),
+                    ("2026-10-01", "en_cours"), ("2026-10-31", "en_cours"),
                     ("2026-11-01", "bientot"), ("2026-12-31", "bientot"), ("2027-01-01", "termine")]
         for jour, statut in attendus:
             with self.subTest(jour=jour):
-                self.assertEqual(self.etat_contrat("CTP-0009", jour, 60)["statut"], statut)
-        self.assertTrue(self.etat_contrat("CTP-0009", "2026-11-01", 60)["alerte"])
+                etat = self.etat_contrat("CTP-0009", jour, 60)
+                self.assertEqual(etat["statut"], statut)
+                self.assertEqual(etat["alerte"], statut == "bientot")
+                self.assertEqual(etat["dateLimite"], "2026-09-30")
         self.assertEqual(self.etat_contrat("CTP-0009", "2026-11-01", 60)["raison"],
                          "se termine dans 60 jours, le 31/12/2026")
         self.assertEqual(self.etat_contrat("CTP-0009", "2026-12-31", 60)["raison"],
                          "se termine aujourd'hui, le 31/12/2026")
-        self.assertEqual(self.etat_contrat("CTP-0009", "2026-10-15", 60)["raison"],
-                         "date limite de résiliation passée (30/09/2026) ; le contrat se termine le 31/12/2026")
+        self.assertEqual(self.etat_contrat("CTP-0009", "2026-10-15", 60)["raison"], "jusqu'au 31/12/2026")
         self.assertEqual(self.etat_contrat("CTP-0009", "2027-01-01", 60)["raison"], "terminé le 31/12/2026")
-        self.assertFalse(self.etat_contrat("CTP-0009", "2027-01-01", 60)["alerte"])
+        # le délai réglé déplace « se termine bientôt » : 30 jours → à partir du 01/12/2026
+        self.assertEqual(self.etat_contrat("CTP-0009", "2026-11-30", 30)["statut"], "en_cours")
+        self.assertEqual(self.etat_contrat("CTP-0009", "2026-12-01", 30)["statut"], "bientot")
 
     def test_fin_illisible(self):
         etat = self.etat_contrat("CTP-0006", "2026-08-01", 60)
@@ -306,6 +335,60 @@ class TestEtatContrat(CasGaranties):
                           "en_cours"])
         self.assertEqual(self.js("() => Garanties.STATUTS_GARANTIE"),
                          ["fin_inconnue", "a_venir", "terminee", "bientot", "en_cours"])
+
+
+class TestResiliationNotee(CasGaranties):
+    """T463 (signalé par la recette T461) : « Noter la résiliation » met reconduction_tacite à 0 ; la décision est
+    prise, le contrat n'est plus jamais « à décider » ; la fiche dit « résiliation notée le … » (journal)."""
+
+    # Le contrat de CS173 après « Noter la résiliation » (lettre du 29/07/2026, journal J-0002).
+    RESILIE = {"id": "CTP-0010", "fournisseur_id": "FOU-0002", "objet": "Maintenance résiliée",
+               "date_debut": "2026-01-01", "date_fin": "2026-12-31", "preavis_mois": "3", "reconduction_tacite": "0",
+               "reconduction_mois": "12", "montant_annuel": "4800", "actif": "1"}
+
+    def etat(self, contrat, jour, delai=60):
+        return self.js("([c, jour, delai]) => Garanties.etatContrat(c, jour, delai)", [contrat, jour, delai])
+
+    def notee(self, contrat):
+        return self.js("(c) => Garanties.resiliationNotee(c)", contrat)
+
+    def test_resilie_jamais_a_decider_se_termine_bientot_avant_la_fin(self):
+        attendus = [("2026-07-31", "en_cours"), ("2026-08-01", "en_cours"), ("2026-09-30", "en_cours"),
+                    ("2026-10-01", "en_cours"), ("2026-10-31", "en_cours"), ("2026-11-01", "bientot"),
+                    ("2026-12-31", "bientot"), ("2027-01-01", "termine")]
+        for jour, statut in attendus:
+            with self.subTest(jour=jour):
+                self.assertEqual(self.etat(self.RESILIE, jour)["statut"], statut)
+        etat = self.etat(self.RESILIE, "2026-08-16")
+        self.assertEqual((etat["raison"], etat["alerte"], etat["dateLimite"]), ("jusqu'au 31/12/2026", False, "2026-09-30"))
+        etat = self.etat(self.RESILIE, "2026-11-16")
+        self.assertEqual((etat["raison"], etat["alerte"]), ("se termine dans 45 jours, le 31/12/2026", True))
+        # La même ligne avec reconduction tacite : CS173 inchangé (à décider du 01/08 au 30/09, puis préavis dépassé)
+        tacite = dict(self.RESILIE, reconduction_tacite="1")
+        for jour, statut in (("2026-07-31", "en_cours"), ("2026-08-01", "a_decider"), ("2026-09-30", "a_decider"),
+                             ("2026-10-01", "preavis_depasse"), ("2026-12-31", "preavis_depasse")):
+            with self.subTest(tacite=jour):
+                self.assertEqual(self.etat(tacite, jour)["statut"], statut)
+
+    def test_resilie_compte_au_total_jusqu_a_sa_fin(self):
+        total = "([c, jour]) => Garanties.totalMontants([c], jour)"
+        self.assertEqual(self.js(total, [self.RESILIE, "2026-08-01"]), {"centimes": 480000, "sansMontant": 0})
+        self.assertEqual(self.js(total, [self.RESILIE, "2026-12-31"]), {"centimes": 480000, "sansMontant": 0})
+        self.assertEqual(self.js(total, [self.RESILIE, "2027-01-01"]), {"centimes": 0, "sansMontant": 0})
+
+    def test_resiliation_notee_lue_au_journal(self):
+        self.assertEqual(self.notee(self.RESILIE), {"notee": "2026-07-30", "lettre": "2026-07-29"})
+        # deux lettres : la plus récente ; une modification qui ne touche pas la fin ne l'efface pas
+        self.assertEqual(self.notee(dict(self.RESILIE, id="CTP-0012")), {"notee": "2026-09-16", "lettre": "2026-09-15"})
+        # nouvelle période saisie après la lettre : elle n'est pas résiliée
+        self.assertIsNone(self.notee(dict(self.RESILIE, id="CTP-0011")))
+        # reconduction tacite (résiliation annulée par « Modifier ») : rien, même si le journal porte une lettre
+        self.assertIsNone(self.notee(dict(self.RESILIE, reconduction_tacite="1")))
+        self.assertIsNone(self.js("() => Garanties.resiliationNotee(Donnees.trouver('contrats_prestataires', 'CTP-0001'))"))
+        # aucune entrée pour ce contrat (celle de J-0009 est d'une autre table) ; ligne sans identifiant
+        self.assertIsNone(self.js("() => Garanties.resiliationNotee(Donnees.trouver('contrats_prestataires', 'CTP-0002'))"))
+        self.assertIsNone(self.notee({}))
+        self.assertIsNone(self.js("() => Garanties.resiliationNotee(null)"))
 
 
 class TestGaranties(CasGaranties):
@@ -406,7 +489,7 @@ class TestContrats(CasGaranties):
     def test_total_des_montants(self):
         # le 01/08/2026 : CTP-0001 (à décider, 4 800), CTP-0002 (en cours, sans montant), CTP-0003 (dates à mettre à
         # jour, 1 200,50), CTP-0004 (à décider, période calculée, 1 350), CTP-0008 (en cours, sans montant),
-        # CTP-0009 (à décider, 2 000) ; CTP-0005 terminé, CTP-0006 fin inconnue, CTP-0007 retiré : hors du total
+        # CTP-0009 (en cours, 2 000) ; CTP-0005 terminé, CTP-0006 fin inconnue, CTP-0007 retiré : hors du total
         total = self.js("() => Garanties.totalMontants(undefined, '2026-08-01')")
         self.assertEqual(total, {"centimes": 480000 + 120050 + 135000 + 200000, "sansMontant": 2})
         total = self.js("() => Garanties.totalMontants(Donnees.lignes('contrats_prestataires'), '2027-01-01')")
@@ -428,14 +511,15 @@ class TestEcheances(CasGaranties):
                             "aMettreAJour: e.aMettreAJour.map((c) => c.id) }; }")
         # GAR-0002 finit le 30/09 ; GAR-0005 (équipement au rebut) et GAR-0007 (retirée) écartées
         self.assertEqual(echeances["garanties"], ["GAR-0002"])
-        # triés par date de l'alerte : trois dates limites le 30/09/2026, puis par identifiant
-        self.assertEqual(echeances["contrats"], ["CTP-0001", "CTP-0004", "CTP-0009"])
+        # triés par date de l'alerte : deux dates limites le 30/09/2026, puis par identifiant ; CTP-0009 (même date
+        # limite, sans reconduction tacite) n'a rien à décider (T463)
+        self.assertEqual(echeances["contrats"], ["CTP-0001", "CTP-0004"])
         self.assertEqual(echeances["aMettreAJour"], ["CTP-0003"])
 
     def test_a_echeance_tri_par_date(self):
         echeances = self.js("() => { const e = Garanties.aEcheance('2026-11-05'); return { "
                             "contrats: e.contrats.map((c) => c.id), aMettreAJour: e.aMettreAJour.map((c) => c.id) }; }")
-        # CTP-0002 (préavis vide) et CTP-0009 (se termine bientôt) : fin 31/12/2026
+        # CTP-0002 (préavis vide) et CTP-0009 (préavis 3 mois) se terminent bientôt : fin 31/12/2026
         self.assertEqual(echeances["contrats"], ["CTP-0002", "CTP-0009"])
         self.assertEqual(echeances["aMettreAJour"], ["CTP-0003", "CTP-0004"])
         # délai passé en argument

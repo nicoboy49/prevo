@@ -5022,10 +5022,14 @@ reste celle de l'employeur (D182) : aucun texte ne dit « conforme » (CS175).
     3 mois → « à décider » du 01/08/2026 au 30/09/2026.
   - `etatContrat(contrat, aujourdhui, delai)` → `{ statut, fin, finPeriode, periodeCalculee, tacite, dateLimite,
     joursAvantLimite, joursAvantFin, alerte, raison }` ; statut = le premier vrai de `STATUTS_CONTRAT` : `fin_inconnue`,
-    `a_decider` (0 ≤ date limite − jour ≤ délai : alerte), `a_mettre_a_jour` (fin enregistrée passée avec reconduction
-    tacite : le contrat continue), `bientot` (sans reconduction tacite, 0 ≤ fin − jour ≤ délai : alerte),
-    `preavis_depasse` (date limite < jour ≤ fin), `termine`, `en_cours`. Un contrat tacite dont la fin est passée et dont
-    `reconduction_mois` est connu est jugé sur la période reconduite **calculée** (`periodeCalculee`, rien n'est écrit).
+    `a_decider` (reconduction tacite, 0 ≤ date limite − jour ≤ délai : alerte), `a_mettre_a_jour` (fin enregistrée
+    passée avec reconduction tacite : le contrat continue), `bientot` (sans reconduction tacite, 0 ≤ fin − jour ≤
+    délai : alerte), `preavis_depasse` (reconduction tacite, date limite < jour ≤ fin), `termine`, `en_cours`. Sans
+    reconduction tacite (dont un contrat dont la résiliation est notée), rien n'est à décider : ni `a_decider` ni
+    `preavis_depasse` (T463). Un contrat tacite dont la fin est passée et dont `reconduction_mois` est connu est jugé
+    sur la période reconduite **calculée** (`periodeCalculee`, rien n'est écrit). `resiliationNotee(contrat)` →
+    `{ notee, lettre }` ou `null` : la dernière « résiliation notée » du journal d'un contrat sans reconduction tacite,
+    si sa fin n'a pas changé depuis (fiche : « Résiliation notée le … »).
   - `propositionReconduction(contrat)` → `{ date_debut, date_fin, mois }` ou `null` : début = ancienne fin + 1 jour ;
     durée = `reconduction_mois`, sinon la durée de la période en mois entiers, sinon 12 ; toujours modifiable.
   - `totalMontants(contrats, aujourdhui)` → `{ centimes, sansMontant }` : contrats actifs dont la prestation continue

@@ -4922,7 +4922,8 @@ def statut_garantie_v22(garantie, jour, delai=DELAI_ALERTE_V22):
 
 def statut_contrat_v22(contrat, jour, delai=DELAI_ALERTE_V22):
     """Statut d'un contrat à `jour` (mêmes règles : à décider, dates à mettre à jour, se termine bientôt, préavis
-    dépassé, terminé, en cours). Sans durée de reconduction connue, la période n'est pas recalculée."""
+    dépassé, terminé, en cours ; sans reconduction tacite, ni à décider ni préavis dépassé, T463). Sans durée de
+    reconduction connue, la période n'est pas recalculée."""
     fin = jour_depuis_texte(contrat['date_fin'])
     tacite = contrat['reconduction_tacite'] == '1'
     duree = int(contrat['reconduction_mois'] or 0)
@@ -4937,13 +4938,13 @@ def statut_contrat_v22(contrat, jour, delai=DELAI_ALERTE_V22):
     preavis = int(contrat['preavis_mois'] or 0)
     limite = ajouter_mois(fin_periode, -preavis) if preavis else fin_periode
     avant_limite, avant_fin = (limite - jour).days, (fin_periode - jour).days
-    if 0 <= avant_limite <= delai:
+    if tacite and 0 <= avant_limite <= delai:
         return 'a_decider'
     if tacite and fin < jour:
         return 'a_mettre_a_jour'
     if not tacite and 0 <= avant_fin <= delai:
         return 'bientot'
-    if avant_limite < 0 <= avant_fin:
+    if tacite and avant_limite < 0 <= avant_fin:
         return 'preavis_depasse'
     return 'termine' if avant_fin < 0 else 'en_cours'
 
