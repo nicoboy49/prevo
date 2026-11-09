@@ -75,7 +75,7 @@ class TestRapportLangue(CasNavigateur):
 
     def valeurs_des_tuiles(self, document):
         valeurs = re.findall(r'<div class="val">([^<]*)</div>', document)
-        self.assertEqual(len(valeurs), 3)
+        self.assertEqual(len(valeurs), 4)                   # 2.2 (T472) : 4ᵉ tuile, le coût de l'arrêt
         return valeurs
 
     # -- tests ----------------------------------------------------------------------------------

@@ -8,9 +8,10 @@ vérifications sur le disque (donnees/documents/, parametres.csv, journal.csv). 
                 retire la tuile ;
     autonome    le fichier n'a ni <script> ni ressource externe (seul lien : mailto:), s'ouvre seul en
                 file:// sans erreur ni requête réseau, et tient sur UNE page A4 imprimée (PDF) ;
-    chiffres    tuiles = Indicateurs.global du mois ; comparaison à N-1 « non comparable » quand
-                l'historique ne couvre pas ce mois ; décision « à examiner » au-delà du seuil
-                (paramètre abaissé), jamais « à remplacer » ;
+    chiffres    tuiles = Indicateurs.global du mois, et la 4ᵉ (2.2, T472) = Indicateurs.coutArret du mois au
+                centime ; comparaison à N-1 « non comparable » quand l'historique ne couvre pas ce mois ; décision
+                « à examiner » au-delà du seuil (paramètre abaissé), jamais « à remplacer » (coût de l'arrêt en
+                détail : test_rapport_cout_arret.py) ;
     revisions   « Recalculer » écrit -r2 sans toucher au premier ; un fichier du même nom déjà présent
                 sur le disque n'est jamais écrasé (révision suivante) ;
     courriel    lien mailto: sans pièce jointe, objet et corps du résumé ;
@@ -222,11 +223,15 @@ class TestContenu(CasRapport):
         attendu = self.page.evaluate("""(mois) => {
             const g = Indicateurs.global(Indicateurs.periodeDuMois(mois), {}, Donnees.aujourdhui());
             const pct = (v) => v === null ? 'non calculable' : UI.nombreFr(v * 100, 1) + ' %';
+            const arret = Indicateurs.coutArret(Indicateurs.periodeDuMois(mois));
             return { disponibilite: pct(g.disponibilite.valeur), partPreventif: pct(g.partPreventif.valeur),
                      cout: g.cout.valeur === null ? 'non calculable' : UI.euro(g.cout.valeur, 0),
+                     coutArret: arret.parEquipement.length || arret.complet ? UI.euro(arret.totalCentimes / 100, 2) : 'non chiffré',
                      n1Couvert: Rapport.interne.estCouvert(Rapport.interne.decalerMois(mois, -12)),
                      m1Couvert: Rapport.interne.estCouvert(Rapport.interne.decalerMois(mois, -1)) }; }""", MOIS)
-        for cle in ("disponibilite", "partPreventif", "cout"):
+        self.assertEqual(re.findall(r'<div class="tuile" data-cle="([^"]+)">', contenu),
+                         ["disponibilite", "cout", "partPreventif", "coutArret"])
+        for cle in ("disponibilite", "partPreventif", "cout", "coutArret"):
             with self.subTest(tuile=cle):
                 bloc = re.search(r'<div class="tuile" data-cle="%s">(.*?)</div>\s*(?:<div class="tuile"|</section>)' % cle, contenu, re.S)
                 self.assertIsNotNone(bloc, cle)
@@ -279,7 +284,8 @@ class TestContenu(CasRapport):
         contenu = self.figer_depuis_l_accueil()
         liens = re.findall(r'href="(mailto:[^"]*)"', contenu)
         self.assertEqual(len(liens), 1)
-        lien = liens[0].replace("&amp;", "&")
+        # Attribut HTML décodé : encodeURIComponent laisse l'apostrophe (« Coût de l'arrêt », 2.2), échappée en &#39;
+        lien = html.unescape(liens[0])
         self.assertTrue(lien.startswith("mailto:?subject="))
         parametres = urllib.parse.parse_qs(lien[len("mailto:?"):])
         self.assertEqual(set(parametres), {"subject", "body"})
@@ -287,6 +293,7 @@ class TestContenu(CasRapport):
         self.assertIn("\r\n", parametres["body"][0])                       # RFC 6068 : CRLF
         self.assertNotIn("joint", parametres["body"][0])
         self.assertIn("Faits marquants", parametres["body"][0])
+        self.assertIn("• Coût de l'arrêt : ", parametres["body"][0])                # 4ᵉ tuile (2.2, T472)
         self.assertLess(len(parametres["body"][0]), 1800)
 
 

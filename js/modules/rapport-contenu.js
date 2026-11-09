@@ -1,7 +1,8 @@
 'use strict';
-// Rapport : rapport mensuel figé — une page A4 pour la direction : trois tuiles comparées au mois
-// précédent et à l'année précédente, faits marquants, décisions proposées, deux graphiques, encadré
-// « Comprendre » (ARCHITECTURE.md §15.10 ; CDC du lot 3, D43 à D45).
+// Rapport : rapport mensuel figé — une page A4 pour la direction : quatre tuiles comparées au mois
+// précédent et à l'année précédente, faits marquants, décisions proposées, trois graphiques, encadré
+// « Comprendre » (ARCHITECTURE.md §15.10 ; CDC du lot 3, D43 à D45). 2.2 (D188, CS174) : la 4ᵉ tuile et le
+// 2ᵉ Pareto disent le coût de l'arrêt (Indicateurs.coutArret), au centime, jamais estimé.
 //
 // Le module est découpé en deux fichiers, chargés dans cet ordre par index.html (§15.1) :
 //   rapport-contenu.js   CE FICHIER, qui crée l'objet Rapport :
@@ -84,18 +85,19 @@ const Rapport = (() => {
   /** Format d'une tuile selon sa nature. */
   function formater(cle, valeur) {
     if (valeur === null || valeur === undefined) return I18n.t('rapport.formater.non_calculable');
+    if (cle === 'coutArret') return UI.euro(valeur, 2);                  // au centime (CS174)
     return cle === 'cout' ? UI.euro(valeur, 0) : pourcentage(valeur);
   }
 
   /**
    * Comparaison d'une valeur à une valeur de référence : { sens, texte } ; sens ∈ 'hausse',
-   * 'baisse', 'stable', null (non comparable ou non calculable). Taux : écart en points ; coût :
+   * 'baisse', 'stable', null (non comparable ou non calculable). Taux : écart en points ; coûts :
    * écart relatif en %.
    */
   function comparer(cle, valeur, reference, comparable, libelleReference) {
     if (!comparable) return { sens: null, texte: I18n.t('rapport.comparer.non_comparable_historique_trop', { libelleReference }) };
     if (valeur === null || reference === null) return { sens: null, texte: I18n.t('rapport.comparer.non_calculable', { libelleReference }) };
-    if (cle === 'cout') {
+    if (cle === 'cout' || cle === 'coutArret') {
       if (reference === 0) {
         return valeur === 0 ? { sens: 'stable', texte: I18n.t('rapport.comparer.stable_rapport', { libelleReference }) }
           : { sens: 'hausse', texte: I18n.t('rapport.comparer.hausse_0', { libelleReference, devise: UI.symboleDevise() }) };
@@ -231,10 +233,71 @@ const Rapport = (() => {
     return liste.slice(0, NOMBRE_FAITS);
   }
 
+  // Coût de l'arrêt (2.2, D188, CS174) : Indicateurs.coutArret du mois, en centimes entiers. Rien n'est estimé : ce
+  // qui manque (équipements sans coût horaire, OT sans durée) est dit sous la valeur et listé dans « Non calculable ».
+  /** Repères cités dans « Non calculable » au plus (une page A4) ; la liste complète est à l'écran Indicateurs. */
+  const REPERES_NON_CHIFFRES = 8;
+
+  /** Valeur de la tuile en euros ; null (« non chiffré ») quand le mois a des pannes et qu'aucune n'est chiffrée. */
+  function valeurCoutArret(calcul) {
+    return calcul.parEquipement.length || calcul.complet ? calcul.totalCentimes / 100 : null;
+  }
+
+  /** Ce qui manque au calcul : « 1 équipement non chiffré, 1 OT sans durée » ('' quand il est complet). */
+  function manqueCoutArret(calcul) {
+    const morceaux = [];
+    if (calcul.nonChiffres.length) morceaux.push(I18n.t('rapport.cout_arret.equipements_non_chiffres', { n: calcul.nonChiffres.length }));
+    if (calcul.sansDuree.length) morceaux.push(I18n.t('rapport.cout_arret.ot_sans_duree', { n: calcul.sansDuree.length }));
+    return morceaux.join(', ');
+  }
+
+  /** Comparaison de deux coûts de l'arrêt, seulement entre deux mois complets (`reference` null : historique trop court). */
+  function comparerCoutArret(calcul, reference, libelleReference) {
+    if (!reference) return comparer('coutArret', null, null, false, libelleReference);
+    if (!calcul.complet || !reference.complet) {
+      return { sens: null, texte: I18n.t('rapport.comparer.non_comparable_cout_incomplet', { libelleReference }) };
+    }
+    return comparer('coutArret', calcul.totalCentimes / 100, reference.totalCentimes / 100, true, libelleReference);
+  }
+
+  /** 4ᵉ tuile : même forme que les trois autres ; `precision` (sous la valeur) dit « Partiel : … » ou « aucun arrêt ». */
+  function tuileCoutArret(calcul, precedent, annee, libellePrecedent, libelleAnnee) {
+    const valeur = valeurCoutArret(calcul);
+    const manque = manqueCoutArret(calcul);
+    let precision = manque;                       // « non chiffré » : ce qui manque ; complet sans panne : aucun arrêt
+    if (valeur !== null) {
+      precision = calcul.parEquipement.length ? (manque && I18n.t('rapport.cout_arret.partiel', { manque })) : I18n.t('rapport.cout_arret.aucun_arret');
+    }
+    return {
+      cle: 'coutArret', libelle: I18n.t('rapport.tuiles_definies.cout_arret'), hausseFavorable: false,
+      valeur, raison: valeur === null ? manque : '', precision,
+      texteValeur: valeur === null ? I18n.t('rapport.cout_arret.non_chiffre') : formater('coutArret', valeur),
+      precedent: precedent ? valeurCoutArret(precedent) : null, anneePrecedente: annee ? valeurCoutArret(annee) : null,
+      tendance: { precedent: comparerCoutArret(calcul, precedent, libellePrecedent), annee: comparerCoutArret(calcul, annee, libelleAnnee) },
+    };
+  }
+
+  /** Entrée « Non calculable » du coût de l'arrêt (null s'il est complet) : « Coût de l'arrêt — non chiffré : PR-02 (6,5 h
+   *  d'arrêt), CU-01 (2 h) ; OT sans durée : OT-2026-0042 (CP-01, non clôturé) », REPERES_NON_CHIFFRES repères au plus. */
+  function nonCalculableCoutArret(calcul) {
+    if (calcul.complet) return null;
+    const equipements = calcul.nonChiffres.slice(0, REPERES_NON_CHIFFRES).map((ligne, rang) => I18n.t(rang
+      ? 'rapport.cout_arret.repere_heures' : 'rapport.cout_arret.repere_heures_arret', { repere: repere(ligne.equipementId), duree: UI.heures(ligne.heures) }));
+    const ots = calcul.sansDuree.slice(0, REPERES_NON_CHIFFRES - equipements.length)
+      .map((ligne) => I18n.t('rapport.cout_arret.ot_repere_raison', { otId: ligne.otId, repere: repere(ligne.equipementId), raison: ligne.raison }));
+    let raison = equipements.length && ots.length
+      ? I18n.t('rapport.cout_arret.non_chiffres_et_sans_duree', { nonChiffres: equipements.join(', '), sansDuree: ots.join(', ') })
+      : equipements.concat(ots).join(', ');
+    const autres = calcul.nonChiffres.length + calcul.sansDuree.length - equipements.length - ots.length;
+    if (autres > 0) raison = I18n.t('rapport.cout_arret.liste_et_autres', { liste: raison, n: autres });
+    return { libelle: I18n.t(calcul.nonChiffres.length ? 'rapport.cout_arret.titre_non_chiffre' : 'rapport.cout_arret.titre_sans_duree'), raison };
+  }
+
   /**
    * Données du rapport d'un mois 'AAAA-MM', calculées à la date `aujourdhui` (date de génération,
    * qui sert aux retards) : { mois, libelleMois, genereLe, entreprise, tuiles, faits, decisions,
-   * pareto, heures12Mois, nonCalculables, comprendre, courriel }. Dans la langue de l'installation (D156), ou dans
+   * pareto, paretoCout, heures12Mois, coutArret, nonCalculables, comprendre, courriel } ; coutArret :
+   * Indicateurs.coutArret du mois, plus `tendance` (celle de la 4ᵉ tuile). Dans la langue de l'installation (D156), ou dans
    * `langue` (code déclaré dont le dictionnaire est chargé : celle choisie pour le rapport, T302).
    */
   function donnees(mois, aujourdhui, maintenant, langue) {
@@ -260,7 +323,8 @@ const Rapport = (() => {
       const valeurAnnee = globalAnnee ? tuile.lire(globalAnnee).valeur : null;
       return {
         cle: tuile.cle, libelle: tuile.libelle, hausseFavorable: tuile.hausseFavorable,
-        valeur: resultat.valeur, raison: resultat.raison, texteValeur: formater(tuile.cle, resultat.valeur),
+        valeur: resultat.valeur, raison: resultat.raison, precision: resultat.valeur === null ? resultat.raison : '',
+        texteValeur: formater(tuile.cle, resultat.valeur),
         precedent: valeurPrecedente, anneePrecedente: valeurAnnee,
         tendance: {
           precedent: comparer(tuile.cle, resultat.valeur, valeurPrecedente, Boolean(globalPrecedent), libelleMois(precedent)),
@@ -268,20 +332,31 @@ const Rapport = (() => {
         },
       };
     });
-    const remplacement = reparerOuRemplacer(mois);
     const nonCalculables = tuiles.filter((tuile) => tuile.valeur === null).map((tuile) => ({ libelle: tuile.libelle, raison: tuile.raison }));
+    // Coût de l'arrêt du mois, comparé aux mois couverts par l'historique (mêmes règles que les trois autres tuiles).
+    const coutArret = Indicateurs.coutArret(periode);
+    const tuileArret = tuileCoutArret(coutArret,
+      globalPrecedent ? Indicateurs.coutArret(Indicateurs.periodeDuMois(precedent)) : null,
+      globalAnnee ? Indicateurs.coutArret(Indicateurs.periodeDuMois(anneePrecedente)) : null,
+      libelleMois(precedent), libelleMois(anneePrecedente));
+    tuiles.push(tuileArret);
+    const remplacement = reparerOuRemplacer(mois);
     if (global.tempsRequis.exclus.length) {
       nonCalculables.push({ libelle: I18n.t('rapport.donnees.equipements_hors_disponibilite'), raison: I18n.t('rapport.donnees.equipement_sans_heures_fonctionnement', { n: global.tempsRequis.exclus.length, reperes: global.tempsRequis.exclus.slice(0, 6).map((element) => repere(element.id)).join(', ') }) + (global.tempsRequis.exclus.length > 6 ? I18n.t('rapport.donnees.texte') : '') });
     }
     if (remplacement.sansValeur.length) {
       nonCalculables.push({ libelle: I18n.t('rapport.donnees.reparer_remplacer'), raison: I18n.t('rapport.donnees.valeur_remplacement_non_renseignee', { n: remplacement.sansValeur.length, reperes: remplacement.sansValeur.slice(0, 6).map(repere).join(', ') }) });
     }
+    const manqueArret = nonCalculableCoutArret(coutArret);
+    if (manqueArret) nonCalculables.push(manqueArret);
     const resultat = {
       mois, libelleMois: libelleMois(mois), genereLe: texte(maintenant) || Donnees.maintenant(),
       entreprise: texte(Donnees.parametre('entreprise_nom', '')),
       tuiles, faits: faitsMarquants(periode, global, jour), decisions: decisions(mois, jour, remplacement),
       pareto: Indicateurs.paretoArrets(periode, 5).map((ligne) => ({ repere: repere(ligne.equipementId), heures: ligne.valeur })),
+      paretoCout: Indicateurs.paretoCoutArret(periode, 5).map((ligne) => ({ repere: repere(ligne.equipementId), centimes: ligne.centimes, valeur: ligne.valeur })),
       heures12Mois: Indicateurs.heuresParMois(mois, 12),
+      coutArret: Object.assign({}, coutArret, { tendance: tuileArret.tendance }),
       mttr: global.mttr, attentePieces: global.attentePieces, seuilRemplacement: remplacement.seuil,
       nonCalculables,
       comprendre: [
@@ -289,6 +364,7 @@ const Rapport = (() => {
         [I18n.t('rapport.donnees.panne'), I18n.t('rapport.donnees.ot_correctif_arret_production')],
         ['MTTR', I18n.t('rapport.donnees.duree_arret_moyenne_panne')],
         [I18n.t('rapport.donnees.cout'), I18n.t('rapport.donnees.heures_taux_horaire_pieces')],
+        [I18n.t('rapport.tuiles_definies.cout_arret'), I18n.t('rapport.donnees.cout_arret_formule')],
         [I18n.t('rapport.donnees.part_preventif'), I18n.t('rapport.donnees.heures_passees_ot_preventifs')],
         [I18n.t('rapport.donnees.reparer_remplacer'), I18n.t('rapport.donnees.cout_maintenance_12_derniers', { seuil: UI.nombreFr(remplacement.seuil, 0) })],
       ],
@@ -314,7 +390,10 @@ const Rapport = (() => {
   function texteCourriel(rapport) {
     const lignes = [rapport.entreprise ? I18n.t('rapport.texte_courriel.rapport_mensuel_maintenance', { libelleMois: rapport.libelleMois, entreprise: rapport.entreprise })
       : I18n.t('rapport.texte_courriel.rapport_mensuel_maintenance_2', { libelleMois: rapport.libelleMois }), ''];
-    rapport.tuiles.forEach((tuile) => lignes.push('• ' + tuile.libelle + ' : ' + tuile.texteValeur + ' (' + tuile.tendance.precedent.texte + ')'));
+    // Le coût de l'arrêt dit ce qui lui manque (« Partiel : … », D188) ; les trois autres tuiles, comme avant la 2.2.
+    rapport.tuiles.forEach((tuile) => lignes.push('• ' + tuile.libelle + ' : ' + (tuile.cle === 'coutArret' && tuile.precision
+      ? I18n.t('rapport.texte_courriel.valeur_precision', { valeur: tuile.texteValeur, precision: tuile.precision }) : tuile.texteValeur)
+      + ' (' + tuile.tendance.precedent.texte + ')'));
     lignes.push('', I18n.t('rapport.texte_courriel.faits_marquants'));
     rapport.faits.forEach((fait) => lignes.push('• ' + fait));
     if (rapport.decisions.length) {
@@ -350,15 +429,28 @@ const Rapport = (() => {
     return dessin;
   }
 
+  // Trois graphiques côte à côte (2.2) : dessinés à la largeur d'une colonne de la page A4 (186 mm, deux intervalles de
+  // 10 px), donc imprimés à leur taille, sans réduction du texte.
+  const LARGEUR_GRAPHIQUE = 226;
+  const HAUTEUR_GRAPHIQUE = 150;
+
   function graphiques(lib, rapport) {
-    const pareto = rapport.pareto.length ? svg(lib, 340, 200, {
-      grid: { left: 70, right: 30, top: 10, bottom: 30 },
+    const pareto = rapport.pareto.length ? svg(lib, LARGEUR_GRAPHIQUE, HAUTEUR_GRAPHIQUE, {
+      grid: { left: 62, right: 34, top: 10, bottom: 30 },
       xAxis: { type: 'value', name: 'h', axisLabel: { color: '#333', formatter: (valeur) => UI.nombreFr(valeur) } },
       yAxis: { type: 'category', inverse: true, data: rapport.pareto.map((ligne) => etiquette(ligne.repere)), axisLabel: { color: '#333' } },
-      series: [{ type: 'bar', data: rapport.pareto.map((ligne) => Math.round(ligne.heures * 10) / 10), itemStyle: { color: COULEURS_SERIES[0] },
+      series: [{ type: 'bar', barMaxWidth: 24, data: rapport.pareto.map((ligne) => Math.round(ligne.heures * 10) / 10), itemStyle: { color: COULEURS_SERIES[0] },
         label: { show: true, position: 'right', color: '#222', formatter: (point) => UI.nombreFr(point.value, 1) } }],
     }) : '';
-    const heures = svg(lib, 340, 200, {
+    // Coût de l'arrêt : montants au centime sur les barres (leur somme est la tuile quand il y a cinq équipements au plus).
+    const cout = rapport.paretoCout.length ? svg(lib, LARGEUR_GRAPHIQUE, HAUTEUR_GRAPHIQUE, {
+      grid: { left: 62, right: 76, top: 10, bottom: 10 },
+      xAxis: { type: 'value', axisLabel: { show: false }, splitLine: { show: false } },
+      yAxis: { type: 'category', inverse: true, data: rapport.paretoCout.map((ligne) => etiquette(ligne.repere)), axisLabel: { color: '#333' } },
+      series: [{ type: 'bar', barMaxWidth: 24, data: rapport.paretoCout.map((ligne) => ligne.valeur), itemStyle: { color: COULEURS_SERIES[0] },
+        label: { show: true, position: 'right', color: '#222', formatter: (point) => etiquette(UI.euro(point.value, 2)) } }],
+    }) : '';
+    const heures = svg(lib, LARGEUR_GRAPHIQUE, HAUTEUR_GRAPHIQUE, {
       grid: { left: 40, right: 10, top: 30, bottom: 30 },
       legend: { top: 0, textStyle: { color: '#222' } },
       xAxis: { type: 'category', data: rapport.heures12Mois.map((element) => element.mois.slice(5, 7) + '/' + element.mois.slice(2, 4)), axisLabel: { color: '#333' } },
@@ -369,7 +461,7 @@ const Rapport = (() => {
         { name: I18n.t('rapport.graphiques.preventif'), type: 'bar', data: rapport.heures12Mois.map((element) => element.preventif), itemStyle: { color: COULEURS_SERIES[1] } },
       ],
     });
-    return { pareto, heures };
+    return { pareto, cout, heures };
   }
 
   /** Feu d'une tendance : forme ET texte (jamais la couleur seule). */
@@ -387,19 +479,20 @@ body { margin: 0; color: #111; background: #fff; font: 9.5pt/1.35 "Segoe UI", Ar
 header { border-bottom: 2px solid #111; padding-bottom: 4px; margin-bottom: 8px; }
 h1 { font-size: 15pt; margin: 0; } h2 { font-size: 10.5pt; margin: 0 0 4px; }
 .sous { margin: 2px 0 0; color: #333; }
-.tuiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
-.tuile { border: 1px solid #888; border-radius: 6px; padding: 6px 8px; }
-.tuile .lib { font-weight: 600; } .tuile .val { font-size: 17pt; font-weight: 700; margin: 2px 0; }
-.tuile .raison { font-size: 8.5pt; color: #333; }
-.feu { display: block; font-size: 8.5pt; } .feu.bon { color: #14532d; } .feu.mauvais { color: #7f1d1d; font-weight: 600; } .feu.neutre { color: #333; }
+.tuiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+.tuile { border: 1px solid #888; border-radius: 6px; padding: 5px 7px; min-width: 0; line-height: 1.25; }
+.tuile .lib { font-weight: 600; } .tuile .val { font-size: 15pt; font-weight: 700; margin: 2px 0; overflow-wrap: anywhere; }
+.tuile .raison { font-size: 8pt; color: #333; }
+.feu { display: block; font-size: 8pt; } .feu.bon { color: #14532d; } .feu.mauvais { color: #7f1d1d; font-weight: 600; } .feu.neutre { color: #333; }
 .colonnes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
 ul, ol { margin: 0; padding-left: 16px; } li { margin: 0 0 2px; }
 figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
-.graphiques { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.graphiques { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+.graphiques figure { min-width: 0; }
 .graphiques svg { width: 100%; height: auto; }
-.comprendre { border: 1px solid #888; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 8.5pt; }
+.comprendre { border: 1px solid #888; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 8.5pt; line-height: 1.25; }
 .comprendre dt { font-weight: 600; display: inline; } .comprendre dd { display: inline; margin: 0; } .comprendre div { margin-bottom: 1px; }
-.non-calculable { font-size: 8.5pt; color: #333; }
+.non-calculable { font-size: 8.5pt; color: #333; line-height: 1.25; }
 .commentaire { border-left: 3px solid #555; padding: 2px 0 2px 8px; margin-bottom: 8px; }
 .commentaire p { margin: 0 0 2px; white-space: pre-line; } .commentaire .mention-ia { font-size: 8pt; font-style: italic; color: #444; }
 .pied { font-size: 8pt; color: #444; margin-top: 4px; }
@@ -433,7 +526,7 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
   : UI.html`${I18n.html('rapport.html.donnees_rapport_fige_prevo_2', { genereLe: UI.dateHeureFr(rapport.genereLe) })}`}</p></header>
 <section class="tuiles">${rapport.tuiles.map((tuile) => UI.html`<div class="tuile" data-cle="${tuile.cle}">
   <div class="lib">${tuile.libelle}</div><div class="val">${tuile.texteValeur}</div>
-  ${tuile.valeur === null ? UI.html`<div class="raison">${tuile.raison}</div>` : ''}
+  ${tuile.precision ? UI.html`<div class="raison">${tuile.precision}</div>` : ''}
   ${feu(tuile, tuile.tendance.precedent)}${feu(tuile, tuile.tendance.annee)}</div>`)}</section>
 <section class="colonnes"><div><h2>${I18n.html('rapport.html.faits_marquants')}</h2><ul>${rapport.faits.map((fait) => UI.html`<li>${fait}</li>`)}</ul></div>
 <div><h2>${I18n.html('rapport.html.decisions_prendre')}</h2>${rapport.decisions.length ? UI.html`<ol>${rapport.decisions.map((decision) => UI.html`<li>${decision}</li>`)}</ol>`
@@ -442,6 +535,9 @@ ${commentaire ? UI.html`<section class="commentaire"><h2>${I18n.html('rapport.ht
     ? UI.html`<p class="mention-ia">${I18n.html('rapport.html.commentaire_redige_aide_ia')}</p>` : ''}</section>` : ''}
 <section class="graphiques">
 <figure><figcaption>${I18n.html('rapport.html.duree_arret_mois_equipement')}</figcaption>${dessins.pareto ? UI.brut(dessins.pareto) : UI.html`<p>${I18n.html('rapport.html.aucun_arret_mois_ci')}</p>`}</figure>
+<figure><figcaption>${I18n.html('rapport.html.cout_arret_mois_equipement', { devise: UI.symboleDevise() })}</figcaption>${dessins.cout ? UI.brut(dessins.cout)
+    : UI.html`<p>${rapport.coutArret.complet && !rapport.coutArret.parEquipement.length ? I18n.html('rapport.html.aucun_arret_mois_ci')
+      : I18n.html('rapport.html.aucun_cout_arret_chiffre')}</p>`}</figure>
 <figure><figcaption>${I18n.html('rapport.html.heures_correctif_preventif_12')}</figcaption>${UI.brut(dessins.heures)}</figure>
 </section>
 ${mttr}
