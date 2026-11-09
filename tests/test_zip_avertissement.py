@@ -112,7 +112,9 @@ class TestCalcul(CasNavigateur):
             "sansDocuments: s })", [tailles, refus, sans_documents])
 
     def test_seuil_de_500_mo_message_exact_donnees_seules_et_refus_sans_avertissement(self):
-        charger_scripts(self.page, ["js/modules/zip-flux.js", "js/modules/zip-lecture.js", "js/modules/zip-donnees.js"])
+        # js/schema.js : zip-donnees.js en tire CHAMPS_DOCUMENTS au chargement (T388).
+        charger_scripts(self.page, ["js/schema.js", "js/modules/zip-flux.js", "js/modules/zip-lecture.js",
+                                    "js/modules/zip-donnees.js"])
         # Seuil : 500 Mo (524 288 000 octets), gelé.
         self.assertEqual(self.page.evaluate(
             "[ZipDonnees.AVERTISSEMENT.contenu, Object.isFrozen(ZipDonnees.AVERTISSEMENT)]"), [SEUIL, True])

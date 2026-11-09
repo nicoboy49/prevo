@@ -55,6 +55,9 @@ PHRASE = ("ordres_travail.csv est abîmé dans ce ZIP (abîmé depuis le %s) : i
           "la base retrouvera le même état, avec le bandeau « Fichier abîmé ». Réparez-le ensuite, ou restaurez une "
           "sauvegarde." % VU_LE.strftime("%d/%m/%Y"))
 BANDEAU = "Fichier abîmé : ordres_travail.csv, depuis le %s (%d jours)." % (VU_LE.strftime("%d/%m/%Y"), JOURS)
+# Mode serveur, jeu entete-tronque (tiré de f3-v1.2.0) passé au format 4 au démarrage : le passage ne crée pas les tables
+# du format 4 absentes (CONCEPTION-L1 §3.3) ; 404 voulus, motif étroit comme test_recette_socle (T402).
+ERREUR_TABLE_DU_FORMAT_4_ABSENTE = re.compile(r"status of 404.*/api/csv/(garanties|contrats_prestataires|reserves_controle)\b")
 
 BANDEAUX_JS = """() => Array.from(document.querySelectorAll('#alertes-app > *'))
   .map((e) => e.textContent.replace(/\\s+/g, ' ').trim()).filter((t) => t.includes('abîmé'))"""
@@ -162,6 +165,7 @@ class CasAbime(CasImport):
 class TestServeur(CasAbime):
 
     def test_serveur_fichier_abime_exporte_puis_importe_tel_quel_date_gardee(self):
+        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)
         source = copier_jeu("entete-tronque", self.temporaire / "a")
         (source / FICHIERS_ABIMES).write_text(json.dumps({"depuis": {"ordres_travail": DATE}}), encoding="utf-8")
         preregler_profil(self.contexte, "responsable", nom="Claire Abîmé")

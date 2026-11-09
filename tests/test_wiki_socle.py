@@ -120,7 +120,10 @@ class TestWikiSocle(CasNavigateur):
         self.ouvrir_demo("responsable")
         self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), str(FORMAT_COURANT))
         self.assertEqual(self.page.evaluate("Schema.version"), FORMAT_COURANT)
-        self.assertEqual(self.page.evaluate("Schema.nomsTables().slice(-2)"), ["wiki_pages", "wiki_journal"])
+        # Tables du wiki : juste après journal (format 3) ; le format 4 ajoute les siennes après elles.
+        self.assertEqual(self.page.evaluate(
+            "(() => { const n = Schema.nomsTables(); const i = n.indexOf('journal'); return n.slice(i + 1, i + 3); })()"),
+            ["wiki_pages", "wiki_journal"])
         # Depuis T139 (D119), la démo a son wiki figé : autant de lignes que les CSV de donnees/demo.
         for table in ("wiki_pages", "wiki_journal"):
             texte = (DOSSIER_DEMO / (table + ".csv")).read_bytes().decode("utf-8-sig")
@@ -145,7 +148,8 @@ class TestWikiSocle(CasNavigateur):
                     attendu = (DOSSIER_DEMO / nom).read_bytes().decode("utf-8-sig")
                     self.assertEqual(len(lignes), len(list(csv.reader(io.StringIO(attendu, newline=""), delimiter=";"))))
             ordres = archive.read("ordres_travail.csv")
-            self.assertTrue(ordres.split(b"\r\n", 1)[0].endswith(b";anomalie_constatee;astuce"))
+            colonnes = ordres.split(b"\r\n", 1)[0].split(b";")   # format 4 : habilitation_requise après astuce
+            self.assertEqual(colonnes[colonnes.index(b"anomalie_constatee") + 1], b"astuce")
 
     def test_date_panne_publique(self):
         self.ouvrir_demo("responsable")

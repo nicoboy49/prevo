@@ -11,6 +11,8 @@ les TAILLES des documents, avant toute lecture de leur contenu.
                      - par l'import courant (ZipLecture.lire de cette copie) ;
                      - par l'import de la bêta 2 publiée : zip-lecture.js de l'étiquette v2.0.0-beta.2 et ses
                        dépendances de la même étiquette (dont JSZip), tirés par « git show » dans une page vide ;
+                       depuis le format 4 (2.2), elle refuse le ZIP (format plus récent, message exact) après ses
+                       contrôles de structure, et son JSZip en décompresse chaque entrée à l'octet ;
     navigateur     CompressionStream sans « deflate-raw » (décision de Nicolas : pas de JSZip en secours) : fenêtre
                    « Export ZIP impossible » avec ZipFlux.MESSAGE_NAVIGATEUR, aucun document demandé, aucun ZIP écrit
                    ni téléchargé, pour l'export complet comme pour les données seules ;
@@ -46,7 +48,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts, preregler_profil
+from commun import FORMAT_COURANT, RACINE, CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts, preregler_profil
 from test_zip_import import TABLES, fichiers_demo
 from test_zip_limites import ecrire_dossier, octets_fictifs, poser_documents
 
@@ -65,6 +67,21 @@ LIRE_ZIP_JS = """async (enBase64) => {
   const r = await ZipLecture.lire(Uint8Array.from(atob(enBase64), (c) => c.charCodeAt(0)));
   return { ok: r.ok, refus: r.refus, documents: r.ok ? r.documents.map((d) => [d.nom, d.taille, d.empreinte]) : null,
     manquants: r.ok && r.manifeste ? (r.manifeste.manquants || null) : null };
+}"""
+
+# Refus de la bêta 2 (contrôle 6 de son zip-lecture.js) : elle lit jusqu'au format 3.
+REFUS_BETA2 = ("Ce ZIP vient d'une version plus récente de Prévo (format %d des fichiers ; cette version lit jusqu'au "
+               "format 3) : il est refusé. Mettez Prévo à jour, puis recommencez.")
+# JSZip (celui de la bêta 2) sur des octets donnés en base64 → [[nom, taille, sha256]] de chaque entrée hors dossier, triés.
+LIRE_JSZIP_JS = """async (enBase64) => {
+  const zip = await JSZip.loadAsync(Uint8Array.from(atob(enBase64), (c) => c.charCodeAt(0)));
+  const entrees = [];
+  for (const entree of Object.values(zip.files).filter((e) => !e.dir)) {
+    const octets = await entree.async('uint8array');
+    const empreinte = new Uint8Array(await crypto.subtle.digest('SHA-256', octets));
+    entrees.push([entree.name, octets.length, Array.from(empreinte, (o) => o.toString(16).padStart(2, '0')).join('')]);
+  }
+  return entrees.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 }"""
 
 # Espions de l'ordre des appels (et points d'arrêt pour la mesure si `pause`) : journal window.__journal.
@@ -229,10 +246,14 @@ class TestCompatibilite(CasMorceaux):
         # Bêta 2 : import par JSZip, sans ZipFlux.
         self.assertEqual(page_beta2.evaluate("[typeof ZipFlux, typeof JSZip, typeof ZipLecture.lire]"),
                          ["undefined", "function", "function"])
+        # Format 4 (2.2) : la bêta 2 lit jusqu'au format 3 ; elle refuse ce ZIP à son contrôle 6 (format plus récent),
+        # donc après avoir lu le répertoire central, les tailles déclarées, l'ouverture par JSZip et le manifeste.
         lu = page_beta2.evaluate(LIRE_ZIP_JS, en_base64(octets))
-        self.assertEqual((lu["ok"], lu["refus"]), (True, None))
-        self.assertEqual(sorted(lu["documents"]), attendus)
-        self.assertEqual(lu["manquants"], ["notice-absente.pdf"])
+        self.assertEqual((lu["ok"], lu["refus"]), (False, REFUS_BETA2 % FORMAT_COURANT))
+        # Et son JSZip décompresse chaque entrée à l'octet (comme zipfile) : le ZIP par morceaux reste lisible.
+        with zipfile.ZipFile(io.BytesIO(octets)) as archive:
+            entrees = sorted([info.filename, info.file_size, sha256(archive.read(info))] for info in archive.infolist())
+        self.assertEqual(page_beta2.evaluate(LIRE_JSZIP_JS, en_base64(octets)), entrees)
 
 
 # ---------------------------------------------------------------------------

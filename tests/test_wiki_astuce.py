@@ -206,7 +206,7 @@ class TestEcriture(CasAstuce):
             self.enregistrer()
             # Sur le disque : la colonne astuce, octet pour octet (cellule entre guillemets : « ; », « " », saut de ligne).
             octets = self.octets(serveur, "ordres_travail.csv")
-            self.assertTrue(octets.split(b"\r\n", 1)[0].endswith(b";astuce"))
+            self.assertIn(b"astuce", octets.split(b"\r\n", 1)[0].split(b";"))   # format 4 : n'est plus la dernière
             self.assertIn(cellule_csv(astuce).encode("utf-8"), octets)
             ligne = self.ot_sur_disque(serveur, OT_EN_COURS)
             self.assertEqual((ligne["astuce"], ligne["compte_rendu"], ligne["statut"]), (astuce, COMPTE_RENDU, "En cours"))
@@ -274,7 +274,7 @@ class TestEcriture(CasAstuce):
                 page.click("#btn-export-accueil")
             with zipfile.ZipFile(attente.value.path()) as archive:
                 octets = archive.read("ordres_travail.csv")
-            self.assertTrue(octets.split(b"\r\n", 1)[0].endswith(b";astuce"))
+            self.assertIn(b"astuce", octets.split(b"\r\n", 1)[0].split(b";"))   # format 4 : n'est plus la dernière
             ligne = next(o for o in lignes_csv(octets) if o["id"] == OT_EN_COURS)
             self.assertEqual(ligne["astuce"], astuce)
             self.assertEqual(octets, self.octets(serveur, "ordres_travail.csv"))   # le fichier tel qu'il est sur le disque

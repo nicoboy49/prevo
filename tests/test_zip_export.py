@@ -326,8 +326,9 @@ class TestServeur(CasExport):
                            "2026-02-10;2027-02-10;vgp-pont-2026.pdf;;1")
         remplacer_une_fois(dossier / "controles_reglementaires.csv", "2026-03-18;2026-09-18;;;1",
                            "2026-03-18;2026-09-18;vgp-chariot-absent.pdf;;1")
-        remplacer_une_fois(dossier / "habilitations.csv", "HAB-0001;TEC-0001;BR;2025-03-10;2028-03-10;;;;",
-                           "HAB-0001;TEC-0001;BR;2025-03-10;2028-03-10;;habilitation-caces.pdf;;")
+        # Démo des habilitations (T444) : recyclage 36 mois, type H02 du catalogue, nature « recommandation ».
+        remplacer_une_fois(dossier / "habilitations.csv", "HAB-0001;TEC-0001;BR;2025-03-10;2028-03-10;36;;H02;recommandation",
+                           "HAB-0001;TEC-0001;BR;2025-03-10;2028-03-10;36;habilitation-caces.pdf;H02;recommandation")
         for table, ligne in (("garanties", "GAR-0001;EQ-0001;;2026-01-01;2027-01-01;;garantie-presse.pdf;1"),
                              ("contrats_prestataires",
                               "CTP-0001;;Maintenance;;;2026-01-01;2027-01-01;;;;;contrat-maintenance.pdf;1")):
