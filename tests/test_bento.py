@@ -93,6 +93,13 @@ STRUCTURE_AVANT = {
                     "info", "liste-cartes", "ok", "pile-gros", "statut", "violet"],
     },
 }
+# 2.2, D199 (T480) : carte « Mes habilitations » ajoutée à l'accueil du technicien, après ses OT (TEC-0002 : une
+# habilitation à renouveler, deux valides ; liste et statuts d'equipe.css). Le reste de la structure est inchangé.
+STRUCTURE_AVANT["technicien"]["blocs"].append("article.carte.accueil-mes-habilitations")
+STRUCTURE_AVANT["technicien"]["classes"] = sorted(set(STRUCTURE_AVANT["technicien"]["classes"]) | {
+    "accueil-habilitations-aide", "accueil-mes-habilitations", "attention", "equipe-dates", "equipe-detail",
+    "equipe-details", "equipe-habilitations", "equipe-intitule", "equipe-principe", "equipe-statut", "equipe-tete",
+    "equipe-type", "note", "ok"})
 
 NOTER_TOASTS_JS = """(() => {
   window.__toasts = [];

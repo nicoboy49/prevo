@@ -16,6 +16,9 @@
 .accueil-mes-ordres .entete-carte + .accueil-sous-titre { margin-top: .2rem; }
 .accueil-preventifs-vide { margin: 0 0 .4rem; }
 
+/* Technicien : « Mes habilitations » (D199, T480 ; liste et statuts : styles d'equipe.css) */
+.accueil-habilitations-aide { margin: 0 0 .9rem; }
+
 /* Gros bouton « Signaler un problème » (technicien, demandeur) */
 .accueil-signaler { margin-bottom: 20px; max-width: 560px; }
 .accueil-signaler .btn-gros { text-decoration: none; }

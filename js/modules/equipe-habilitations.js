@@ -8,13 +8,15 @@
 //      l'autorisation de conduite, « Reprendre le justificatif de : CACES … ») ;
 //   4. carte « Habilitations » de la fiche d'un technicien (Equipe.interne.carteHabilitations) : recyclage et nature
 //      de la source (NF C 18-510 : « recommandation »), type et provenance, justificatif, rappel du CACES sans
-//      autorisation de conduite, phrase D182 ; Equipe.interne.brancherHabilitations relie boutons et liens.
+//      autorisation de conduite, phrase D182 ; Equipe.interne.brancherHabilitations relie boutons et liens ;
+//   5. carte « Mes habilitations » de l'accueil du technicien (Equipe.carteMesHabilitations, D199, T480) : SES
+//      habilitations qui comptent, type du catalogue, échéance et statut, jamais le justificatif (ni nom ni lien).
 // Le contenu du catalogue (types, familles, référence, liens, durée en clair, délivré par, titres, mention) reste en
 // français dans toutes les langues (CDC §3.2) : ses blocs portent lang="fr" et data-catalogue, comme aux Contrôles.
 // Profils : le responsable écrit (Equipe.ajouterHabilitation… refusent tout autre profil) ; le technicien lit. Le lien
 // du justificatif est montré au responsable, et au technicien sur SA fiche seulement (Q5) ; en mode serveur avec
-// comptes, le serveur ne sert ces documents qu'au responsable (T445, réponse provisoire n° 3, à confirmer) : le
-// technicien voit alors « justificatif joint, visible par le responsable », jamais un lien qui échouerait (403).
+// comptes, le serveur ne sert ces documents qu'au responsable (T445, D196) : le technicien voit alors « justificatif
+// joint, visible par le responsable », jamais un lien qui échouerait (403).
 // Chargé juste après equipe-ecrans.js (dont il reçoit les outils d'écran par Equipe.interne) et avant
 // equipe-acces.js. Complète l'objet Equipe.
 
@@ -371,11 +373,23 @@ Object.assign(Equipe, (() => {
       <div class="alerte-texte">${I18n.t('equipe.type_habilitation.rappel_caces')}</div></div>`;
   }
 
-  /** Carte « Habilitations » : les habilitations qui comptent, des plus urgentes aux autres ; phrase D182 en note. */
-  function carteHabilitations(technicien, responsable, jour) {
-    const liste = habilitationsAvecEtat(technicien.id, jour)
+  /** Habilitations qui comptent d'un technicien, avec leur état : les plus urgentes d'abord, puis par intitulé. */
+  function parUrgence(technicienId, jour) {
+    return habilitationsAvecEtat(technicienId, jour)
       .sort((a, b) => STATUTS_HABILITATION.indexOf(a.etat.statut) - STATUTS_HABILITATION.indexOf(b.etat.statut)
         || UI.comparerTextes(texte(a.habilitation.intitule), texte(b.habilitation.intitule)));
+  }
+
+  /** « Obtenue le … · échéance le … » (ou « sans échéance »). */
+  function datesHtml(habilitation) {
+    return UI.html`<div class="equipe-dates">${dateIso(habilitation.date_echeance)
+      ? I18n.t('equipe.habilitations.obtenue_echeance', { obtention: UI.dateFr(habilitation.date_obtention), echeance: UI.dateFr(habilitation.date_echeance) })
+      : I18n.t('equipe.habilitations.obtenue_sans_echeance', { obtention: UI.dateFr(habilitation.date_obtention) })}</div>`;
+  }
+
+  /** Carte « Habilitations » : les habilitations qui comptent, des plus urgentes aux autres ; phrase D182 en note. */
+  function carteHabilitations(technicien, responsable, jour) {
+    const liste = parUrgence(technicien.id, jour);
     const sansAutorisation = new Set(Equipe.cacesSansAutorisation(technicien.id, jour).map((h) => h.id));
     const acces = accesJustificatif(technicien);
     return UI.html`<article class="carte equipe-carte-habilitations">
@@ -383,9 +397,7 @@ Object.assign(Equipe, (() => {
         ${responsable ? UI.html`<button type="button" class="btn btn-secondaire" id="equipe-ajouter-habilitation">${UI.icone('ajouter')}${I18n.t('equipe.ouvrir_ajout.ajouter_habilitation')}</button>` : ''}</div>
       ${liste.length ? UI.html`<ul class="equipe-habilitations">${liste.map(({ habilitation, etat }) => UI.html`<li data-habilitation="${habilitation.id}">
         <div class="equipe-tete"><b class="equipe-intitule">${habilitation.intitule}</b>${statutHtml(habilitation, etat)}</div>
-        <div class="equipe-dates">${dateIso(habilitation.date_echeance)
-    ? I18n.t('equipe.habilitations.obtenue_echeance', { obtention: UI.dateFr(habilitation.date_obtention), echeance: UI.dateFr(habilitation.date_echeance) })
-    : I18n.t('equipe.habilitations.obtenue_sans_echeance', { obtention: UI.dateFr(habilitation.date_obtention) })}</div>
+        ${datesHtml(habilitation)}
         <div class="equipe-details">${recyclageHtml(habilitation)}${typeHtml(habilitation)}${justificatifHtml(habilitation, acces)}</div>
         ${sansAutorisation.has(habilitation.id) ? rappelCacesHtml() : ''}
         ${responsable ? UI.html`<div class="actions equipe-actions">
@@ -428,7 +440,37 @@ Object.assign(Equipe, (() => {
     }));
   }
 
+  // ===========================================================================================
+  // 5. Carte « Mes habilitations » de l'accueil du technicien (D199, T480)
+  // ===========================================================================================
+
+  /**
+   * Carte « Mes habilitations » de l'accueil (Accueil la cherche à l'affichage) : les habilitations qui comptent du
+   * technicien donné (celui du profil ou du compte connecté), les plus urgentes d'abord : intitulé, statut (valide,
+   * à renouveler, échue, pas encore valable) et son détail, dates, type du catalogue. Jamais le justificatif, ni nom ni
+   * lien (D196, D199), ni bouton ; aucune habilitation d'un autre technicien. '' sans technicien lié au profil.
+   */
+  function carteMesHabilitations(technicienId, jour) {
+    const id = texte(technicienId);
+    if (!id) return '';
+    const liste = parUrgence(id, jour);
+    return UI.html`<article class="carte accueil-mes-habilitations" id="accueil-mes-habilitations">
+      <div class="entete-carte"><h2>${I18n.t('equipe.mes_habilitations.titre')}</h2><span class="badge ${liste.length ? 'info' : 'neutre'}">${liste.length}</span></div>
+      <p class="muted accueil-habilitations-aide">${I18n.t('equipe.mes_habilitations.tenues_par_responsable')}</p>
+      ${liste.length ? UI.html`<ul class="equipe-habilitations">${liste.map(({ habilitation, etat }) => {
+    const type = Equipe.typeDe(habilitation);
+    return UI.html`<li data-habilitation="${habilitation.id}" data-statut="${etat.statut}">
+        <div class="equipe-tete"><b class="equipe-intitule">${habilitation.intitule}</b>${statutHtml(habilitation, etat)}</div>
+        ${datesHtml(habilitation)}
+        ${type ? UI.html`<div class="equipe-details"><div class="equipe-type">${I18n.html('equipe.carte_habilitations.type', { type: catalogueHtml(texte(type.type)) })}</div></div>` : ''}
+      </li>`;
+  })}</ul>` : UI.html`<p class="muted">${I18n.t('equipe.mes_habilitations.aucune')}</p>`}
+      ${principeHtml()}
+    </article>`;
+  }
+
   Object.assign(Equipe.interne, { carteHabilitations, brancherHabilitations });
 
-  return {};
+  // carteMesHabilitations : pour l'accueil du technicien (accueil.js).
+  return { carteMesHabilitations };
 })());

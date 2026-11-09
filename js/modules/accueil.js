@@ -11,7 +11,8 @@
 //   Technicien  : gros bouton « Signaler », les trois indicateurs des contrôles et de l'équipe (contrôles
 //                 sous 30 jours, habilitations à renouveler, réserves en retard depuis la 2.2) et la liste
 //                 de ses OT ouverts : d'abord ses préventifs de la semaine (ou la mention qu'il n'en a pas),
-//                 puis ses autres OT.
+//                 puis ses autres OT ; enfin « Mes habilitations » (2.2, D199 : les siennes seulement, type,
+//                 échéance, statut, sans justificatif ; carte d'equipe-habilitations.js).
 //   Demandeur   : gros bouton « Signaler un problème » et ses 5 dernières demandes (statut,
 //                 motif de refus).
 //   Tous, en mode serveur et sauf sur téléphone (D31) : carte « Connecter un téléphone » (QR code
@@ -318,6 +319,14 @@ const Accueil = (() => {
     </article>`;
   }
 
+  // D199 (T480) : SES habilitations, celles du technicien du profil (en mode serveur avec comptes : du compte connecté,
+  // App.profil vient de la session), jamais un justificatif (D196). Carte d'equipe-habilitations.js, chargé après ce
+  // fichier : cherchée au moment de l'affichage (absente des pages de test qui ne chargent pas ce fichier).
+  function carteMesHabilitations(aujourdhui) {
+    if (typeof Equipe === 'undefined' || typeof Equipe.carteMesHabilitations !== 'function') return '';
+    return Equipe.carteMesHabilitations(App.profil.technicienId, aujourdhui);
+  }
+
   function accueilTechnicien() {
     const aujourdhui = Donnees.aujourdhui();
     const identifiant = App.profil.technicienId;
@@ -339,7 +348,8 @@ const Accueil = (() => {
         <a href="#/di/nouvelle" class="btn btn-primaire btn-gros">${UI.icone('ajouter')}<span>${I18n.html('accueil.accueil_technicien.signaler_probleme_creer_demande')}</span></a>
       </div>
       <div class="instruments accueil-instruments accueil-instruments-technicien">${indicateursConformite(compteurs, aujourdhui)}</div>
-      ${carteOrdresTechnicien(mesOrdres, idsPreventifs, aujourdhui)}`;
+      ${carteOrdresTechnicien(mesOrdres, idsPreventifs, aujourdhui)}
+      ${carteMesHabilitations(aujourdhui)}`;
   }
 
   function accueilDemandeur() {
