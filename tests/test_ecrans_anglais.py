@@ -21,7 +21,8 @@ sélecteur de langue. Pour chaque écran relevé :
       (texte de fr.js, ou texte resté en dur dans un module) ; les morceaux de données d'un texte composé (cellules
       des CSV du jeu de démo et leurs phrases, comptes et poste de test, noms des langues) sont retirés avant de
       chercher les mots français ; les valeurs stockées des listes (D155) ne sont jamais des données : elles se
-      traduisent à l'affichage ;
+      traduisent à l'affichage ; le contenu du catalogue Prévo (2.2, T416 : blocs [data-catalogue], en français
+      dans toutes les langues, CDC §3.2) est une donnée lui aussi, relevé écran par écran (TestDonneesCatalogue) ;
     - même liste d'écrans que le relevé français (aucun écran perdu en anglais) ;
     - formats en-GB : la date en lettres de l'accueil (« Monday 19 October 2026 ») et un montant des indicateurs
       (« €1,760.00 ») au format britannique.
@@ -383,14 +384,41 @@ def rapport(problemes):
 # Relevé en anglais : le parcours de la photographie, avec la console écoutée
 # ---------------------------------------------------------------------------
 
+# Contenu du catalogue Prévo affiché (2.2, T416 ; CDC §3.2 : textes juridiques français, en français dans toutes les
+# langues) : les blocs [data-catalogue] (lang="fr") sont des DONNÉES. Texte d'un bloc ; pour une option de liste, où
+# le texte du catalogue voisine avec un texte traduit (« C01 · <nature> — 12 months »), la valeur de data-catalogue
+# (la part du catalogue) ; pour un groupe d'options, son libellé (la famille).
+SCRIPT_DONNEES_CATALOGUE = r"""
+() => {
+  const textes = [];
+  for (const element of document.querySelectorAll('[data-catalogue]')) {
+    const valeur = element.getAttribute('data-catalogue')
+      || (element.localName === 'optgroup' ? element.label : (element.innerText || element.textContent || ''));
+    textes.push(...String(valeur).split(/[\n\t]/));
+  }
+  return textes;
+}
+"""
+
+
+def donnees_du_catalogue(page):
+    """Morceaux de données des blocs [data-catalogue] de la page (SCRIPT_DONNEES_CATALOGUE), comme segments_de_donnees."""
+    segments = set()
+    for texte in page.evaluate(SCRIPT_DONNEES_CATALOGUE):
+        _ajouter_segment(segments, texte)
+    return segments
+
+
 class ReleveurAnglais(photo.Releveur):
     """Releveur de la photographie, English choisi ; note, écran par écran, les erreurs JavaScript (sans arrêter le
-    relevé), les messages d'erreur et les avertissements de clé absente de la console, et l'attribut lang."""
+    relevé), les messages d'erreur et les avertissements de clé absente de la console, et l'attribut lang ; garde les
+    textes des blocs du catalogue (donnees_catalogue), rangés parmi les données."""
 
     def __init__(self, playwright, navigateur, mode):
         super().__init__(playwright, navigateur, mode, langue=LANGUE)
         self.problemes = []
         self.courant = ("aucun", "début du relevé")
+        self.donnees_catalogue = set()
 
     def signaler(self, sorte, detail):
         profil, ecran = self.courant
@@ -426,6 +454,7 @@ class ReleveurAnglais(photo.Releveur):
             lang = page.evaluate("document.documentElement.lang")
             if lang != LANGUE:
                 self.signaler("lang", "<html lang=%r> (attendu %r)" % (lang, LANGUE))
+            self.donnees_catalogue |= donnees_du_catalogue(page)
         return entree
 
 
@@ -444,7 +473,8 @@ class TestEcransAnglais(unittest.TestCase):
         super().setUpClass()
         if sync_playwright is None:
             raise unittest.SkipTest("Playwright pour Python n'est pas installé")
-        cls.examen = Examen(Textes(), segments_de_donnees())
+        cls.textes = Textes()
+        cls.segments = segments_de_donnees()
         cls._playwright = sync_playwright().start()
         cls.addClassCleanup(cls._playwright.stop)
         cls.navigateur = cls._playwright.chromium.launch(headless=True)
@@ -460,7 +490,9 @@ class TestEcransAnglais(unittest.TestCase):
             anglais = photo.document(mode, releveur.ecrans)
             releveur.problemes.append(Probleme(mode, "?", releveur.dernier, "relevé interrompu", str(erreur)))
         duree = time.monotonic() - debut
-        problemes = releveur.problemes + self.examen.releve(anglais, francais) + formats_en_gb(anglais)
+        # Données de la démo, plus le contenu du catalogue vu pendant le relevé (blocs [data-catalogue]).
+        examen = Examen(self.textes, self.segments | releveur.donnees_catalogue)
+        problemes = releveur.problemes + examen.releve(anglais, francais) + formats_en_gb(anglais)
         retenus = [p for p in problemes if exception_de(p) is None]
         excuses = [p for p in problemes if exception_de(p) is not None]
         dossier = Path(tempfile.gettempdir()) / "prevo-ecrans-anglais"
@@ -534,6 +566,43 @@ class TestRepli(CasNavigateur):
                                     "autre": "This morning in the workshop"})
         attendu = "Prévo (traduction) : clé « %s » absente en « en » : texte français affiché." % self.CLE
         self.assertEqual([a for a in avertissements if AVERTISSEMENT_CLE in a], [attendu])
+
+
+class TestDonneesCatalogue(CasNavigateur):
+    """Blocs du catalogue Prévo (T416) : leur texte est une donnée, pas un oubli de traduction ; le texte traduit qui
+    les entoure reste examiné."""
+
+    PAGE = """<!doctype html><html lang="en"><body><form>
+      <select><option value="">Free entry (outside the catalogue)</option>
+        <optgroup label="Levage" data-catalogue><option value="C01" data-catalogue="VGP pont roulant, palan">C01 · VGP
+          pont roulant, palan — 12 months</option></optgroup></select>
+      <dl><dt>Reference text</dt><dd lang="fr" data-catalogue>Arrêté du 1er mars 2004, art. 23</dd>
+        <dt>Who inspects</dt><dd lang="fr" data-catalogue>Personnes qualifiées de l'établissement</dd></dl>
+      <div lang="fr" data-catalogue>à confirmer avec votre organisme de contrôle</div></form></body></html>"""
+
+    def test_blocs_du_catalogue_parmi_les_donnees(self):
+        self.page.set_content(self.PAGE)
+        segments = donnees_du_catalogue(self.page)
+        for attendu in ("Levage", "VGP pont roulant, palan", "Arrêté du 1er mars 2004, art. 23",
+                        "Personnes qualifiées de l'établissement", "à confirmer avec votre organisme de contrôle"):
+            with self.subTest(segment=attendu):
+                self.assertIn(attendu, segments)
+        self.assertNotIn("C01 · VGP pont roulant, palan — 12 months", segments, "l'option entière n'est pas une donnée")
+        textes = Textes()
+        examen = Examen(textes, segments)
+        vus = ["C01 · VGP pont roulant, palan — 12 months", "Arrêté du 1er mars 2004, art. 23",
+               "Personnes qualifiées de l'établissement", "à confirmer avec votre organisme de contrôle"]
+        releve = {"mode": "demo", "ecrans": [{"profil": "responsable", "ecran": "controles-nouveau", "titre": "",
+                                              "texte": photo.compter(vus), "attributs": {}}]}
+        vide = {"mode": "demo", "ecrans": [{"profil": "responsable", "ecran": "controles-nouveau", "titre": "",
+                                            "texte": {}, "attributs": {}}]}
+        self.assertEqual(examen.releve(releve, vide), [])
+        # Sans les blocs du catalogue, ces textes seraient signalés ; un suffixe resté en français l'est toujours.
+        self.assertTrue(Examen(textes, set()).releve(releve, vide))
+        releve["ecrans"][0]["texte"] = photo.compter(["C01 · VGP pont roulant, palan — 12 mois"])
+        problemes = examen.releve(releve, vide)
+        self.assertEqual(len(problemes), 1, problemes)
+        self.assertIn("mois", problemes[0].detail)
 
 
 class TestExamen(unittest.TestCase):

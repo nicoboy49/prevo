@@ -6,7 +6,8 @@
 //      CatalogueFR (page de test sans le fichier, catalogue retiré un jour), liste vide : l'écran retombe sur la
 //      saisie libre, sans erreur. Une mise à jour du catalogue n'est JAMAIS appliquée par ces fonctions : elle est
 //      seulement proposée (miseAJourProposee), reprise sur un clic par appliquerMiseAJourCatalogue (T415).
-//   2. Bloc du catalogue du formulaire de création (Controles.interne.blocCatalogue) : T416.
+//   2. Le catalogue à l'écran (T416, §4.3, §4.4) : bloc du formulaire de création (Controles.interne.blocCatalogue),
+//      source d'un contrôle sur sa fiche (blocSourceControle : provenance, liens, mention, mise à jour proposée).
 // Chargé après controles-reserves.js et avant controles-ecritures.js. Complète l'objet Controles ; une fonction d'un
 // fichier chargé plus tard est cherchée au moment de l'appel.
 
@@ -179,6 +180,212 @@ Object.assign(Controles, (() => {
       .map((champ) => ({ champ, actuel: texte(controle[champ]), propose: proposees[champ] }));
     return ecarts.length ? { ligne, ecarts } : null;
   }
+
+  // ===========================================================================================
+  // 2. Le catalogue à l'écran (T416, CONCEPTION-L2-L3 §4.3, §4.4) : bloc du formulaire de création (blocCatalogue),
+  //    source d'un contrôle sur sa fiche (blocSourceControle), provenance (texteProvenance). Le contenu du catalogue
+  //    (nature, référence, liens, équipements visés, qui vérifie, periodicite_texte, mention) reste en français dans
+  //    toutes les langues (CDC §3.2 : textes juridiques français) : ses blocs portent lang="fr" et data-catalogue,
+  //    que tests/test_ecrans_anglais.py range parmi les données ; une option de la liste, où le texte du catalogue
+  //    voisine avec un texte traduit (« — 12 months »), porte la part du catalogue dans data-catalogue. Libellés,
+  //    provenance, mention « réglementation française » et phrase D182 sont traduits. Aucune écriture ici, sauf le
+  //    bouton « Reprendre ces valeurs » : Controles.appliquerMiseAJourCatalogue (T415), sur un clic du responsable.
+  // ===========================================================================================
+
+  // Champs que le choix d'une ligne pré-remplit (valeursDepuisCatalogue) ; tout reste modifiable.
+  const CHAMPS_PRE_REMPLIS = Object.freeze(['nature', 'periodicite_mois', 'texte_reference', 'nature_source']);
+  const ADRESSE_LIEN = /^https:\/\/[^\s"'<>]+$/;
+
+  const libelleMois = (valeur) => I18n.t('controles.carte_description.periodicite_mois_mois', { n: Number(valeur) });
+  const catalogueHtml = (valeur) => UI.html`<span lang="fr" data-catalogue>${valeur}</span>`;
+
+  /** Provenance d'un contrôle (§2) : « Catalogue Prévo (C14), relu le 08/11/2026 — réglementation française »,
+   *  « Saisie (nature choisie au catalogue : C14) » ou « Saisie ». source : un contrôle, ou ses champs de source. */
+  function texteProvenance(source) {
+    const lue = lireSource(source);
+    if (lue.origine === 'catalogue') {
+      return lue.reluLe
+        ? I18n.t('controles.catalogue.provenance_catalogue', { ligne: lue.catalogueId, date: UI.dateFr(lue.reluLe) })
+        : I18n.t('controles.catalogue.provenance_catalogue_sans_date', { ligne: lue.catalogueId });
+    }
+    return lue.catalogueId ? I18n.t('controles.catalogue.provenance_saisie_ligne', { ligne: lue.catalogueId })
+      : I18n.t('controles.catalogue.provenance_saisie');
+  }
+
+  /** Liens d'une ligne (Légifrance, EUR-Lex…) : nouvel onglet, sans transmettre la page d'origine ; un simple lien
+   *  ouvert par l'utilisateur, aucune requête de l'appli (CS177). Une adresse autre que https:// n'est pas un lien. */
+  function liensHtml(ligne) {
+    const liens = (Array.isArray(ligne.liens) ? ligne.liens : []).filter((lien) => lien && texte(lien.libelle || lien.url));
+    if (!liens.length) return '';
+    return UI.html`<ul class="controles-catalogue-liens">${liens.map((lien) => {
+      const libelle = texte(lien.libelle) || texte(lien.url);
+      if (!ADRESSE_LIEN.test(texte(lien.url))) return UI.html`<li>${catalogueHtml(libelle)}</li>`;
+      return UI.html`<li><a href="${texte(lien.url)}" target="_blank" rel="noopener noreferrer">${catalogueHtml(libelle)}<span
+        class="visuellement-cache"> ${I18n.t('controles.catalogue.nouvel_onglet')}</span></a></li>`;
+    })}</ul>`;
+  }
+
+  /** Mention de la ligne (« à confirmer avec votre organisme de contrôle », C04, C13) en encadré d'attention. */
+  function mentionHtml(mention) {
+    if (!mention) return '';
+    return UI.html`<div class="alerte attention controles-catalogue-mention" role="note">${UI.icone('alerte')}
+      <div class="alerte-texte" lang="fr" data-catalogue>${mention}</div></div>`;
+  }
+
+  /** Libellé d'une option : « C01 · VGP pont roulant… — 12 mois » (« sans périodicité par défaut » : C13, C24). */
+  function libelleOption(ligne) {
+    const periodicite = valeursDepuisCatalogue(ligne).periodicite_mois;
+    return I18n.t('controles.catalogue.option', { ligne: texte(ligne.id), nature: texte(ligne.nature),
+      periodicite: periodicite ? libelleMois(periodicite) : I18n.t('controles.catalogue.option_sans_periodicite') });
+  }
+
+  /** Encart de la ligne choisie au formulaire : provenance (badge « saisie » si une valeur de la source a changé),
+   *  source, référence, liens, équipements visés, qui vérifie, periodicite_texte, mention, « Tout reste modifiable ». */
+  function encartHtml(ligne) {
+    const valeurs = valeursDepuisCatalogue(ligne);
+    const source = [Schema.libelleValeur('controles_reglementaires', 'nature_source', valeurs.nature_source),
+      valeurs.catalogue_relu_le ? I18n.t('controles.catalogue.relu_le', { date: UI.dateFr(valeurs.catalogue_relu_le) }) : '',
+      I18n.t('controles.catalogue.reglementation_francaise')].filter(Boolean).join(' · ');
+    const liens = liensHtml(ligne);
+    return UI.html`<dl class="valeurs controles-catalogue-valeurs">
+      <dt>${I18n.t('controles.catalogue.provenance')}</dt><dd><span class="controles-provenance"></span>
+        <span class="controles-badge-saisie"></span></dd>
+      <dt>${I18n.t('controles.catalogue.source')}</dt><dd class="controles-catalogue-source">${source}</dd>
+      <dt>${I18n.t('controles.carte_description.texte_reference')}</dt><dd lang="fr" data-catalogue>${valeurs.texte_reference}</dd>
+      ${liens ? UI.html`<dt>${I18n.t('controles.catalogue.liens')}</dt><dd>${liens}</dd>` : ''}
+      <dt>${I18n.t('controles.catalogue.equipements_vises')}</dt><dd lang="fr" data-catalogue>${texte(ligne.equipements)}</dd>
+      <dt>${I18n.t('controles.catalogue.qui_verifie')}</dt><dd lang="fr" data-catalogue>${texte(ligne.qui_verifie)}</dd>
+      <dt>${I18n.t('controles.carte_description.periodicite')}</dt><dd lang="fr" data-catalogue>${texte(ligne.periodicite_texte)}</dd>
+      </dl>
+      <p class="aide controles-valeur-modifiee" hidden>${I18n.t('controles.catalogue.valeur_modifiee')}</p>
+      ${mentionHtml(texte(ligne.mention))}
+      <p class="note">${I18n.t('controles.catalogue.tout_modifiable')}</p>`;
+  }
+
+  /**
+   * Bloc du catalogue, inséré en tête du formulaire « Nouveau contrôle » (rendu) : liste « Choisir dans le catalogue
+   * Prévo — réglementation française » (« Saisie libre (hors catalogue) » en premier et par défaut, Q6 ; un
+   * <optgroup> par famille), encart de la ligne choisie, phrase D182. Choisir une ligne remplit nature, périodicité,
+   * référence et nature de la source ; changer ensuite l'une des valeurs de la source montre « saisie », par la
+   * règle même de l'écriture (sourceApresSaisie). La liste s'appelle catalogue_id : creerControle (T415) en déduit la
+   * provenance. Sans catalogue (CatalogueFR absent) : la phrase seule, saisie libre.
+   */
+  function blocCatalogue(formulaire) {
+    const familles = famillesCatalogue();
+    const id = UI.identifiantUnique('controle-catalogue');
+    const bloc = UI.element(UI.html`<div class="large controles-catalogue">${familles.length ? UI.html`
+      <div class="champ" data-champ="catalogue_id"><label class="libelle" for="${id}">${I18n.t('controles.catalogue.choisir')}</label>
+        <select id="${id}" name="catalogue_id" aria-describedby="${id}-aide">
+          <option value="">${I18n.t('controles.catalogue.saisie_libre')}</option>${familles.map((groupe) => UI.html`
+          <optgroup label="${groupe.famille}" data-catalogue>${groupe.lignes.map((ligne) => UI.html`
+            <option value="${ligne.id}" data-catalogue="${texte(ligne.nature)}">${libelleOption(ligne)}</option>`)}</optgroup>`)}
+        </select><p class="aide" id="${id}-aide">${I18n.t('controles.catalogue.aide_choix')}</p></div>
+      <div class="encadre controles-catalogue-encart" hidden></div>` : ''}
+      <p class="note controles-principe">${I18n.t('controles.principe.texte')}</p></div>`);
+    formulaire.insertBefore(bloc, formulaire.firstChild);
+    const liste = UI.$('select', bloc);
+    if (!liste) return bloc;
+    const encart = UI.$('.controles-catalogue-encart', bloc);
+    const aidePeriodicite = UI.$('.champ[data-champ="periodicite_mois"] .aide', formulaire);
+    const aideInitiale = aidePeriodicite ? aidePeriodicite.textContent : '';
+
+    function actualiserProvenance() {
+      const ligne = ligneCatalogue(liste.value);
+      const provenance = UI.$('.controles-provenance', encart);
+      if (!ligne || !provenance) return;
+      const source = sourceApresSaisie(UI.lireFormulaire(formulaire), ligne);
+      const saisie = source.source_periodicite === 'saisie';
+      provenance.textContent = texteProvenance(source);
+      UI.remplir(UI.$('.controles-badge-saisie', encart),
+        saisie ? UI.badgeValeur('controles_reglementaires', 'source_periodicite', 'saisie') : '');
+      UI.$('.controles-valeur-modifiee', encart).hidden = !saisie;
+    }
+
+    function choisir() {
+      const ligne = ligneCatalogue(liste.value);
+      encart.hidden = !ligne;
+      UI.remplir(encart, ligne ? encartHtml(ligne) : '');
+      if (!ligne) {
+        if (aidePeriodicite) aidePeriodicite.textContent = aideInitiale;
+        return;
+      }
+      const valeurs = valeursDepuisCatalogue(ligne);
+      CHAMPS_PRE_REMPLIS.forEach((nom) => {
+        const champ = formulaire.querySelector('[name="' + nom + '"]');
+        if (champ) champ.value = valeurs[nom];
+      });
+      if (aidePeriodicite) {
+        aidePeriodicite.textContent = valeurs.periodicite_mois ? aideInitiale : I18n.t('controles.catalogue.sans_periodicite_aide');
+      }
+      actualiserProvenance();
+    }
+
+    liste.addEventListener('change', choisir);
+    ['input', 'change'].forEach((evenement) => formulaire.addEventListener(evenement, (e) => {
+      if (e.target !== liste) actualiserProvenance();
+    }));
+    return bloc;
+  }
+
+  /** « Le catalogue Prévo a été relu le 01/03/2027 : il propose 60 mois (vous avez 48 mois). Rien n'est changé sans
+   *  vous. » : un fragment sûr (les textes du catalogue y restent en français). */
+  function texteMiseAJour(proposee) {
+    const nature = (valeur) => Schema.libelleValeur('controles_reglementaires', 'nature_source', valeur) || '—';
+    const propositions = proposee.ecarts.map((ecart) => {
+      if (ecart.champ === 'periodicite_mois') {
+        return I18n.html('controles.catalogue.propose_periodicite', { propose: ecart.propose ? libelleMois(ecart.propose) : '—',
+          actuel: ecart.actuel ? libelleMois(ecart.actuel) : '—' });
+      }
+      if (ecart.champ === 'texte_reference') {
+        return I18n.html('controles.catalogue.propose_reference', { propose: catalogueHtml(ecart.propose || '—'),
+          actuel: ecart.actuel || '—' });
+      }
+      return I18n.html('controles.catalogue.propose_nature_source', { propose: nature(ecart.propose), actuel: nature(ecart.actuel) });
+    });
+    const valeurs = { propositions: UI.brut(propositions.map(String).join(' ; ')) };
+    const reluLe = dateIso(proposee.ligne.relu_le);
+    return reluLe ? I18n.html('controles.catalogue.mise_a_jour', Object.assign(valeurs, { date: UI.dateFr(reluLe) }))
+      : I18n.html('controles.catalogue.mise_a_jour_sans_date', valeurs);
+  }
+
+  async function reprendreCatalogue(controleId, bouton) {
+    if (bouton.disabled) return;
+    bouton.disabled = true;
+    bouton.setAttribute('aria-busy', 'true');
+    try {
+      const changes = await Controles.appliquerMiseAJourCatalogue(controleId);
+      UI.toast(I18n.t(changes.length ? 'controles.catalogue.valeurs_reprises' : 'controles.catalogue.rien_a_reprendre'), 'succes');
+      await App.reafficher();
+    } catch (erreur) {
+      App.signalerErreur(erreur, 'reprise des valeurs du catalogue');
+    } finally {
+      bouton.disabled = false;
+      bouton.removeAttribute('aria-busy');
+    }
+  }
+
+  /**
+   * Source d'un contrôle sur sa fiche (carte de description, carte du formulaire du responsable) : provenance, liens
+   * et mention de sa ligne du catalogue, mise à jour proposée (§4.4 : encart et, pour le responsable, « Reprendre ces
+   * valeurs », seul moyen de reprendre des valeurs du catalogue), phrase D182 en note. Rend un élément.
+   */
+  function blocSourceControle(controle, responsable) {
+    const ligne = ligneCatalogue(controle.catalogue_id);
+    const liens = ligne ? liensHtml(ligne) : '';
+    const proposee = miseAJourProposee(controle);
+    const bloc = UI.element(UI.html`<div class="controles-source"><dl class="valeurs">
+      <dt>${I18n.t('controles.catalogue.provenance')}</dt><dd class="controles-provenance">${texteProvenance(controle)}</dd>
+      ${liens ? UI.html`<dt>${I18n.t('controles.catalogue.liens')}</dt><dd>${liens}</dd>` : ''}</dl>
+      ${mentionHtml(mentionDuControle(controle))}
+      ${proposee ? UI.html`<div class="encadre info controles-mise-a-jour" role="status"><p>${texteMiseAJour(proposee)}</p>
+        ${responsable ? UI.html`<button type="button" class="btn btn-secondaire" id="controle-reprendre-catalogue">${UI.icone('valider')}${I18n.t('controles.catalogue.reprendre')}</button>` : ''}</div>` : ''}
+      <p class="note controles-principe">${I18n.t('controles.principe.texte')}</p></div>`);
+    const bouton = UI.$('#controle-reprendre-catalogue', bloc);
+    if (bouton) bouton.addEventListener('click', () => reprendreCatalogue(controle.id, bouton));
+    return bloc;
+  }
+
+  Object.assign(Controles.interne, { blocCatalogue, blocSourceControle, texteProvenance });
 
   return {
     // règles pures du catalogue (CONCEPTION-L2-L3 §4.1)

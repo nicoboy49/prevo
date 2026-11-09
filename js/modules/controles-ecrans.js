@@ -4,6 +4,8 @@
 // ?statut=observations à lever est lu comme « réserves à lever »), création #/controles/nouveau
 // (?equipement=), fiche #/controles/<id> (statut RG9, réserves à lever, dernier contrôle et rapport,
 // OT réglementaires de l'équipement, historique au journal) ; puis l'enregistrement des écrans auprès d'App.
+// Catalogue Prévo (2.2, T416) : bloc du formulaire de création et source du contrôle sur sa fiche, construits par
+// controles-catalogue.js (Controles.interne.blocCatalogue, blocSourceControle) ; phrase D182 sur les trois écrans.
 // Profils : le responsable a tous les boutons ; le technicien consulte (aucun bouton d'écriture
 // n'est rendu) ; le demandeur n'a pas accès (App le renvoie à l'accueil).
 // Le module ne crée jamais d'OT : « Créer un OT » ouvre #/ot/nouveau pré-rempli (type
@@ -220,7 +222,8 @@ Object.assign(Controles, (() => {
       <div class="controles">
         <div class="entete-page">
           <div><h1>${I18n.t('controles.liste.controles_reglementaires')}</h1>
-            <p>${I18n.t('controles.liste.verifications_imposees_reglementation_vgp')}</p></div>
+            <p>${I18n.t('controles.liste.verifications_imposees_reglementation_vgp')}</p>
+            <p class="note controles-principe">${I18n.t('controles.principe.texte')}</p></div>
           <div class="actions">${responsable ? UI.html`<a class="btn btn-primaire" id="controles-nouveau"
             href="#/controles/nouveau${filtres.equipement ? '?equipement=' + encodeURIComponent(filtres.equipement) : ''}">${UI.icone('ajouter')}${I18n.t('controles.liste.ajouter_controle')}</a>` : ''}</div>
         </div>
@@ -273,6 +276,8 @@ Object.assign(Controles, (() => {
   // 10. Formulaire d'un contrôle : création (#/controles/nouveau) et modification (fiche)
   // ===========================================================================================
 
+  /** Formulaire d'un contrôle ; à la création, le catalogue Prévo en tête (Controles.interne.blocCatalogue, de
+   *  controles-catalogue.js) ; nature de la source (2.2, CS171) : « — non renseignée — » ou une valeur de la liste. */
   function formulaireControle(controle, equipementPropose) {
     const formulaire = UI.element(UI.html`<form class="form-grille" id="form-controle" novalidate>
       <div class="champ large" data-champ="equipement_id"><span class="libelle">${I18n.t('commun.champ.equipement')} <span class="requis" aria-hidden="true">*</span></span>
@@ -283,6 +288,8 @@ Object.assign(Controles, (() => {
       { placeholder: I18n.t('controles.formulaire_controle.ex_verification_generale_periodique'), attributs: { maxlength: '160' } }), true);
     ajouter(UI.champ(definitionChamp('texte_reference'), valeur('texte_reference'), { placeholder: I18n.t('controles.formulaire_controle.ex_arrete_1_er') }), true);
     ajouter(UI.champ(definitionChamp('periodicite_mois', { obligatoire: true }), valeur('periodicite_mois'), { aide: I18n.t('controles.formulaire_controle.nombre_entier_mois_entre') }));
+    const natureSource = UI.$('option[value=""]', ajouter(UI.champ(definitionChamp('nature_source'), valeur('nature_source'))));
+    if (natureSource) natureSource.textContent = I18n.t('controles.formulaire_controle.nature_source_non_renseignee');
     ajouter(UI.champ(definitionChamp('organisme'), valeur('organisme')));
     ajouter(UI.champ(definitionChamp('derniere_date'), valeur('derniere_date'),
       { aide: controle ? I18n.t('controles.formulaire_controle.correction_seulement_nouveau_controle') : I18n.t('controles.formulaire_controle.facultatif_date_dernier_controle') }));
@@ -296,6 +303,7 @@ Object.assign(Controles, (() => {
       valeur: controle ? controle.equipement_id : (equipementPropose || ''),
     });
     formulaire.addEventListener('submit', (evenement) => { evenement.preventDefault(); enregistrerControle(formulaire, controle, selecteur); });
+    if (!controle) Controles.interne.blocCatalogue(formulaire);
     return formulaire;
   }
 
@@ -412,14 +420,18 @@ Object.assign(Controles, (() => {
       <dt>${I18n.t('controles.carte_dernier_controle.observations')}</dt><dd>${observations}</dd></dl></article>`;
   }
 
+  /** Carte de description (technicien) : le contrôle, puis sa source (provenance, liens, mention, phrase D182). */
   function carteDescription(controle, prochaine) {
-    return UI.html`<article class="carte"><h2>${I18n.t('controles.colonnes_liste.controle')}</h2><dl class="valeurs">
+    const carte = UI.element(UI.html`<article class="carte"><h2>${I18n.t('controles.colonnes_liste.controle')}</h2><dl class="valeurs">
       <dt>${I18n.t('commun.champ.equipement')}</dt><dd>${lienEquipement(controle)}</dd>
       <dt>${I18n.t('controles.carte_description.nature')}</dt><dd>${controle.nature}</dd>
       <dt>${I18n.t('controles.carte_description.texte_reference')}</dt><dd>${controle.texte_reference}</dd>
+      <dt>${definitionChamp('nature_source').libelle}</dt><dd>${Schema.libelleValeur('controles_reglementaires', 'nature_source', controle.nature_source)}</dd>
       <dt>${I18n.t('controles.carte_description.periodicite')}</dt><dd>${controle.periodicite_mois ? I18n.t('controles.carte_description.periodicite_mois_mois', { n: controle.periodicite_mois }) : ''}</dd>
       <dt>${I18n.t('controles.carte_description.organisme_controle')}</dt><dd>${controle.organisme}</dd>
-      <dt>${I18n.t('controles.carte_description.prochain_controle')}</dt><dd>${prochaine ? UI.dateFr(prochaine) : I18n.t('controles.carte_description.date_inconnue')}</dd></dl></article>`;
+      <dt>${I18n.t('controles.carte_description.prochain_controle')}</dt><dd>${prochaine ? UI.dateFr(prochaine) : I18n.t('controles.carte_description.date_inconnue')}</dd></dl></article>`);
+    carte.appendChild(Controles.interne.blocSourceControle(controle, false));
+    return carte;
   }
 
   function carteOrdres(controle) {
@@ -441,6 +453,8 @@ Object.assign(Controles, (() => {
   const MOTIF_REALISATION = /^contrôle réalisé le (.+?)(?: par (.+?))? ; (?:rapport : (.+?)|(sans rapport joint)) ; (?:observations : ([\s\S]+)|(sans observation))$/;
   const MOTIF_LEVEE = /^observations levées le (.+?) : ([\s\S]*)$/;
   const MOTIF_IMPORT = /^import (.+)$/;
+  // Valeurs du catalogue reprises sur un clic (appliquerMiseAJourCatalogue, T415) : « … C14 relu le 01/03/2027 … ».
+  const MOTIF_CATALOGUE = /^valeurs du catalogue (\S+)(?: relu le (.+?))? reprises$/;
 
   function complementJournal(complement) {
     if (complement === 'création du contrôle réglementaire') return I18n.t('controles.journal.creation_controle');
@@ -457,6 +471,11 @@ Object.assign(Controles, (() => {
     }
     trouve = MOTIF_LEVEE.exec(complement);
     if (trouve) return I18n.t('controles.journal.observations_levees', { date: trouve[1], commentaire: trouve[2] });
+    trouve = MOTIF_CATALOGUE.exec(complement);
+    if (trouve) {
+      return trouve[2] ? I18n.t('controles.journal.valeurs_catalogue_reprises', { ligne: trouve[1], date: trouve[2] })
+        : I18n.t('controles.journal.valeurs_catalogue_reprises_sans_date', { ligne: trouve[1] });
+    }
     trouve = MOTIF_IMPORT.exec(complement);
     return trouve ? I18n.t('controles.journal.import', { fichier: trouve[1] }) : null;
   }
@@ -530,6 +549,7 @@ Object.assign(Controles, (() => {
     const zone = UI.$('.controles-zone-controle', conteneur);
     if (responsable) {
       const carte = UI.element(UI.html`<article class="carte"><h2>${I18n.t('controles.colonnes_liste.controle')}</h2></article>`);
+      carte.appendChild(Controles.interne.blocSourceControle(controle, true));
       carte.appendChild(formulaireControle(controle));
       zone.appendChild(carte);
       UI.$('#controle-realise', conteneur).addEventListener('click', () => ouvrirRealisation(controle));

@@ -24,6 +24,19 @@ reçues ignorées ; catalogue relu (C14 à 60 mois) : une autre modification gar
 appliquerMiseAJourCatalogue reprend les valeurs (journal « valeurs du catalogue C14 relu le 01/03/2027 reprises »),
 rejouable ; ligne retirée du catalogue de la page : provenance gardée.
 
+Le catalogue à l'écran (T416, CONCEPTION-L2-L3 §4.3, §4.4, controles-catalogue.js et controles-ecrans.js) :
+  - en démo, formulaire « Nouveau contrôle » : « Saisie libre (hors catalogue) » en premier et choisi, un groupe par
+    famille ; choisir C14 remplit 48 mois, sa référence et « obligation réglementaire », l'encart (lang="fr",
+    data-catalogue) dit « relu le 08/11/2026 », « réglementation française », équipements visés, qui vérifie, liens
+    en nouvel onglet (noopener noreferrer) ; changer la périodicité montre « saisie » ; C04 et C13 montrent « à
+    confirmer avec votre organisme de contrôle » ; C13 laisse la périodicité vide avec son aide ; C18 ne dit jamais
+    « conforme » ; fiche d'un contrôle de la démo : provenance, liens, phrase D182 ;
+  - en mode serveur (CSV relus) : contrôle créé par le formulaire depuis C14 (catalogue, C14, 2026-11-08,
+    obligation) ; page qui reçoit le catalogue relu (C14 à 60 mois) : encart « Le catalogue Prévo a été relu le
+    01/03/2027 : il propose 60 mois (vous avez 48 mois). Rien n'est changé sans vous. », rien d'écrit sans le clic,
+    pas de bouton pour le technicien (écran en anglais), « Reprendre ces valeurs » reprend 60 mois ; l'historique dit
+    l'entrée du journal, traduite en anglais.
+
 Bibliothèque standard + Playwright. Lancer depuis la racine du projet (au travers du verrou des navigateurs) :
     py -X utf8 -m unittest discover -s tests -p "test_catalogue_controles.py" -v
 """
@@ -667,6 +680,277 @@ class TestEcrituresCatalogue(CasEcrituresCatalogue):
             octets = self.octets()
             self.assertEqual(self.accepte("appliquerMiseAJourCatalogue", c14), [])
             self.assertEqual(self.octets(), octets)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Le catalogue à l'écran (T416) : formulaire « Nouveau contrôle », fiche, mise à jour proposée
+# ---------------------------------------------------------------------------------------------------------------
+
+PHRASE_D182 = "Prévo est une aide au suivi ; la responsabilité reste celle de l'employeur."
+PROVENANCE_C14 = "Catalogue Prévo (C14), relu le 08/11/2026 — réglementation française"
+AIDE_SANS_PERIODICITE = "Aucune périodicité par défaut : à saisir (par exemple selon votre contrat d'assurance)."
+MISE_A_JOUR_C14 = ("Le catalogue Prévo a été relu le 01/03/2027 : il propose 60 mois (vous avez 48 mois). Rien n'est"
+                   " changé sans vous.")
+
+# Relevé du formulaire « Nouveau contrôle » : champs, encart de la ligne choisie, texte de la page.
+FORMULAIRE_JS = """() => {
+  const formulaire = document.querySelector('#form-controle');
+  const champ = (nom) => formulaire.querySelector('[name="' + nom + '"]');
+  const encart = formulaire.querySelector('.controles-catalogue-encart');
+  const dans = (selecteur) => (encart && !encart.hidden ? Array.from(encart.querySelectorAll(selecteur)) : []);
+  const liste = champ('catalogue_id');
+  return {
+    choisie: liste.value,
+    libelle: formulaire.querySelector('label[for="' + liste.id + '"]').textContent.trim(),
+    premiere: [liste.options[0].value, liste.options[0].text],
+    groupes: Array.from(liste.querySelectorAll('optgroup')).map((groupe) => [groupe.label,
+      Array.from(groupe.querySelectorAll('option')).map((option) => option.value)]),
+    options: Object.fromEntries(Array.from(liste.querySelectorAll('optgroup option')).map((o) => [o.value, o.text])),
+    nature: champ('nature').value, periodicite: champ('periodicite_mois').value,
+    reference: champ('texte_reference').value, natureSource: champ('nature_source').value,
+    natureSourceAffichee: champ('nature_source').selectedOptions[0].text,
+    natureSourceVide: champ('nature_source').options[0].text,
+    aidePeriodicite: formulaire.querySelector('.champ[data-champ="periodicite_mois"] .aide').textContent,
+    encart: !!encart && !encart.hidden,
+    texteEncart: encart && !encart.hidden ? encart.innerText : '',
+    provenance: dans('.controles-provenance').map((e) => e.textContent.trim()).join(''),
+    badge: dans('.controles-badge-saisie').map((e) => e.textContent.trim()).join(''),
+    valeurModifiee: dans('.controles-valeur-modifiee').some((e) => !e.hidden),
+    mentions: dans('.controles-catalogue-mention').map((e) => e.innerText.trim()),
+    liens: dans('.controles-catalogue-liens a').map((a) => [a.getAttribute('href'), a.target, a.rel]),
+    blocs: dans('[data-catalogue]').map((e) => e.getAttribute('lang')),
+    principe: Array.from(formulaire.querySelectorAll('.controles-principe')).map((e) => e.textContent.trim()),
+    page: document.querySelector('#contenu').innerText,
+  };
+}"""
+
+# Relevé de la source d'un contrôle sur sa fiche.
+FICHE_JS = """() => {
+  const source = document.querySelector('#contenu .controles-source');
+  const mise = source && source.querySelector('.controles-mise-a-jour');
+  return {
+    provenance: source ? source.querySelector('.controles-provenance').textContent.trim() : null,
+    liens: source ? Array.from(source.querySelectorAll('.controles-catalogue-liens a')).map((a) =>
+      [a.getAttribute('href'), a.target, a.rel, a.querySelector('[data-catalogue]').getAttribute('lang')]) : [],
+    miseAJour: mise ? mise.querySelector('p').textContent.trim() : null,
+    bouton: !!document.querySelector('#controle-reprendre-catalogue'),
+    principe: Array.from(document.querySelectorAll('#contenu .controles-principe')).map((e) => e.textContent.trim()),
+    natureSource: (document.querySelector('#form-controle [name=nature_source]') || {}).value,
+    historique: Array.from(document.querySelectorAll('#contenu .controles-journal .controles-action'))
+      .map((e) => e.textContent.trim()),
+    page: document.querySelector('#contenu').innerText,
+  };
+}"""
+
+
+def liens_de(identifiant):
+    """[adresse, cible, rel] des liens d'une ligne du catalogue, tels que l'écran doit les rendre."""
+    return [[lien["url"], "_blank", "noopener noreferrer"] for lien in lignes_par_id()[identifiant]["liens"]]
+
+
+class CasCatalogueEcran(CasCatalogue):
+
+    def formulaire(self):
+        return self.page.evaluate(FORMULAIRE_JS)
+
+    def choisir(self, identifiant):
+        self.page.select_option("#form-controle [name=catalogue_id]", identifiant)
+        return self.formulaire()
+
+    def aller(self, route, selecteur):
+        self.page.evaluate("(route) => { location.hash = route; }", route)
+        self.page.wait_for_selector(selecteur)
+
+
+class TestCatalogueEcranDemo(CasCatalogueEcran):
+    """Démo (index.html en file://), profil Responsable."""
+
+    def test_formulaire_nouveau_controle(self):
+        self.ouvrir_demo()
+        self.aller("#/controles/nouveau", "#form-controle [name=catalogue_id]")
+        lignes = lignes_du_depot("controles")
+        releve = self.formulaire()
+        # Saisie libre en premier et choisie ; un groupe par famille, dans l'ordre du fichier ; libellés des options.
+        self.assertEqual(releve["libelle"], "Choisir dans le catalogue Prévo — réglementation française")
+        self.assertEqual(releve["premiere"], ["", "Saisie libre (hors catalogue)"])
+        self.assertEqual(releve["choisie"], "")
+        familles = []
+        for ligne in lignes:
+            if not familles or familles[-1][0] != ligne["famille"]:
+                familles.append([ligne["famille"], []])
+            familles[-1][1].append(ligne["id"])
+        self.assertEqual(releve["groupes"], familles)
+        self.assertEqual(releve["options"]["C01"], "C01 · VGP pont roulant, palan, potence (installés à demeure) — 12 mois")
+        self.assertEqual(releve["options"]["C13"], "C13 · " + lignes_par_id()["C13"]["nature"]
+                         + " — sans périodicité par défaut")
+        self.assertFalse(releve["encart"])
+        self.assertEqual(releve["principe"], [PHRASE_D182])
+        self.assertEqual(releve["natureSourceVide"], "— non renseignée —")
+        aide_initiale = releve["aidePeriodicite"]
+
+        # C14 : 48 mois, sa référence, « obligation réglementaire », relu le 08/11/2026, réglementation française.
+        releve = self.choisir("C14")
+        self.assertEqual((releve["nature"], releve["periodicite"], releve["reference"], releve["natureSource"]),
+                         (C14["nature"], "48", C14["reference"], "obligation"))
+        self.assertEqual(releve["natureSourceAffichee"], "obligation réglementaire")
+        self.assertTrue(releve["encart"])
+        self.assertIn("obligation réglementaire · relu le 08/11/2026 · réglementation française", releve["texteEncart"])
+        for morceau in (C14["reference"], C14["equipements"], C14["qui_verifie"], C14["periodicite_texte"],
+                        "Tout reste modifiable."):
+            with self.subTest(morceau=morceau):
+                self.assertIn(morceau, releve["texteEncart"])
+        self.assertEqual(releve["provenance"], PROVENANCE_C14)
+        self.assertEqual((releve["badge"], releve["valeurModifiee"], releve["mentions"]), ("", False, []))
+        self.assertEqual(releve["liens"], liens_de("C14"))
+        self.assertTrue(releve["blocs"] and all(lang == "fr" for lang in releve["blocs"]), releve["blocs"])
+        self.assertEqual(releve["principe"], [PHRASE_D182])
+        # Renommer la nature n'est pas changer la source ; changer la périodicité montre « saisie ».
+        self.page.fill("#form-controle [name=nature]", "Inspection du réservoir de l'atelier 2")
+        self.assertEqual((self.formulaire()["provenance"], self.formulaire()["badge"]), (PROVENANCE_C14, ""))
+        self.page.fill("#form-controle [name=periodicite_mois]", "36")
+        releve = self.formulaire()
+        self.assertEqual((releve["badge"], releve["valeurModifiee"]), ("saisie", True))
+        self.assertEqual(releve["provenance"], "Saisie (nature choisie au catalogue : C14)")
+        self.assertIn("Valeur modifiée : elle sera notée « saisie ».", releve["texteEncart"])
+        self.page.fill("#form-controle [name=periodicite_mois]", "48")
+        self.assertEqual((self.formulaire()["badge"], self.formulaire()["provenance"]), ("", PROVENANCE_C14))
+        self.page.select_option("#form-controle [name=nature_source]", "norme")
+        self.assertEqual(self.formulaire()["badge"], "saisie")
+
+        # C04 et C13 : « à confirmer avec votre organisme de contrôle » ; C13 sans périodicité, avec son aide.
+        releve = self.choisir("C04")
+        self.assertEqual((releve["periodicite"], releve["mentions"], releve["badge"]), ("6", [MENTION], ""))
+        releve = self.choisir("C13")
+        self.assertEqual((releve["periodicite"], releve["natureSource"], releve["mentions"]),
+                         ("", "recommandation", [MENTION]))
+        self.assertEqual(releve["aidePeriodicite"], AIDE_SANS_PERIODICITE)
+        # C18 : jamais « conforme » à l'écran (réponse provisoire n° 1).
+        releve = self.choisir("C18")
+        self.assertIn(C18_AFFICHE, releve["texteEncart"])
+        self.assertIsNone(MOT_CONFORME.search(releve["page"]), "« conforme » à l'écran")
+        self.assertEqual(releve["aidePeriodicite"], aide_initiale)
+        # Retour à la saisie libre : encart fermé, valeurs gardées (tout reste modifiable).
+        releve = self.choisir("")
+        self.assertFalse(releve["encart"])
+        self.assertEqual((releve["nature"], releve["periodicite"]), (lignes_par_id()["C18"]["nature"], "3"))
+        self.assertEqual(releve["principe"], [PHRASE_D182])
+
+    def test_fiche_d_un_controle_de_la_demo(self):
+        self.ouvrir_demo()
+        identifiant, relu_le = self.page.evaluate("() => { const c = Donnees.lignes('controles_reglementaires')"
+                                                  ".find((c) => c.catalogue_id === 'C14'); return [c.id, c.catalogue_relu_le]; }")
+        self.aller("#/controles/" + identifiant, "#contenu .controles-source")
+        releve = self.page.evaluate(FICHE_JS)
+        # La démo décale toutes ses colonnes date (StockageDemo.decalerDates), catalogue_relu_le comprise : la date
+        # affichée est celle du contrôle en mémoire (écart signalé au rendu de T416).
+        annee, mois_, jour = relu_le.split("-")
+        self.assertEqual(releve["provenance"], "Catalogue Prévo (C14), relu le %s/%s/%s — réglementation française"
+                         % (jour, mois_, annee))
+        self.assertEqual(releve["liens"], [lien + ["fr"] for lien in liens_de("C14")])
+        self.assertEqual((releve["miseAJour"], releve["bouton"]), (None, False))
+        self.assertEqual(releve["principe"], [PHRASE_D182])
+        self.assertEqual(releve["natureSource"], "obligation")
+        self.assertIsNone(MOT_CONFORME.search(releve["page"]))
+
+
+class TestCatalogueEcranServeur(CasCatalogueEcran):
+    """Mode serveur (copie du jeu de démo, CSV relus) : création depuis C14, mise à jour proposée puis reprise."""
+
+    def ouvrir_technicien(self, serveur, route):
+        """Seconde page, profil Technicien, écran en anglais (le contenu du catalogue reste en français)."""
+        contexte = self.navigateur.new_context(locale="en-GB", viewport={"width": 1280, "height": 800})
+        self.addCleanup(contexte.close)
+        contexte.add_init_script("try { localStorage.setItem('prevo.langue', 'en'); } catch (erreur) {}")
+        technicien = next(ligne["id"] for ligne in lire_table(serveur.dossier, "techniciens.csv"))
+        preregler_profil(contexte, "technicien", nom="Technicien", technicien_id=technicien)
+        page = contexte.new_page()
+        self.surveiller(page)
+        page.goto(serveur.url + "/" + route)
+        attendre_pret(page)
+        page.wait_for_selector("#contenu .controles-source")
+        return page
+
+    def test_cree_depuis_c14_puis_mise_a_jour_proposee_et_reprise_sur_un_clic(self):
+        with ServeurPrevo() as serveur:
+            self.dossier = serveur.dossier
+            equipement = next(ligne["id"] for ligne in lire_table(serveur.dossier, "equipements.csv")
+                              if ligne["actif"] != "0" and ligne["statut"] != "rebut")
+            preregler_profil(self.contexte, "responsable", nom="Responsable")
+            self.page.goto(serveur.url + "/#/controles/nouveau?equipement=" + equipement)
+            attendre_pret(self.page)
+            self.page.wait_for_load_state("networkidle")
+            self.page.wait_for_selector("#form-controle [name=catalogue_id]")
+            self.choisir("C14")
+            self.page.fill("#form-controle [name=organisme]", "Organisme T416")
+            self.page.click("#form-controle button[type=submit]")
+            self.page.wait_for_function("location.hash.startsWith('#/controles/CTR-')")
+            identifiant = self.page.evaluate("decodeURIComponent(location.hash.split('/').pop())")
+            ligne = self.controle(identifiant)
+            self.assertEqual({cle: ligne[cle] for cle in PROVENANCE + ("periodicite_mois", "texte_reference")},
+                             dict(SOURCE_C14, periodicite_mois="48", texte_reference=C14["reference"]))
+            self.page.wait_for_selector("#contenu .controles-source")
+            releve = self.page.evaluate(FICHE_JS)
+            self.assertEqual((releve["provenance"], releve["miseAJour"], releve["principe"]),
+                             (PROVENANCE_C14, None, [PHRASE_D182]))
+
+            # La page reçoit le catalogue relu (C14 à 60 mois) : proposé, rien d'écrit.
+            dossier = tempfile.mkdtemp(prefix="prevo-t416-")
+            self.addCleanup(shutil.rmtree, dossier, True)
+            script = catalogue_modifie(dossier)
+            octets = self.octets()
+            self.page.add_script_tag(content=script)
+            self.page.evaluate("App.reafficher()")
+            self.page.wait_for_selector("#controle-reprendre-catalogue")
+            releve = self.page.evaluate(FICHE_JS)
+            self.assertEqual(releve["miseAJour"], MISE_A_JOUR_C14)
+            self.assertEqual(self.page.inner_text("#controle-reprendre-catalogue").strip(), "Reprendre ces valeurs")
+            self.assertEqual(self.octets(), octets)
+
+            # Technicien (écran en anglais) : la proposition, sans bouton.
+            technicien = self.ouvrir_technicien(serveur, "#/controles/" + identifiant)
+            technicien.add_script_tag(content=script)
+            technicien.evaluate("App.reafficher()")
+            technicien.wait_for_selector("#contenu .controles-mise-a-jour")
+            anglais = technicien.evaluate(FICHE_JS)
+            self.assertEqual(anglais["miseAJour"], "The Prévo catalogue was reviewed on 01/03/2027: it proposes"
+                             " 60 months (you have 48 months). Nothing is changed without you.")
+            self.assertFalse(anglais["bouton"])
+            self.assertEqual(anglais["provenance"], "Prévo catalogue (C14), reviewed on 08/11/2026 — French regulations")
+            self.assertEqual(anglais["principe"],
+                             ["Prévo is an aid to keeping track; responsibility remains with the employer."])
+            self.assertEqual(anglais["liens"], [lien + ["fr"] for lien in liens_de("C14")])
+            self.assertEqual(self.octets(), octets)
+
+            # Le clic du responsable : 60 mois, relecture du 01/03/2027 ; l'historique le dit.
+            self.page.click("#controle-reprendre-catalogue")
+            self.page.wait_for_function(
+                "() => document.getElementById('toast').textContent.includes('Valeurs du catalogue reprises')")
+            self.page.wait_for_function("() => !document.querySelector('#controle-reprendre-catalogue')")
+            ligne = self.controle(identifiant)
+            self.assertEqual({cle: ligne[cle] for cle in PROVENANCE + ("periodicite_mois",)},
+                             dict(SOURCE_C14, catalogue_relu_le="2027-03-01", periodicite_mois="60"))
+            releve = self.page.evaluate(FICHE_JS)
+            self.assertEqual((releve["miseAJour"], releve["provenance"]),
+                             (None, "Catalogue Prévo (C14), relu le 01/03/2027 — réglementation française"))
+            self.assertEqual(releve["historique"][0], "modification : periodicite_mois, catalogue_relu_le"
+                             " — valeurs du catalogue C14 relu le 01/03/2027 reprises")
+            # Le technicien recharge : plus rien de proposé ; l'entrée du journal traduite.
+            technicien.reload()
+            attendre_pret(technicien)
+            technicien.wait_for_selector("#contenu .controles-source")
+            technicien.add_script_tag(content=script)
+            technicien.evaluate("App.reafficher()")
+            technicien.wait_for_selector("#contenu .controles-journal")
+            anglais = technicien.evaluate(FICHE_JS)
+            self.assertIsNone(anglais["miseAJour"])
+            self.assertIn("values of catalogue entry C14 reviewed on 01/03/2027 applied", anglais["historique"][0])
+
+    def controle(self, identifiant):
+        return next(ligne for ligne in lire_table(self.dossier, "controles_reglementaires.csv")
+                    if ligne["id"] == identifiant)
+
+    def octets(self):
+        return (self.dossier / "controles_reglementaires.csv").read_bytes()
 
 
 if __name__ == "__main__":
