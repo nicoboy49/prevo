@@ -148,6 +148,9 @@ const Parc = (() => {
   // 2. Contrôles de saisie (purs : testés sans écran)
   // ===========================================================================================
 
+  // Forme normalisée de Donnees (« 1250.50 ») d'un montant positif ou nul, deux décimales au plus.
+  const MONTANT_AU_CENTIME = /^\d+(?:\.\d{0,2})?$/;
+
   /**
    * Contrôle les valeurs d'un équipement. Renvoie [{ nom, message }] (vide si tout va bien).
    *   valeurs : champs du formulaire ; lignesEquipements / lignesLocalisations : données à jour ;
@@ -207,7 +210,24 @@ const Parc = (() => {
         erreurs.push({ nom: 'valeur_remplacement', message: I18n.t('parc.verifier_equipement.saisissez_montant_euros_positif') });
       }
     }
+    // Coût d'une heure d'arrêt (D188, CS174) : vide permis (« non chiffré ») ; sinon positif ou nul, au centime.
+    const coutArret = String(valeurs.cout_arret_h || '').trim();
+    if (coutArret) {
+      const lu = Donnees.normaliser.decimal(coutArret);
+      if (!lu.ok || !MONTANT_AU_CENTIME.test(lu.valeur)) {
+        erreurs.push({ nom: 'cout_arret_h', message: I18n.t('parc.verifier_equipement.saisissez_montant_positif_nul') });
+      }
+    }
     return erreurs;
+  }
+
+  /**
+   * Coût d'une heure d'arrêt d'une fiche (equipements.cout_arret_h, D188) : nombre positif ou nul, ou null si la
+   * valeur est vide, illisible ou négative (« non chiffré », jamais estimé : même règle qu'Indicateurs.coutArret).
+   */
+  function coutArretHoraire(valeur) {
+    const montant = Donnees.nombre(valeur);
+    return montant === null || montant < 0 ? null : montant || 0;
   }
 
   // Vrai si `ancetre` figure parmi les parents (de parent en parent) de `depart`, lui compris.
@@ -310,7 +330,7 @@ const Parc = (() => {
     // Object.assign(Parc.interne, …). Pas une API : son contenu peut changer à tout moment.
     interne: {
       estActif, comparerCodes, comparerLibelles, parRepere, identifiantsDescendants, remonteSurSoi, abreger,
-      badgeCriticite, badgesEquipement, listeAdaptative,
+      badgeCriticite, badgesEquipement, listeAdaptative, coutArretHoraire,
       dernierReleveDe, verifierReleve, estEnBaisse,
     },
   };

@@ -187,6 +187,10 @@ Object.assign(Parc, (() => {
     ajouter(UI.champ(definition('valeur_remplacement'), valeur('valeur_remplacement'), {
       aide: I18n.t('parc.formulaire.prix_equipement_neuf_equivalent'),
     }));
+    // Coût d'une heure d'arrêt (D188, CS174), dans la devise réglée (libellé du schéma) ; jamais de valeur par défaut.
+    ajouter(UI.champ(definition('cout_arret_h'), valeur('cout_arret_h'), {
+      aide: I18n.t('parc.formulaire.production_perdue_penalites_heures'),
+    }));
     ajouter(UI.champ(definition('habilitation_requise'), valeur('habilitation_requise'), {
       aide: I18n.t('parc.formulaire.ex_br_plusieurs_habilitations'),
     }));

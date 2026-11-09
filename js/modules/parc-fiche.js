@@ -11,7 +11,7 @@ Object.assign(Parc, (() => {
   // Règles, outils et écrans des fichiers précédents (parc-regles.js à parc-formulaires.js).
   const { cheminLocalisation, libelleEquipement, afficherListe, afficherFormulaire, afficherEtiquettes } = Parc;
   const { estActif, comparerCodes, comparerLibelles, parRepere, abreger, badgeCriticite, badgesEquipement,
-    listeAdaptative, dernierReleveDe, ouvrirFenetreReleve } = Parc.interne;
+    listeAdaptative, dernierReleveDe, ouvrirFenetreReleve, coutArretHoraire } = Parc.interne;
 
   const LIMITE_HISTORIQUE = 20;                       // lignes montrées avant « Voir les autres »
   const STATUTS_OT_FERMES = ['Clôturé techniquement', 'Clôturé administrativement', 'Annulé'];
@@ -57,7 +57,16 @@ Object.assign(Parc, (() => {
     return montant === null ? '' : UI.euro(montant) + ' HT';
   }
 
-  function carteCaracteristiques(equipement, lienDocument) {
+  /** « 850,00 €/h » (devise réglée), ou « non chiffré » si le coût d'une heure d'arrêt est vide, illisible ou négatif (D188). */
+  function coutHeureArret(equipement) {
+    const montant = coutArretHoraire(equipement.cout_arret_h);
+    return montant === null ? I18n.t('parc.carte_caracteristiques.non_chiffre')
+      : I18n.t('parc.carte_caracteristiques.montant_par_heure', { montant: UI.euro(montant) });
+  }
+
+  // Le coût d'une heure d'arrêt n'est montré qu'au responsable (D126, conception L5 §3.3) : caché par le serveur
+  // aux autres profils, il ne doit jamais apparaître chez eux en faux « non chiffré ».
+  function carteCaracteristiques(equipement, lienDocument, responsable) {
     const parent = equipement.parent_id ? Donnees.trouver('equipements', equipement.parent_id) : null;
     const heures = UI.enNombre(equipement.heures_fonct_jour);
     let documentHtml = '';
@@ -83,6 +92,7 @@ Object.assign(Parc, (() => {
           <dt>${I18n.t('commun.champ.statut')}</dt><dd>${equipement.statut ? UI.badgeValeur('equipements', 'statut', equipement.statut) : ''}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.heures_jour')}</dt><dd>${heures === null ? '' : UI.heures(heures)}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.valeur_remplacement')}</dt><dd class="parc-valeur-remplacement">${valeurRemplacement(equipement)}</dd>
+          ${responsable ? UI.html`<dt>${I18n.t('parc.carte_caracteristiques.cout_heure_arret')}</dt><dd class="parc-cout-arret">${coutHeureArret(equipement)}</dd>` : ''}
           <dt>${I18n.t('parc.carte_caracteristiques.habilitation_requise')}</dt><dd>${equipement.habilitation_requise}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.document')}</dt><dd>${documentHtml}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.actif')}</dt><dd>${estActif(equipement) ? I18n.t('parc.carte_caracteristiques.oui') : I18n.t('parc.carte_caracteristiques.non_equipement_desactive')}</dd>
@@ -420,7 +430,7 @@ Object.assign(Parc, (() => {
         ${carteConsignation(equipement)}
 
         <div class="grille">
-          <div class="c8">${carteCaracteristiques(equipement, adresse)}</div>
+          <div class="c8">${carteCaracteristiques(equipement, adresse, responsable)}</div>
           <div class="c4">${carteQr(equipement)}</div>
         </div>
         <div class="grille">
