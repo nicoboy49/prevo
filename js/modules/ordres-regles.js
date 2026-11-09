@@ -341,8 +341,10 @@ const Ordres = (() => {
   // Origine d'une exigence : la colonne habilitation_requise de l'équipement, ou celle de l'OT.
   const ORIGINES_HABILITATION = Object.freeze(['equipement', 'ot']);
   // Marqueur fixe du journal (D156), relu ici et par les écrans :
-  // « dérogation habilitation : TEC-0004 le 2026-11-20 sans BR (échue), H0V (absente) ; motif : <texte> ».
-  const MOTIF_DEROGATION = /(?:^|\s)dérogation habilitation : (\S+) le (\d{4}-\d{2}-\d{2}) sans (.+?) ; motif : ([\s\S]+)$/;
+  // « dérogation habilitation : TEC-0004 le 2026-11-20 sans BR (échue), H0V (absente) ; motif : <texte> ». En mode
+  // serveur avec comptes (T448, D186 « qui »), le compte connecté avant le motif : « … ; compte : nicolas.briand ;
+  // motif : <texte> ». Les deux formes se relisent (marqueurs écrits sans compte : hors comptes, ou avant T448).
+  const MOTIF_DEROGATION = /(?:^|\s)dérogation habilitation : (\S+) le (\d{4}-\d{2}-\d{2}) sans (.+?)(?: ; compte : (.+?))? ; motif : ([\s\S]+)$/;
   const MOTIF_MANQUANTE = /^(.+?)(?: \((?:(absente)|(échue)|(pas encore obtenue))\))?$/;
 
   // Intitulé comparable et date lue : les fonctions d'Equipe (cherchées à l'appel, equipe-regles.js est
@@ -461,32 +463,38 @@ const Ordres = (() => {
    * « dérogation habilitation : TEC-0004 le 2026-11-20 sans BR (échue), H0V (absente) ; motif : … ».
    * manquantes : celles de controleHabilitation (ou des intitulés). Motif obligatoire (QUESTIONS-L2-L6
    * Q7), espaces et retours à la ligne réduits à une espace. Rend '' sans technicien, date, manquante ou motif.
+   * compte (T448) : identifiant du compte connecté en mode comptes, noté « ; compte : … » avant le motif ; vide :
+   * le marqueur d'avant, sans compte.
    */
-  function marqueurDerogation(technicienId, date, manquantes, motif) {
+  function marqueurDerogation(technicienId, date, manquantes, motif, compte) {
     const id = texte(technicienId);
     const jour = dateLue(date);
     const liste = (manquantes || []).map((m) => (typeof m === 'string' ? { intitule: m } : m || {}))
       .filter((m) => texte(m.intitule));
     const propre = texte(motif).replace(/\s+/g, ' ');
+    const qui = texte(compte).replace(/\s+/g, ' ');
     if (!id || !jour || !liste.length || !propre) return '';
     const action = 'dérogation habilitation : ' + id + ' le ' + jour + ' sans '
       + liste.map((m) => texte(m.intitule) + (m.raison === 'echue' ? ' (échue)' : m.raison === 'absente' ? ' (absente)'
         : m.raison === 'pas_encore_obtenue' ? ' (pas encore obtenue)' : '')).join(', ')
-      + ' ; motif : ' + propre;
+      + (qui ? ' ; compte : ' + qui : '') + ' ; motif : ' + propre;
     return action;
   }
 
   /** Relit le marqueur d'une action du journal → { technicienId, date, manquantes: [{ intitule, raison }],
-   *  motif }, ou null (pas de marqueur, ou marqueur sans motif). raison : code, '' si le marqueur n'en dit pas. */
+   *  motif } (plus compte, l'identifiant du compte, quand le marqueur le porte : T448), ou null (pas de marqueur, ou
+   *  marqueur sans motif). raison : code, '' si le marqueur n'en dit pas. */
   function lireDerogation(action) {
     const trouve = MOTIF_DEROGATION.exec(texte(action));
-    if (!trouve || !texte(trouve[4])) return null;
+    if (!trouve || !texte(trouve[5])) return null;
     const manquantes = trouve[3].split(', ').map((morceau) => {
       const m = MOTIF_MANQUANTE.exec(morceau.trim());
       const raison = m[2] ? 'absente' : m[3] ? 'echue' : m[4] ? 'pas_encore_obtenue' : '';
       return { intitule: m[1].trim(), raison };
     }).filter((m) => m.intitule);
-    return manquantes.length ? { technicienId: trouve[1], date: trouve[2], manquantes, motif: texte(trouve[4]) } : null;
+    if (!manquantes.length) return null;
+    const derogation = { technicienId: trouve[1], date: trouve[2], manquantes, motif: texte(trouve[5]) };
+    return texte(trouve[4]) ? Object.assign(derogation, { compte: texte(trouve[4]) }) : derogation;
   }
 
   /**

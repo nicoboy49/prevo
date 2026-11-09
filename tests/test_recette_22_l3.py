@@ -141,8 +141,9 @@ def lundi(date):
     return date - datetime.timedelta(days=date.weekday())
 
 
-def marqueur(technicien, date, liste, motif):
-    return "dérogation habilitation : %s le %s sans %s ; motif : %s" % (technicien, date.isoformat(), liste, motif)
+def marqueur(technicien, date, liste, motif, compte=""):
+    qui = " ; compte : " + compte if compte else ""          # T448 : le compte connecté, avec les comptes seulement
+    return "dérogation habilitation : %s le %s sans %s%s ; motif : %s" % (technicien, date.isoformat(), liste, qui, motif)
 
 
 def carte_ligne(habilitation_id):
@@ -299,12 +300,14 @@ class Ecran:
         self.page.wait_for_selector(DEROGATION, state="detached")
 
     def verifier_journal(self, entree, ot_id, technicien, date, liste, motif, debut):
-        """Qui (profil, poste), quand (date et heure du jour), quel OT, quelle habilitation (le marqueur, D186)."""
+        """Qui (profil, poste ; avec les comptes, le compte : T448), quand (date et heure du jour), quel OT, quelle
+        habilitation (le marqueur, D186)."""
         self.assertEqual((entree["table"], entree["id_ligne"], entree["profil"], entree["poste"]),
                          ("ordres_travail", ot_id, "Responsable", "Poste test"))
         self.assertRegex(entree["date_heure"], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
         self.assertIn(entree["date_heure"][:10], (self.jour.isoformat(), (self.jour + datetime.timedelta(days=1)).isoformat()))
-        self.assertEqual(entree["action"], debut + " ; " + marqueur(technicien, date, liste, motif))
+        compte = COMPTES_DE_TEST["responsable"][0] if getattr(self, "COMPTES", False) else ""
+        self.assertEqual(entree["action"], debut + " ; " + marqueur(technicien, date, liste, motif, compte))
 
     def bandeau_derogation(self, entree, intitule, motif):
         return "Affecté sans habilitation %s valide : dérogation du responsable le %s à %s. Motif : %s" % (

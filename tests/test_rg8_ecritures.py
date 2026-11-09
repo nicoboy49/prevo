@@ -11,6 +11,10 @@ l'action du journal de l'écriture elle-même finit par le marqueur « dérogati
 changer de date redemande. Sous un profil technicien, l'option ne change rien. Un OT sans exigence passe toujours.
 Les fenêtres « passer outre » sont T438 (fiche de l'OT) et T439 (planning).
 
+T448 (D186 « qui ») : en mode serveur avec comptes (TestRg8EcrituresComptes, session du responsable), le marqueur porte
+aussi le compte connecté, « … ; compte : <identifiant> ; motif : … » ; hors comptes, il est inchangé. lireDerogation
+relit les deux formes, et la dérogation notée avec le compte vaut pour l'acte suivant.
+
 Aucun identifiant du jeu de démo écrit en dur (rôles de tests/fixtures/demo-scenarios.json) ; date fixe 20/11/2026 ;
 un serveur pour la classe, chaque test sur ses propres OT et techniciens.
 
@@ -22,7 +26,7 @@ import io
 import unittest
 from pathlib import Path
 
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo
+from commun import COMPTES_DE_TEST, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo
 
 SCENARIOS = scenarios_demo()
 EQ_BR = SCENARIOS["equipement_br"]                     # AE-03, exige la BR
@@ -37,6 +41,7 @@ MOTIF = "Électricien du site présent ; consignation faite par lui"
 DEROGER = {"passerOutreHabilitation": True, "motifDerogation": MOTIF}
 SEUL_LE_RESPONSABLE = "Seul le responsable peut passer outre."
 MOTIF_OBLIGATOIRE = "Pour passer outre, le motif de la dérogation est obligatoire."
+COMPTE_RESPONSABLE = COMPTES_DE_TEST["responsable"][0]  # nicolas.briand
 
 # Appel d'une écriture → { accepte } ou { refus, habilitation, pieces } (Donnees.ErreurValidation) ou { erreur }.
 APPEL_JS = """async ([module, fonction, args]) => {
@@ -61,20 +66,24 @@ def brut(valeur):
     return valeur[1:] if valeur.startswith("'") else valeur
 
 
-def marqueur(technicien, date, liste, motif=MOTIF):
-    return "dérogation habilitation : %s le %s sans %s ; motif : %s" % (technicien, date, liste, motif)
+def marqueur(technicien, date, liste, motif=MOTIF, compte=""):
+    qui = " ; compte : " + compte if compte else ""
+    return "dérogation habilitation : %s le %s sans %s%s ; motif : %s" % (technicien, date, liste, qui, motif)
 
 
 def date_fr(iso):
     return "%s/%s/%s" % (iso[8:10], iso[5:7], iso[0:4])
 
 
-class TestRg8Ecritures(CasNavigateur):
+class CasRg8Ecritures(CasNavigateur):
+    """Un serveur pour la classe (COMPTES : avec les trois comptes de test, session du rôle) ; outils communs."""
+
+    COMPTES = False
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.serveur = ServeurPrevo()
+        cls.serveur = ServeurPrevo(comptes=cls.COMPTES)
         cls.serveur.demarrer()
         cls.addClassCleanup(cls.serveur.arreter)
         cls.dossier = cls.serveur.dossier
@@ -86,7 +95,10 @@ class TestRg8Ecritures(CasNavigateur):
     # -- outils ----------------------------------------------------------------------------------
 
     def ouvrir(self, profil="responsable", technicien_id=""):
-        preregler_profil(self.contexte, profil, technicien_id=technicien_id)
+        if self.COMPTES:
+            self.serveur.poser_session(self.contexte, profil)
+        else:
+            preregler_profil(self.contexte, profil, technicien_id=technicien_id)
         self.page.goto(self.serveur.url + "/#/ot")
         attendre_pret(self.page)
         self.page.wait_for_load_state("networkidle")
@@ -130,10 +142,14 @@ class TestRg8Ecritures(CasNavigateur):
         return self.accepte("Ordres", "creer", dict({"equipement_id": EQ_BR, "titre": titre, "type": "correctif différé",
                                                      "priorite": "P3"}, **valeurs))
 
+
+class TestRg8Ecritures(CasRg8Ecritures):
+
     # -- création -------------------------------------------------------------------------------
 
     def test_creer_refuse_sans_rien_ecrire_puis_derogation_du_responsable_au_journal(self):
         self.ouvrir()
+        self.assertFalse(self.page.evaluate("App.comptesExiges()"))      # hors comptes : marqueur sans compte (T448)
         valeurs = {"equipement_id": EQ_BR, "titre": "T437 — création", "type": "correctif différé", "priorite": "P3",
                    "technicien_id": TEC_ECHUE, "date_prevue": DATE}
         avant_ot, avant_journal = self.nombre_ot(), len(self.journal())
@@ -311,6 +327,76 @@ class TestRg8Ecritures(CasNavigateur):
         self.assertIn("dérogation habilitation", self.actions(ot_id)[-1])
         self.ouvrir_fiche(ot_id)
         self.ouvrir_fiche(OT_EXIGEE)
+
+
+class TestRg8EcrituresComptes(CasRg8Ecritures):
+    """T448 (D186 « qui ») : mode serveur avec comptes, session du responsable ; le marqueur porte le compte."""
+
+    COMPTES = True
+
+    def test_derogation_notee_avec_le_compte_connecte(self):
+        self.ouvrir()
+        self.assertEqual(self.page.evaluate("[App.comptesExiges(), App.session.identifiant, App.estResponsable()]"),
+                         [True, COMPTE_RESPONSABLE, True])
+        valeurs = {"equipement_id": EQ_BR, "titre": "T448 — création", "type": "correctif différé", "priorite": "P3",
+                   "technicien_id": TEC_ECHUE, "date_prevue": DATE}
+        avant_ot, avant_journal = self.nombre_ot(), len(self.journal())
+        refus = self.refuse("Ordres", "creer", valeurs)
+        self.assertEqual(refus["refus"], self.refus_attendu(self.nom_echue, TEC_ECHUE, DATE, self.br_echue()))
+        self.assertEqual((self.nombre_ot(), len(self.journal())), (avant_ot, avant_journal))   # rien d'écrit
+
+        ot_id = self.accepte("Ordres", "creer", valeurs, DEROGER)
+        entrees = [j for j in self.journal() if j["id_ligne"] == ot_id]
+        self.assertEqual([j["action"] for j in entrees], ["création — création de l'OT (manuel) ; "
+                                                         + marqueur(TEC_ECHUE, DATE, "BR (échue)", compte=COMPTE_RESPONSABLE)])
+        # Qui (le compte, en plus du profil et du poste), quand, quel OT, quelle habilitation.
+        entree = entrees[0]
+        self.assertEqual((entree["table"], entree["profil"], entree["poste"]), ("ordres_travail", "Responsable", "Poste test"))
+        self.assertRegex(entree["date_heure"], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
+        relu = self.page.evaluate("(action) => Ordres.lireDerogation(action)", entree["action"])
+        self.assertEqual(relu, {"technicienId": TEC_ECHUE, "date": DATE, "motif": MOTIF, "compte": COMPTE_RESPONSABLE,
+                                "manquantes": [{"intitule": "BR", "raison": "echue"}]})
+
+    def test_preparer_puis_planifier_la_derogation_avec_compte_vaut_pour_l_acte_suivant(self):
+        self.ouvrir()
+        ot_id = self.nouvel_ot("T448 — préparation")
+        self.accepte("Ordres", "changerStatut", ot_id, "Créé", "Préparé")
+        affecter = {"technicien_id": TEC_ECHUE, "date_prevue": DATE}
+        self.refuse("interne", "modifierOt", ot_id, affecter, "préparation")
+        self.assertEqual(self.accepte("interne", "modifierOt", ot_id, affecter, "préparation", DEROGER),
+                         ["technicien_id", "date_prevue"])
+        derniere = self.actions(ot_id)[-1]
+        self.assertTrue(derniere.endswith(" — préparation ; " + marqueur(TEC_ECHUE, DATE, "BR (échue)",
+                                                                        compte=COMPTE_RESPONSABLE)), derniere)
+        # derogationAccordee relit le marqueur avec compte : « Planifier » ne redemande pas.
+        self.assertEqual(self.accepte("Ordres", "changerStatut", ot_id, "Préparé", "Planifié"), "Planifié")
+        self.assertEqual(self.actions(ot_id)[-1], "modification : statut — statut Préparé → Planifié")
+
+    def test_lire_derogation_relit_les_deux_formes(self):
+        self.ouvrir()
+        manquantes = [{"intitule": "BR", "raison": "echue"}, {"intitule": "H0V", "raison": "absente"}]
+        attendu = {"technicienId": "TEC-0004", "date": "2026-11-20", "motif": "urgent ; consigné", "manquantes": manquantes}
+        ancien = "modification : technicien_id — préparation ; " + marqueur("TEC-0004", "2026-11-20", "BR (échue), H0V (absente)",
+                                                                             "urgent ; consigné")
+        nouveau = "modification : technicien_id — préparation ; " + marqueur("TEC-0004", "2026-11-20", "BR (échue), H0V (absente)",
+                                                                              "urgent ; consigné", compte="jean.dupont.2")
+        lire = "(a) => Ordres.lireDerogation(a)"
+        self.assertEqual(self.page.evaluate(lire, ancien), attendu)                      # sans compte : aucune clé « compte »
+        self.assertEqual(self.page.evaluate(lire, nouveau), dict(attendu, compte="jean.dupont.2"))
+        # Un ancien motif qui contient « ; compte : » reste le motif (le compte se place avant « ; motif : »).
+        self.assertEqual(self.page.evaluate(lire, marqueur("TEC-0004", "2026-11-20", "BR", "voir ; compte : x")),
+                         {"technicienId": "TEC-0004", "date": "2026-11-20", "motif": "voir ; compte : x",
+                          "manquantes": [{"intitule": "BR", "raison": ""}]})
+        # marqueurDerogation : compte vide ou blanc → la forme d'avant ; espaces réduits ; sans motif → ''.
+        ecrire = "([c]) => Ordres.marqueurDerogation('TEC-0004', '2026-11-20', [{ intitule: 'BR', raison: 'echue' }], 'm', c)"
+        for compte, attendue in (("", marqueur("TEC-0004", "2026-11-20", "BR (échue)", "m")),
+                                 (" \n ", marqueur("TEC-0004", "2026-11-20", "BR (échue)", "m")),
+                                 (None, marqueur("TEC-0004", "2026-11-20", "BR (échue)", "m")),
+                                 ("  jean\n dupont ", marqueur("TEC-0004", "2026-11-20", "BR (échue)", "m", "jean dupont"))):
+            with self.subTest(compte=compte):
+                self.assertEqual(self.page.evaluate(ecrire, [compte]), attendue)
+        self.assertEqual(self.page.evaluate(
+            "() => Ordres.marqueurDerogation('TEC-0004', '2026-11-20', ['BR'], ' ', 'nicolas.briand')"), "")
 
 
 if __name__ == "__main__":

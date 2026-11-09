@@ -32,6 +32,14 @@ Object.assign(Ordres, (() => {
     return typeof App !== 'undefined' && Boolean(App) && typeof App.estResponsable === 'function' && App.estResponsable();
   }
 
+  // D186 « qui » (T448) : le journal n'a que poste et profil ; en mode serveur avec comptes, l'identifiant du compte
+  // connecté (App.session) va dans le marqueur de dérogation. Hors comptes (démo, dossier, serveur sans comptes) : ''.
+  function compteConnecte() {
+    if (typeof App === 'undefined' || !App || typeof App.comptesExiges !== 'function' || !App.comptesExiges()) return '';
+    const session = App.session;
+    return session ? texte(session.identifiant) : '';
+  }
+
   /**
    * RG8 dans une écriture, sur l'OT tel qu'il sera écrit (technicien_id et date_prevue à jour). verification :
    * celle de verifierPassage(ot, 'Planifié'), dont les autres erreurs comptent aussi ; sans elle, RG8 seule.
@@ -46,7 +54,8 @@ Object.assign(Ordres, (() => {
     const refus = passage.habilitation || null;
     const reglages = options || {};
     const passerOutre = Boolean(refus) && reglages.passerOutreHabilitation === true && profilResponsable();
-    const marqueur = passerOutre ? marqueurDerogation(refus.technicienId, refus.date, refus.manquantes, reglages.motifDerogation) : '';
+    const marqueur = passerOutre
+      ? marqueurDerogation(refus.technicienId, refus.date, refus.manquantes, reglages.motifDerogation, compteConnecte()) : '';
     const erreurs = passage.erreurs.filter((message) => !refus || message !== refus.message);
     if (refus && !marqueur) erreurs.push(passerOutre ? messageRefusHabilitation(refus, true) : refus.message);
     if (!erreurs.length) return marqueur;
