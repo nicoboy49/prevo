@@ -882,8 +882,13 @@ La liste ci-dessous est celle des clés réellement exposées (relevée dans le 
   `prochaineDate(controle)`, `etat(controle, aujourdhui)`, `sous30Jours(aujourdhui)` ; écritures
   `verifierControle(valeurs, aujourdhui)`, `creerControle(valeurs)`, `modifierControle(controleId,
   valeurs)`, `ecrireRapport(controleId, date, fichier)` (→ nom du document écrit),
-  `enregistrerRealisation(controleId, { date, organisme, rapport, observations })`,
-  `leverObservations(controleId, { date, commentaire })`.
+  `enregistrerRealisation(controleId, { date, organisme, rapport, reserves, echeance_levee })` ; réserves
+  (`controles-reserves.js`) : `STATUTS_RESERVE`, `lignesDeReserves`, `reserveLevee`, `echeanceReserve`, `etatReserve`,
+  `reservesDuControle`, `reservesOuvertes`, `reservesEnRetard`, `adresseOtReserve`, `ajouterReserves`, `leverReserve`,
+  `modifierReserve`, `lierOtAReserve` ; catalogue (`controles-catalogue.js`) : `catalogue`, `ligneCatalogue`,
+  `famillesCatalogue`, `valeursDepuisCatalogue`, `lireSource`, `sourceApresSaisie`, `mentionDuControle`,
+  `miseAJourProposee`, et `appliquerMiseAJourCatalogue(controleId)` (écriture, `controles-ecritures.js`) ;
+  `leverObservations` retirée en 2.2 (§15.7).
 - **`Planning`** (lot 3, §15.5) : règles pures `lundiDe(dateIso)`, `joursDeLaSemaine(lundi)`,
   `ordresDeLaSemaine(lundi)`, `chargeSemaine(technicienId, lundi)`, `semaine(lundi)` ; écriture
   `planifier(otId, statutAttendu, technicienId, dateIso)` (→ `{ statut, avertissements }`).
@@ -1646,34 +1651,115 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   (`Parc.afficherEtiquettes(conteneur, parametres)`).
 
 ### 15.7 Contrôles réglementaires (`controles-*.js`, objet `Controles`)
-- Règles : `Controles.STATUTS` = `['en retard', 'observations à lever', 'à planifier', 'à jour']` ;
+- Règles (`controles-regles.js`) : `Controles.STATUTS` = `['en retard', 'réserves à lever', 'à planifier', 'à jour']` ;
   `Controles.ajouterMois(dateIso, n)` (même jour, ramené au dernier jour du mois : 31/01 + 1 →
   28 ou 29/02) ; `Controles.prochaineDate(controle)` = `prochaine_date`, sinon `derniere_date` +
   `periodicite_mois`, sinon `''` ; `Controles.etat(controle, aujourdhui)` → `{ statut, secondaires,
-  prochaine, joursRestants, raison }` : statut = le premier vrai parmi `en retard` (prochaine <
-  aujourd'hui), `observations à lever` (`observations` non vide et `observations_levees` ≠ 1),
-  `à planifier` (prochaine ≤ aujourd'hui + 30 j, ou prochaine inconnue : raison « date inconnue »),
-  `à jour` ; `secondaires` = les autres états vrais (une date impossible, ex. « 2026-13-05 », compte
-  comme inconnue). `Controles.sous30Jours(aujourdhui)` → contrôles
-  d'équipements actifs (hors rebut) dont la prochaine date est inconnue ou ≤ aujourd'hui + 30 j.
-- Écritures (`Donnees.modifier('controles_reglementaires')`, contrôles sur la ligne fraîche) :
-  `verifierControle(valeurs)`, `creerControle(valeurs)`, `modifierControle(id, valeurs)`,
-  `enregistrerRealisation(id, { date, organisme, rapport, observations })` (`derniere_date` = date,
-  `prochaine_date` = `ajouterMois(date, periodicite_mois)`, `observations_levees` = `0` si
-  observations sinon `1` ; date future refusée ; le rapport est un nom de document déjà écrit par
-  `App.adaptateur.ecrireDocument`), `leverObservations(id, { date, commentaire })` (journal
-  « observations levées le … : … »). Jamais de suppression ; aucun OT généré.
-- Écrans : `#/controles` (`?statut=`, `?filtre=30j`, `?equipement=`), `#/controles/nouveau`
-  (`?equipement=`), `#/controles/<id>` (fiche, historique au journal, rapport ouvert par
-  `urlDocument`, OT réglementaires de l'équipement, « Créer un OT » → `#/ot/nouveau?equipement=…&
-  type=réglementaire&titre=…` pré-rempli : `#/ot/nouveau` lit désormais `?type=` et `?titre=` ;
-  titre « Levée des observations — <nature> » s'il reste des observations à lever, sinon
-  « Accompagnement du contrôle — <nature> », comme le dit D40 — correction de relecture).
-  Carte « Contrôles réglementaires » sur la fiche équipement (technicien et responsable).
+  prochaine, joursRestants, raison, reservesALever, reservesEnRetard, echeanceReserves }` : statut = le premier
+  vrai parmi `en retard` (prochaine < aujourd'hui), `réserves à lever` (au moins une réserve du contrôle non
+  levée : « réserves à lever (n) » à l'écran, `n` = `reservesALever`), `à planifier` (prochaine ≤ aujourd'hui + 30 j,
+  ou prochaine inconnue : raison « date inconnue »), `à jour` ; `secondaires` = les autres états vrais (une date
+  impossible, ex. « 2026-13-05 », compte comme inconnue) ; `reservesEnRetard` = `k` parmi les `n`,
+  `echeanceReserves` = la plus ancienne échéance de levée connue (`''` si aucune) ; la raison dit « 2 réserves à
+  lever, dont 1 en retard ». Les colonnes anciennes `observations` et `observations_levees` ne comptent plus : la
+  migration (§25, D183) les a reprises en réserves ; elles restent dans le fichier telles quelles (CS169) et ne sont
+  plus écrites. `Controles.sous30Jours(aujourdhui)` → contrôles d'équipements actifs (hors rebut) dont la prochaine
+  date est inconnue ou ≤ aujourd'hui + 30 j.
+- Réserves, règles pures (`controles-reserves.js`, T411 ; lisent `Donnees`, n'écrivent rien, n'affichent aucun texte) :
+  `STATUTS_RESERVE` = `['en retard', 'à lever', 'levée']` (valeurs comparées dans le code, D155) ;
+  `lignesDeReserves(saisie)` (une réserve par ligne non vide du texte saisi, puce de début retirée) ;
+  `reserveLevee(reserve)` (`levee` = `1`) ; `echeanceReserve(reserve)` → `{ date, parDefaut }` (D187 : sans
+  `echeance_levee` saisie, **30 jours après `date_controle`**, `parDefaut` vrai, l'écran dit « 30 jours après le
+  contrôle » ; date du contrôle inconnue : pas d'échéance, jamais en retard) ; `etatReserve(reserve, aujourdhui)` →
+  `{ statut, echeance, parDefaut, joursRestants }` (« levée » quelle que soit l'échéance ; « en retard » si ouverte
+  et échéance passée la veille au plus tard ; sinon « à lever ») ; `reservesDuControle(controleId)` → groupes
+  `[{ date_controle, reserves }]`, réalisation la plus récente d'abord, ouvertes avant levées ; `reservesOuvertes(
+  controleId)` ; `reservesEnRetard(aujourdhui)` → `[{ reserve, controle, etat }]` des contrôles d'équipements suivis,
+  échéance la plus ancienne d'abord (source unique de l'accueil et du rapport, ci-dessous) ;
+  `adresseOtReserve(reserve, textes)` → `#/ot/nouveau?equipement=…&type=réglementaire&titre=…&travail=…&reserve=RES-…`
+  (rien n'est créé : l'adresse ouvre le formulaire pré-rempli ; `textes` = `{ titre, travail }` composés par l'écran
+  dans la langue de l'installation, sinon le texte de la réserve, titre coupé à 80 caractères).
+- Réserves, écritures (`controles-reserves.js`, T413 ; `Donnees.modifier('reserves_controle')`, contrôles refaits sur
+  la ligne fraîche, jamais de suppression) : `ajouterReserves(controleId, { date_controle, texte, gravite,
+  echeance_levee })` (rejouable : une réserve de même contrôle, même date et même texte n'est jamais recréée ;
+  renvoie les identifiants créés), `leverReserve(reserveId, { date, commentaire, ot_id })` (`levee` = 1, `date_levee`, `commentaire_levee`,
+  commentaire obligatoire), `modifierReserve(reserveId, valeurs)` (réserve ouverte seulement ; `texte`, `gravite`,
+  `echeance_levee`), `lierOtAReserve(reserveId, otId)` (T413, appelée par T420 : réserve ouverte sans OT lié, OT
+  existant du même équipement ; déjà reliée à ce même OT : rien à écrire, accepté ; journal « reliée à OT-… »). Contrôles
+  de saisie exposés aux écrans par `Controles.interne` (`verifierAjoutReserves`, `verifierLeveeReserve`,
+  `verifierModificationReserve`). Marqueurs du journal (français fixes, D156, traduits à l'affichage par la fiche) :
+  « réserves relevées au contrôle du JJ/MM/AAAA : n », « réserve levée le JJ/MM/AAAA : commentaire », « correction de
+  la réserve », « reliée à OT-… ».
+- Écritures des contrôles (`controles-ecritures.js`, `Donnees.modifier('controles_reglementaires')`, contrôles sur la
+  ligne fraîche) : `verifierControle(valeurs)`, `creerControle(valeurs)`, `modifierControle(id, valeurs)`,
+  `enregistrerRealisation(id, { date, organisme, rapport, reserves, echeance_levee })` : en deux écritures (D18),
+  d'abord le contrôle (`derniere_date` = date, `prochaine_date` = `ajouterMois(date, periodicite_mois)`, `organisme`,
+  `rapport` ; date future refusée ; le rapport est un nom de document déjà écrit par `App.adaptateur.ecrireDocument`),
+  puis les réserves relevées (une par ligne du texte) **ajoutées** par `ajouterReserves` avec cette date : aucune
+  réserve existante n'est effacée ni modifiée, celles des contrôles précédents restent ouvertes. `observations` est
+  encore lu comme synonyme de `reserves` (appelants d'avant la 2.2), mais n'est plus écrit ; `observations` et
+  `observations_levees` ne sont plus écrites par aucune fonction. `leverObservations` est retirée (T418) : on lève
+  une réserve par `leverReserve`. Renvoie `{ derniere_date, prochaine_date, reserves: identifiants créés }`. Journal
+  « contrôle réalisé le … par … ; rapport : … ; 3 réserves » (« sans réserve »). Jamais de suppression ; aucun OT
+  généré.
+- Catalogue des contrôles (`controles-catalogue.js`, règles pures, T414 ; `window.CatalogueFR.controles`, gelé, lecture
+  seule, §1) : `catalogue()` (lignes dans l'ordre du fichier, `[]` sans catalogue), `ligneCatalogue(id)` (« c14 »
+  accepté), `famillesCatalogue()` (`[{ famille, lignes }]`, un `<optgroup>` par famille), `valeursDepuisCatalogue(ligne)`
+  (nature, périodicité, référence, nature de la source, et la provenance), `lireSource(controle)` →
+  `{ origine: 'catalogue' | 'saisie', catalogueId, reluLe }`, `mentionDuControle(controle)`, `miseAJourProposee(
+  controle)`, `sourceApresSaisie(valeurs, ligne, controleAvant)`. Provenance (colonnes du format 4, §25) :
+  `source_periodicite` (`catalogue` ou `saisie`), `catalogue_id`, `catalogue_relu_le`. Un contrôle est « catalogue »
+  s'il a `source_periodicite` = `catalogue` ET un `catalogue_id` (sinon lu « saisie », aussi pour un contrôle d'avant
+  la 2.2). `sourceApresSaisie` rend `{ source_periodicite, catalogue_id, catalogue_relu_le }` : « catalogue » si
+  `periodicite_mois`, `texte_reference` et `nature_source` sont ceux de la ligne ; **aussi** si le contrôle l'était
+  déjà et que ces trois valeurs n'ont pas changé (`controleAvant`, 3e argument : changer l'organisme d'un contrôle
+  « catalogue » dont la ligne a été relue depuis le laisse « catalogue », sa mise à jour reste proposée et n'est jamais
+  appliquée par une autre modification) ; sinon « saisie », `catalogue_id` et `catalogue_relu_le` gardés ; sans ligne,
+  « saisie » et les deux vides. La nature (intitulé) n'est pas une valeur de source : on peut la renommer.
+  `miseAJourProposee(controle)` → `null` ou `{ ligne, ecarts: [{ champ, actuel, propose }] }` quand le contrôle est
+  « catalogue », que sa ligne a été relue après `catalogue_relu_le` et que les valeurs diffèrent ; elle n'écrit rien.
+- Catalogue, écriture (`controles-ecritures.js`, T415) : `Controles.appliquerMiseAJourCatalogue(controleId)`, seule
+  écriture qui reprend des valeurs du catalogue sur un contrôle existant, **sur un clic du responsable**
+  (« Reprendre ces valeurs ») : une mise à jour du catalogue ne change jamais un contrôle d'elle-même (CS171). Elle
+  recalcule la proposition sur la ligne fraîche et n'écrit que celle annoncée au journal ; les champs changés
+  reçoivent les valeurs proposées, `source_periodicite` = `catalogue`, `catalogue_relu_le` = date de la relecture ;
+  la `prochaine_date` enregistrée n'est pas recalculée (le fichier fait foi). Rien de proposé (déjà reprise ici ou sur un
+  autre poste, contrôle « saisie ») : rien n'est écrit, renvoie `[]`. Journal « valeurs du catalogue C14 relu le … reprises ».
+  `creerControle` et `modifierControle` ne prennent jamais la provenance de l'appelant : ils la tiennent eux-mêmes
+  (`sourceAvantEcriture`) ; une ligne du catalogue absente de la page (fichier retouché, ligne retirée par une
+  version plus récente) ne l'efface pas. `valeursControle` ramène une `nature_source` hors liste et un
+  `catalogue_id` inconnu à vide, sans message.
+- Écrans : `#/controles` (`?statut=`, `?filtre=30j`, `?filtre=reserves-en-retard`, `?equipement=`), l'ancien
+  `?statut=observations à lever` est lu comme « réserves à lever » ; le filtre `reserves-en-retard` ne garde que les
+  contrôles dont une réserve ouverte est en retard (`Controles.reservesEnRetard`). `#/controles/nouveau`
+  (`?equipement=`) avec le bloc du catalogue (`Controles.interne.blocCatalogue` : liste par famille, encart de la
+  ligne choisie, choisir remplit nature, périodicité, référence et nature de la source, tout reste modifiable),
+  `#/controles/<id>` (fiche : source et provenance par `blocSourceControle`, « mise à jour proposée » avec le bouton
+  « Reprendre ces valeurs », historique au journal, rapport ouvert par `urlDocument`, OT réglementaires de
+  l'équipement). Le contenu du catalogue reste en français dans toutes les langues (textes juridiques, blocs
+  `lang="fr" data-catalogue`). Réserves à l'écran (`controles-reserves-ecrans.js`, T418 à T420) : carte « Réserves » de
+  la fiche (ouvertes avant levées, badge « à lever » / « en retard » / « levée le … », échéance, « 30 jours après le
+  contrôle » quand elle est par défaut), champs « réserves relevées » et « échéance de levée » de la fenêtre « Enregistrer
+  le contrôle réalisé » ; pour le responsable seulement, « Lever », « Modifier » (fenêtres `ouvrirLeveeReserve`,
+  `ouvrirModificationReserve`), « Ajouter une réserve » (`ouvrirAjoutReserve`), et « Créer un OT » → `adresseOtReserve`
+  (`#/ot/nouveau` lit `?equipement=`, `?type=`, `?titre=`, `?travail=` et `?reserve=` ; l'OT n'est relié qu'après
+  « Créer », par `lierOtAReserve` appelée depuis `ordres-fiche.js` ; si la liaison échoue, l'OT est créé et un message le
+  dit) ; « Voir l'OT » quand la réserve en a un ; rappel « L'OT … est clôturé » (proposition de lever la réserve) pour un
+  OT clôturé. Le technicien lit, n'a aucun bouton d'écriture ; le demandeur n'a pas accès. Carte « Contrôles
+  réglementaires » sur la fiche équipement (technicien et responsable).
+- Phrase D182 : « Prévo est une aide au suivi ; la responsabilité reste celle de l'employeur. » (clé
+  `controles.principe.texte`) sur les écrans Contrôles (liste, création, fiche), comme sur ceux des habilitations
+  et des garanties.
+- Accueil et rapport (T421) : la tuile « Contrôles et habilitations » de l'accueil et l'indicateur du technicien
+  comptent `Controles.reservesEnRetard()` (lien `#/controles?filtre=reserves-en-retard`) ; le rapport mensuel en tire
+  un fait marquant et une décision (`rapport-contenu.js`).
+- Démo (T417, T423, T424) : rôles `controle_reserves` (CTR-0003), `reserve_en_retard`, `reserve_a_echeance`,
+  `reserve_levee` dans `demo-scenarios.json` ; contrôles alignés sur le catalogue validé ; la démo ne décale plus
+  `catalogue_relu_le`, navigateur et serveur suivent la même règle.
 - Écarts retenus (T47) : la liste ne montre par défaut que les contrôles des équipements suivis
   (actifs, hors rebut) — `?inactifs=1` montre les autres — et accepte `?recherche=` ; la périodicité
   est un nombre entier de 1 à 240 mois ; la dernière date et la date de réalisation ne sont jamais
-  futures ; lever des observations exige un commentaire ; le rapport est écrit par
+  futures ; lever une réserve exige un commentaire ; le rapport est écrit par
   `Controles.ecrireRapport(controleId, date, fichier)` sous le nom `controle-<id>-<date>.<ext>`
   (« -2 », « -3 »… si le nom existe ; 9 Mo au plus ; une photo est réduite en JPEG de 2 400 px de côté
   au plus, et non 1 280 px comme les photos d'intervention du brief §4 : un rapport photographié doit
@@ -4755,6 +4841,13 @@ la 2.2 afficheront.
   `levee` (0 ou 1), `date_levee`, `commentaire_levee`, `ot_id`. **`garanties`** (`GAR-` + 4 chiffres) et
   **`contrats_prestataires`** (`CTP-` + 4 chiffres, `equipement_ids` séparés par « ; ») ont un `actif` : on désactive,
   on ne supprime pas (FORMAT.md §3).
+- **Règles du L2 sur ces données** (détail au §15.7) : une réserve est « levée » quand `levee` vaut 1 ; sans
+  `echeance_levee`, elle est à lever 30 jours après `date_controle` (D187) ; le statut d'un contrôle « réserves à
+  lever (n) » vient de `reserves_controle`, plus des colonnes anciennes `observations` et `observations_levees`
+  (gardées telles quelles, plus écrites, CS169). `source_periodicite` vaut `catalogue` seulement avec un
+  `catalogue_id` et tant que périodicité, référence et nature de la source sont celles de la ligne ;
+  `catalogue_relu_le` garde la date de relecture reprise, et une relecture plus récente du catalogue n'est
+  qu'une proposition (`appliquerMiseAJourCatalogue`, sur un clic).
 - **Reprise des observations (D183)** : `Formats.reservesReprises` (`js/formats.js`) et `reserves_reprises`
   (`serveur.py`), mêmes réserves aux mêmes octets. Règle par contrôle (un contrôle avec observations et sans réserve
   reçoit une réserve par ligne non vide), idempotente, jamais « table vide » ; la constante de commentaire
