@@ -3627,6 +3627,8 @@ I18n.ajouter('tr', {
   'indicateurs.comprendre.respect_preventif_part_ot': '<b>Önleyici bakım uyumu</b>: vadesi dönem içinde olan takvime bağlı önleyici iş emirlerinden (planlanan tarih + bakım planı periyodunun %{tolerance}\'i) en geç vadesinde kapatılanların payı.',
   'indicateurs.comprendre.temps_requis_heures_fonctionnement': '<b>Gereken süre</b>: ekipmanın günlük çalışma saati × dönemin gün sayısı (hizmete alındığı tarihten itibaren). Günlük çalışma saati girilmemişse ekipman “hesaplanamıyor” sayılır: MTBF\'ye ve kullanılabilirliğe girmez (asla tahmin yapılmaz).',
   'indicateurs.comprendre.valeur_stock_stock_prix': '<b>Stok değeri</b>: aktif malzemelerin stok × birim fiyatı (tüm depo, filtresiz).',
+  'indicateurs.cout_arret.non_cloture': 'kapatılmamış',
+  'indicateurs.cout_arret.sans_duree_arret': 'duruş süresi girilmemiş',
   'indicateurs.cout_des_ordres.prix_actuel_pieces_limite': 'parçaların güncel fiyatı (D24 sınırı)',
   'indicateurs.creer_carte.csv': 'CSV',
   'indicateurs.creer_carte.image': 'Görsel',

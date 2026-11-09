@@ -3624,6 +3624,8 @@ I18n.ajouter('en', {
   'indicateurs.comprendre.respect_preventif_part_ot': '<b>Preventive compliance</b>: share of fixed-interval preventive work orders due in the period (planned date + {tolerance}% of the task list interval) closed no later than the due date.',
   'indicateurs.comprendre.temps_requis_heures_fonctionnement': '<b>Required time</b>: operating hours per day of the equipment × days of the period (since it entered service). Without operating hours per day, the equipment “cannot be calculated”: it is counted in neither the MTBF nor the availability (never an estimate).',
   'indicateurs.comprendre.valeur_stock_stock_prix': '<b>Stock value</b>: stock × unit price of active items (the whole of stores, no filter).',
+  'indicateurs.cout_arret.non_cloture': 'not closed',
+  'indicateurs.cout_arret.sans_duree_arret': 'no downtime entered',
   'indicateurs.cout_des_ordres.prix_actuel_pieces_limite': 'current price of parts (limit D24)',
   'indicateurs.creer_carte.csv': 'CSV',
   'indicateurs.creer_carte.image': 'Image',

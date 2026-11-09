@@ -3626,6 +3626,8 @@ I18n.ajouter('it', {
   'indicateurs.comprendre.respect_preventif_part_ot': '<b>Rispetto della manutenzione preventiva</b>: quota degli OdL preventivi sistematici in scadenza nel periodo (data prevista + {tolerance} % della periodicità del piano di manutenzione) chiusi al più tardi alla scadenza.',
   'indicateurs.comprendre.temps_requis_heures_fonctionnement': '<b>Tempo richiesto</b>: ore di funzionamento al giorno dell\'attrezzatura × giorni del periodo (dalla messa in servizio). Senza ore al giorno indicate, l\'attrezzatura è «non calcolabile»: non entra né nel MTBF né nella disponibilità (mai una stima).',
   'indicateurs.comprendre.valeur_stock_stock_prix': '<b>Valore delle scorte</b>: scorte × prezzo unitario degli articoli attivi (tutto il magazzino, senza filtri).',
+  'indicateurs.cout_arret.non_cloture': 'non chiuso',
+  'indicateurs.cout_arret.sans_duree_arret': 'tempo di fermo non inserito',
   'indicateurs.cout_des_ordres.prix_actuel_pieces_limite': 'prezzo attuale dei ricambi (limite D24)',
   'indicateurs.creer_carte.csv': 'CSV',
   'indicateurs.creer_carte.image': 'Immagine',

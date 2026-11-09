@@ -3626,6 +3626,8 @@ I18n.ajouter('pt-PT', {
   'indicateurs.comprendre.respect_preventif_part_ot': '<b>Cumprimento da manutenção preventiva</b>: peso das OT preventivas sistemáticas com vencimento no período (data prevista + {tolerance} % da periodicidade da gama) encerradas, o mais tardar, no vencimento.',
   'indicateurs.comprendre.temps_requis_heures_fonctionnement': '<b>Tempo requerido</b>: horas de funcionamento por dia do equipamento × dias do período (desde a sua entrada em serviço). Sem horas por dia indicadas, o equipamento é «não calculável»: não entra nem no MTBF nem na disponibilidade (nunca há estimativa).',
   'indicateurs.comprendre.valeur_stock_stock_prix': '<b>Valor do stock</b>: stock × preço unitário dos artigos ativos (todo o armazém, sem filtro).',
+  'indicateurs.cout_arret.non_cloture': 'não encerrado',
+  'indicateurs.cout_arret.sans_duree_arret': 'tempo de paragem não introduzido',
   'indicateurs.cout_des_ordres.prix_actuel_pieces_limite': 'preço atual das peças (limite D24)',
   'indicateurs.creer_carte.csv': 'CSV',
   'indicateurs.creer_carte.image': 'Imagem',

@@ -1,8 +1,9 @@
 'use strict';
 // Indicateurs (2/4) — séries des graphiques de l'écran Indicateurs et du rapport mensuel : Pareto
 // des pannes et des arrêts, heures par mois, MTBF et MTTR des équipements A, causes des pannes,
-// charge et capacité des techniciens (ARCHITECTURE.md §15.3). Règles PURES, comme
-// indicateurs-regles.js, dont ce fichier reprend les outils (Indicateurs.interne).
+// charge et capacité des techniciens (ARCHITECTURE.md §15.3) ; coût de l'arrêt (2.2, D188, CS174 :
+// §8 ci-dessous). Règles PURES, comme indicateurs-regles.js, dont ce fichier reprend les outils
+// (Indicateurs.interne).
 
 Object.assign(Indicateurs, (() => {
 
@@ -114,5 +115,113 @@ Object.assign(Indicateurs, (() => {
       }));
   }
 
-  return { paretoPannes, paretoArrets, heuresParMois, mtbfMttrCriticiteA, causes, chargeCapacite };
+  // ===========================================================================================
+  // 8. Coût de l'arrêt (D188, CS174) : Σ durées d'arrêt des pannes × coût d'une heure d'arrêt
+  //    (equipements.cout_arret_h, valeur actuelle de la fiche), au centime, SANS FLOTTANT.
+  //    Aucun coût horaire par défaut : un équipement sans coût est « non chiffré », une panne
+  //    sans durée n'est pas comptée ; tous deux sont listés, jamais estimés. 0 saisi = chiffré à 0.
+  // ===========================================================================================
+
+  const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
+  const DIX_MILLIEMES_PAR_HEURE = 10000;
+
+  /**
+   * Décimal du fichier → entier à l'échelle 10^decimales, lu dans la forme normalisée de Donnees
+   * (« 1 234,5 » → « 1234.5 ») chiffre à chiffre : jamais de flottant. Au-delà de `decimales`
+   * décimales : arrondi moitié vers le haut. null si vide, illisible ou négatif.
+   */
+  function entierALEchelle(valeur, decimales) {
+    const lu = Donnees.normaliser.decimal(typeof valeur === 'number' ? String(valeur) : valeur);
+    const morceaux = lu.ok ? /^(-?)(\d+)(?:\.(\d*))?$/.exec(lu.valeur) : null;
+    if (!morceaux) return null;
+    const fraction = morceaux[3] || '';
+    if (morceaux[1] === '-' && /[1-9]/.test(morceaux[2] + fraction)) return null;
+    let entier = Number(morceaux[2] + (fraction + '0'.repeat(decimales)).slice(0, decimales));
+    if (fraction.charAt(decimales) >= '5') entier += 1;
+    return Number.isSafeInteger(entier) ? entier : null;
+  }
+
+  /** Coût d'une heure d'arrêt en centimes (« 87,35 » → 8735), ou null : non chiffré. */
+  function centimesDuCoutHoraire(valeur) {
+    return entierALEchelle(valeur, 2);
+  }
+
+  /** Durée d'arrêt en dix-millièmes d'heure (« 0,3333 » → 3333), ou null : sans durée. */
+  function dixMilliemesDHeure(valeur) {
+    return entierALEchelle(valeur, 4);
+  }
+
+  /** Centimes de (dixMilliemes / 10 000) h × centimesParHeure, arrondis une fois au centime, moitié
+   *  vers le haut. Heures entières et reste séparés, division entière exacte (aucun flottant). */
+  function centimesDeLArret(dixMilliemes, centimesParHeure) {
+    const reste = dixMilliemes % DIX_MILLIEMES_PAR_HEURE;
+    const heuresEntieres = (dixMilliemes - reste) / DIX_MILLIEMES_PAR_HEURE;
+    const produit = reste * centimesParHeure + DIX_MILLIEMES_PAR_HEURE / 2;
+    return heuresEntieres * centimesParHeure + (produit - produit % DIX_MILLIEMES_PAR_HEURE) / DIX_MILLIEMES_PAR_HEURE;
+  }
+
+  /**
+   * Coût de l'arrêt des pannes de la période (Indicateurs.pannes : mêmes OT que le Pareto des
+   * arrêts ; équipements au rebut ou désactivés compris) →
+   * { totalCentimes, total, parEquipement, nonChiffres, sansDuree, complet }.
+   * parEquipement : [{ equipementId, heures, coutHoraireCentimes, centimes, ots }], équipements
+   * chiffrés ayant au moins une panne avec durée, par coût décroissant ; nonChiffres :
+   * [{ equipementId, heures, ots }], équipements avec une panne et sans coût horaire lisible
+   * (introuvable compris), par heures décroissantes ; ots = pannes dont les heures sont comptées ;
+   * sansDuree : [{ otId, equipementId, raison }], par date de panne. total = totalCentimes / 100 ;
+   * totalCentimes = somme des lignes ; complet = rien de non chiffré ni de sans durée.
+   */
+  function coutArret(periodeChoisie, filtres) {
+    const ctx = contexte();
+    const parEquipementId = new Map();
+    const sansDuree = [];
+    pannes(periodeChoisie, {}, ctx).forEach((panne) => {
+      const equipementId = texte(panne.ot.equipement_id);
+      const equipement = ctx.equipements.get(equipementId);
+      if (equipement ? !passeFiltres(equipement, filtres, ctx) : aDesFiltres(filtres)) return;
+      if (!parEquipementId.has(equipementId)) parEquipementId.set(equipementId, { equipementId, equipement, dixMilliemes: 0, ots: [] });
+      const element = parEquipementId.get(equipementId);
+      const duree = dixMilliemesDHeure(panne.ot.duree_arret_h);
+      if (duree === null) {
+        const raison = STATUTS_CLOTURES.includes(texte(panne.ot.statut))
+          ? I18n.t('indicateurs.cout_arret.sans_duree_arret') : I18n.t('indicateurs.cout_arret.non_cloture');
+        sansDuree.push({ otId: panne.ot.id, equipementId, raison });
+        return;
+      }
+      element.dixMilliemes += duree;
+      element.ots.push(panne.ot.id);
+    });
+    const chiffres = [];
+    const nonChiffres = [];
+    parEquipementId.forEach((element) => {
+      const heures = element.dixMilliemes / DIX_MILLIEMES_PAR_HEURE;
+      const coutHoraire = element.equipement ? centimesDuCoutHoraire(element.equipement.cout_arret_h) : null;
+      if (coutHoraire === null) nonChiffres.push({ equipementId: element.equipementId, heures, ots: element.ots });
+      else if (element.ots.length) {
+        chiffres.push({ equipementId: element.equipementId, heures, coutHoraireCentimes: coutHoraire,
+          centimes: centimesDeLArret(element.dixMilliemes, coutHoraire), ots: element.ots });
+      }
+    });
+    chiffres.sort((a, b) => b.centimes - a.centimes || b.heures - a.heures || a.equipementId.localeCompare(b.equipementId));
+    nonChiffres.sort((a, b) => b.heures - a.heures || a.equipementId.localeCompare(b.equipementId));
+    const totalCentimes = chiffres.reduce((somme, ligne) => somme + ligne.centimes, 0);
+    return { totalCentimes, total: totalCentimes / 100, parEquipement: chiffres, nonChiffres, sansDuree,
+      complet: nonChiffres.length === 0 && sansDuree.length === 0 };
+  }
+
+  /** Pareto du coût de l'arrêt : les n premiers (10 par défaut) équipements chiffrés à plus de 0 €,
+   *  [{ equipementId, valeur (€), centimes, heures, cumulPct, ots }], cumul en % du total. */
+  function paretoCoutArret(periodeChoisie, n, filtres) {
+    const calcul = coutArret(periodeChoisie, filtres);
+    let cumul = 0;
+    return calcul.parEquipement.filter((ligne) => ligne.centimes > 0).slice(0, n || 10).map((ligne) => {
+      cumul += ligne.centimes;
+      return { equipementId: ligne.equipementId, valeur: ligne.centimes / 100, centimes: ligne.centimes, heures: ligne.heures,
+        cumulPct: calcul.totalCentimes ? cumul / calcul.totalCentimes * 100 : 0, ots: ligne.ots };
+    });
+  }
+
+  Object.assign(Indicateurs.interne, { centimesDuCoutHoraire, dixMilliemesDHeure });
+
+  return { paretoPannes, paretoArrets, heuresParMois, mtbfMttrCriticiteA, causes, chargeCapacite, coutArret, paretoCoutArret };
 })());

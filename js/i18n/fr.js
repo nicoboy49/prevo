@@ -3622,6 +3622,8 @@ I18n.ajouter('fr', {
   'indicateurs.comprendre.respect_preventif_part_ot': '<b>Respect du préventif</b> : part des OT préventifs systématiques à échéance dans la période (date prévue + {tolerance} % de la périodicité de la gamme) clôturés au plus tard à l\'échéance.',
   'indicateurs.comprendre.temps_requis_heures_fonctionnement': '<b>Temps requis</b> : heures de fonctionnement par jour de l\'équipement × jours de la période (depuis sa mise en service). Sans heures par jour renseignées, l\'équipement est « non calculable » : il n\'entre ni dans le MTBF ni dans la disponibilité (jamais d\'estimation).',
   'indicateurs.comprendre.valeur_stock_stock_prix': '<b>Valeur du stock</b> : stock × prix unitaire des articles actifs (tout le magasin, sans filtre).',
+  'indicateurs.cout_arret.non_cloture': 'non clôturé',
+  'indicateurs.cout_arret.sans_duree_arret': 'sans durée d\'arrêt',
   'indicateurs.cout_des_ordres.prix_actuel_pieces_limite': 'prix actuel des pièces (limite D24)',
   'indicateurs.creer_carte.csv': 'CSV',
   'indicateurs.creer_carte.image': 'Image',
