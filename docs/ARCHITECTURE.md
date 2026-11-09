@@ -835,7 +835,7 @@ RG8 ne prévient plus : elle **bloque** (D186, D191, ci-dessous).
     `Ordres.avecDerogation(ecrire, contexte)` (essaie sans option ; sur un refus qui ne porte que sur RG8 et pour le
     responsable, ouvre la fenêtre puis refait l'écriture avec la dérogation), champ « Habilitation exigée pour cet OT ».
     Le technicien voit les bandeaux, jamais la case ni le bouton. RG8 au planning : §15.5.
-  - **Limite connue, droits serveur PROVISOIRES (T445, réponse provisoire, à confirmer par Nicolas)** : le blocage est
+  - **Limite connue, droits serveur (T445, D195, D196)** : le blocage est
     tenu **par l'application seule**. En mode serveur avec comptes, le serveur réserve l'écriture de `habilitations` au
     responsable et ne sert les justificatifs qu'au responsable (§22.5), mais il n'a **aucun contrôle RG8 complet** : le
     technicien reste autorisé à écrire `ordres_travail` (D126), et un appel direct de l'API peut encore s'affecter un OT
@@ -1885,7 +1885,7 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
     intitule, date, fichier)` écrit le document avant la ligne (« habilitation-TEC-0002-CACES-R489-2021-12-02.pdf ») ;
     formats et taille contrôlés par `verifierFichierJustificatif`, photo réduite. Lien montré au responsable, et au
     technicien sur sa propre fiche ; en mode serveur avec comptes, le serveur ne sert ces documents qu'au responsable
-    (§22.5, provisoire, à confirmer) : le technicien voit alors « justificatif joint, visible par le responsable ».
+    (§22.5, D196) : le technicien voit alors « justificatif joint, visible par le responsable ».
   - *Autorisation de conduite (CS179)* : type **H14**, distinct des CACES (H06 à H13, `estCaces`). Un CACES ne vaut pas
     autorisation : `Equipe.cacesSansAutorisation(technicienId, jour)` rend les CACES valables sans autorisation de
     conduite valable (rappel à l'écran) ; `justificatifsReprenables` propose de reprendre le justificatif d'un CACES.
@@ -3987,16 +3987,16 @@ Précisions de T152 :
   `GET /api/documents/<nom>` répond 403 `acces.document_ferme` au technicien, au demandeur et à l'appareil. Le rapport
   porte le coût de l'arrêt et les heures d'arrêt par équipement (d'où le coût horaire caché par T473) et le coût de
   maintenance ; avant T478, le technicien, qui lit `parametres` et donc ces noms, le recevait. Même mécanisme que les
-  documents réservés de T445 (`documents_reserves`, `segment_permis`), hors de leurs tuples provisoires : les vider ne
-  rouvre pas les rapports. Aucun écran du technicien n'ouvre un rapport figé (onglet « Rapports mensuels » de
+  documents réservés de T445 (`documents_reserves`, `segment_permis`), mais leur liste est à part des colonnes de
+  `DOCUMENTS_RESERVES_AU_RESPONSABLE`. Aucun écran du technicien n'ouvre un rapport figé (onglet « Rapports mensuels » de
   l'écran Indicateurs et tuile de l'accueil au responsable, export ZIP au responsable avec les comptes) : aucun lien
   n'échoue. Limite : un rapport écrit dont le nom n'a pas pu être ajouté à `rapports_mensuels` (écriture de
   `parametres` échouée juste après celle du document, `Rapport.figer`) n'est pas réservé.
-- **Réponses provisoires de T445** (questions 2 et 3 du L3, nuit du 08 au 09/11/2026, **à confirmer par Nicolas**) :
-  - *Habilitations* : `habilitations` s'écrit par le responsable seul ; le `PUT` et l'ajout du technicien sont refusés
+- **Règles décidées de T445** (questions 2 et 3 du L3, confirmées par Nicolas le 09/11/2026 : D195, D196) :
+  - *Habilitations (D195)* : `habilitations` s'écrit par le responsable seul ; le `PUT` et l'ajout du technicien sont refusés
     (403 `acces.table_du_responsable`, comme `parametres`) ; il la lit toujours. Aucun de ses écrans ne l'écrit (boutons
     de l'Équipe au responsable, import réservé au responsable).
-  - *Documents réservés* : un document cité par `habilitations.justificatif` ou `contrats_prestataires.document`
+  - *Documents réservés (D196)* : un document cité par `habilitations.justificatif` ou `contrats_prestataires.document`
     (relus à chaque requête, apostrophe de protection retirée, casse ignorée car le dossier ne la distingue pas sous
     Windows ni macOS) n'est servi qu'au responsable : `GET /api/documents/<nom>` répond 403 `acces.document_ferme` au
     technicien, au demandeur et à l'appareil, même si le document est aussi cité ailleurs. Les autres documents ne
@@ -4004,9 +4004,8 @@ Précisions de T152 :
   - *Limite connue (RG8)* : le blocage RG8 reste tenu par l'application (§10) ; le serveur n'en a aucune copie. Un
     compte technicien qui appelle l'API directement peut encore écrire `ordres_travail` et s'affecter un OT sans
     l'habilitation requise ; à l'écran, il n'en a aucun moyen (CS178). Même limite que RG3 et RG4.
-  - *Annuler* : vider `TABLES_DU_RESPONSABLE_PROVISOIRES` ou `DOCUMENTS_DU_RESPONSABLE_PROVISOIRES` dans `serveur.py`
-    (seul endroit), puis remettre ce tableau et `tests/test_droits_format4.py` ; les rapports mensuels figés (T478,
-    décidé) restent réservés au responsable.
+  - *Où elles sont tenues* : `TABLES_RESERVEES_AU_RESPONSABLE` et `DOCUMENTS_RESERVES_AU_RESPONSABLE` dans
+    `serveur.py` ; les rapports mensuels figés (T478, D126) sont réservés au responsable par leur propre paramètre.
 - **Sans comptes** : rien ne change (aucune colonne ni ligne retirée, toutes les versions, aucune règle d'écriture).
 
 `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert qu'en portée « ce PC » et en modes dossier

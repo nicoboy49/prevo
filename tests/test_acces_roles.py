@@ -70,7 +70,7 @@ ROLES = ("demandeur", "appareil", "technicien", "responsable")
 TOUTES_LES_TABLES = frozenset(serveur.TABLES)
 TABLES_DU_DEMANDEUR = frozenset({"localisations", "equipements", "demandes", "compteurs", "releves",
                                  "codes_defaillance", "parametres", "wiki_pages"})
-# habilitations : T445, réponse provisoire Q2 (à confirmer) ; documents réservés : tests/test_droits_format4.py.
+# habilitations : T445, D195 ; documents réservés : tests/test_droits_format4.py.
 # reserves_controle, garanties, contrats_prestataires : T453 (décidé, L4-L6 Q6) ; tests/test_garanties_serveur.py.
 ECRITURE_DU_TECHNICIEN = TOUTES_LES_TABLES - {"parametres", "techniciens", "fournisseurs", "reserves_controle",
                                               "garanties", "contrats_prestataires", "habilitations"}

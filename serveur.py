@@ -6434,31 +6434,29 @@ ORDRE_DES_ROLES = ('demandeur', 'appareil', 'technicien', 'responsable')
 # (accueil, Signaler, demandes, parc, fiche d'équipement avec ses compteurs et relevés, wiki, Ce poste).
 TABLES_DU_DEMANDEUR = ('localisations', 'equipements', 'demandes', 'compteurs', 'releves', 'codes_defaillance',
                        'parametres', 'wiki_pages')
-# --- T445 : réponses PROVISOIRES aux questions 2 et 3 du L3 (nuit du 08 au 09/11/2026), à confirmer par Nicolas ----
-# SEUL endroit à changer pour les annuler : vider l'un ou l'autre de ces deux tuples (le reste du code les suit ;
-# ARCHITECTURE.md §22.5 et tests/test_droits_format4.py changent avec). Mode serveur avec comptes seulement.
-#   Q2 : habilitations ne s'écrit que par le responsable (PUT et ajout : 403 au technicien, comme parametres) ; le
-#        blocage RG8 reste tenu par l'application (aucune copie de la règle ici, limite écrite au §10 et au §22.5).
-#   Q3 : un document cité par l'une de ces colonnes n'est servi qu'au responsable (GET /api/documents/<nom> : 403 au
-#        technicien, au demandeur et à l'appareil), colonnes relues à chaque requête (documents_reserves).
-TABLES_DU_RESPONSABLE_PROVISOIRES = ('habilitations',)
-DOCUMENTS_DU_RESPONSABLE_PROVISOIRES = (('habilitations', 'justificatif'), ('contrats_prestataires', 'document'))
-# --- fin des réponses provisoires de T445 ---------------------------------------------------------------------------
-# Rapports mensuels figés (T478, DÉCIDÉ : D126, aucun coût pour le technicien ; écart trouvé par la recette T476), hors
-# des tuples provisoires ci-dessus (les vider ne les rouvre pas) : coût de l'arrêt et heures d'arrêt par équipement,
-# coût de maintenance. Leurs noms sont la valeur de ce paramètre de parametres.csv (séparés par des virgules, comme
-# Rapport.rapportsFiges), relue à chaque requête (documents_reserves) : servis au seul responsable, comme ci-dessus.
+# --- Droits du responsable sur les habilitations et leurs justificatifs (T445, DÉCIDÉ : D195, D196) -------------------
+# Mode serveur avec comptes seulement.
+#   D195 : habilitations ne s'écrit que par le responsable (PUT et ajout : 403 au technicien, comme parametres) ; le
+#          blocage RG8 reste tenu par l'application (aucune copie de la règle ici, limite écrite au §10 et au §22.5).
+#   D196 : un document cité par l'une de ces colonnes n'est servi qu'au responsable (GET /api/documents/<nom> : 403 au
+#          technicien, au demandeur et à l'appareil), colonnes relues à chaque requête (documents_reserves).
+TABLES_RESERVEES_AU_RESPONSABLE = ('habilitations',)
+DOCUMENTS_RESERVES_AU_RESPONSABLE = (('habilitations', 'justificatif'), ('contrats_prestataires', 'document'))
+# Rapports mensuels figés (T478, DÉCIDÉ : D126, aucun coût pour le technicien ; écart trouvé par la recette T476), à
+# part des colonnes ci-dessus : coût de l'arrêt et heures d'arrêt par équipement, coût de maintenance. Leurs noms
+# sont la valeur de ce paramètre de parametres.csv (séparés par des virgules, comme Rapport.rapportsFiges), relue à
+# chaque requête (documents_reserves) : servis au seul responsable, comme ci-dessus.
 PARAMETRE_DES_RAPPORTS_FIGES = 'rapports_mensuels'
 # Écritures : le demandeur crée des demandes (PUT de demandes.csv en ajout seulement) et la ligne de journal qui va
 # avec ; le technicien écrit tout sauf les tables du responsable, qu'il lit (techniciens sans taux horaire,
-# contrats_prestataires sans montant annuel). Format 4 (T453, DÉCIDÉ : QUESTIONS-L2-L6.md, L4-L6 Q6 ; hors des tuples
-# provisoires de T445 ci-dessus) : reserves_controle, garanties et contrats_prestataires s'écrivent par le responsable
-# seul (PUT et ajout : 403 au technicien, comme parametres ; aucun écran du technicien ne les écrit) ; le demandeur ne
+# contrats_prestataires sans montant annuel). Format 4 (T453, DÉCIDÉ : QUESTIONS-L2-L6.md, L4-L6 Q6) :
+# reserves_controle, garanties et contrats_prestataires s'écrivent par le responsable
+# seul, comme habilitations (TABLES_RESERVEES_AU_RESPONSABLE, D195) (PUT et ajout : 403 au technicien, comme parametres ; aucun écran du technicien ne les écrit) ; le demandeur ne
 # les lit pas (absentes de TABLES_DU_DEMANDEUR).
 TABLES_DU_DEMANDEUR_EN_ECRITURE = ('demandes',)
 TABLES_DU_DEMANDEUR_EN_AJOUT = ('demandes', 'journal')
 TABLES_DU_RESPONSABLE_EN_ECRITURE = ('parametres', 'techniciens', 'fournisseurs', 'reserves_controle', 'garanties',
-                                     'contrats_prestataires') + TABLES_DU_RESPONSABLE_PROVISOIRES
+                                     'contrats_prestataires') + TABLES_RESERVEES_AU_RESPONSABLE
 TABLES_DU_TECHNICIEN_EN_ECRITURE = tuple(table for table in TABLES if table not in TABLES_DU_RESPONSABLE_EN_ECRITURE)
 # Documents du demandeur : les photos de demandes (nom donné par nomPhoto de js/modules/demandes-ecritures.js) et les
 # documents des équipements (noms de la colonne « document » d'equipements.csv). Le serveur ne sait pas qui a pris
@@ -6468,7 +6466,7 @@ MOTIF_PHOTO_DE_DEMANDE = re.compile(PREFIXE_NOM_DOCUMENT + r'photo-[0-9]{8}-[0-9
                                     re.ASCII)
 PHOTOS_DE_DEMANDES = 'photos de demandes'
 DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
-# Documents du technicien : tous, sauf ceux que documents_reserves réserve au responsable (T445, T478) ; marqueur.
+# Documents du technicien : tous, sauf ceux que documents_reserves réserve au responsable (D196, T478) ; marqueur.
 DOCUMENTS_DU_TECHNICIEN = 'documents_sauf_reserves'
 TOUS = (OUI, OUI, OUI, OUI)
 RESPONSABLE = (NON, NON, NON, OUI)
@@ -6604,15 +6602,15 @@ def rapports_figes(config):
 def documents_reserves(config):
     """Noms des documents servis au seul responsable, en minuscules (le dossier des documents ne distingue pas la
     casse sous Windows ni macOS : « JUSTIF.PDF » ouvrirait « justif.pdf ») : ceux des colonnes de
-    DOCUMENTS_DU_RESPONSABLE_PROVISOIRES (T445, réponse provisoire Q3) et les rapports mensuels figés (T478, D126)."""
-    noms = {nom for table, colonne in DOCUMENTS_DU_RESPONSABLE_PROVISOIRES
+    DOCUMENTS_RESERVES_AU_RESPONSABLE (D196) et les rapports mensuels figés (T478, D126)."""
+    noms = {nom for table, colonne in DOCUMENTS_RESERVES_AU_RESPONSABLE
             for nom in documents_cites(config, table, colonne)}
     return {nom.lower() for nom in noms | rapports_figes(config)}
 
 
 def segment_permis(config, regle, segment):
     """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin. Un document
-    réservé au responsable (documents_reserves : T445, T478) n'est permis par aucune règle de lecture d'un autre rôle."""
+    réservé au responsable (documents_reserves : D196, T478) n'est permis par aucune règle de lecture d'un autre rôle."""
     if segment is None:
         return False
     if isinstance(regle, tuple):

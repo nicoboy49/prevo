@@ -23,8 +23,8 @@ Ce qui est vérifié, en mode serveur avec comptes (vraies sessions sur une copi
     rapports figés (T478, D126 ; écart trouvé par la recette T476) un document cité par parametres.rapports_mensuels
                    (noms séparés par des virgules, apostrophe de protection et espaces de bord tolérés) n'est servi
                    qu'au responsable : 403 « ce document n'est pas ouvert » au technicien (qui en lit pourtant le nom),
-                   au demandeur et à l'appareil ; casse du nom ignorée ; liste relue à chaque requête ; hors des tuples
-                   provisoires de T445 (les vider ne rouvre pas les rapports) ; autres documents et envois inchangés ;
+                   au demandeur et à l'appareil ; casse du nom ignorée ; liste relue à chaque requête ; à part de
+                   DOCUMENTS_RESERVES_AU_RESPONSABLE (D196) : vider celui-ci ne rouvre pas les rapports ; autres documents et envois inchangés ;
                    sans comptes, servis.
 
 Aucune donnée réelle : copie temporaire du jeu f4-v2.2.0 (tests/jeux_formats.py). Sans navigateur.
@@ -487,10 +487,10 @@ class TestRapportsFiges(CasRapportsFiges):
         self.assertTrue(self.permis(config, self.RESPONSABLE, RAPPORT))
         self.assertTrue(self.permis(config, self.TECHNICIEN, AUTRE))
 
-    def test_hors_des_tuples_provisoires_de_t445(self):
-        """D126 est décidé : vider DOCUMENTS_DU_RESPONSABLE_PROVISOIRES (annuler T445) ne rouvre pas les rapports."""
+    def test_a_part_des_documents_reserves_d196(self):
+        """D126 est décidé : vider DOCUMENTS_RESERVES_AU_RESPONSABLE (D196) ne rouvre pas les rapports."""
         config = self.config()
-        with mock.patch.object(serveur, "DOCUMENTS_DU_RESPONSABLE_PROVISOIRES", ()):
+        with mock.patch.object(serveur, "DOCUMENTS_RESERVES_AU_RESPONSABLE", ()):
             self.assertFalse(self.permis(config, self.TECHNICIEN, RAPPORT))
             self.assertFalse(self.permis(config, self.TECHNICIEN, REVISION))
             self.assertTrue(self.permis(config, self.TECHNICIEN, AUTRE))

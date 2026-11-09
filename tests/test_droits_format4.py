@@ -1,7 +1,7 @@
 """Droits du serveur sur les tables et documents du format 4 (T445 ; CS178 ; ARCHITECTURE.md §22.5 et §10 RG8).
 
-RÉPONSES PROVISOIRES aux questions 2 et 3 du L3 (nuit du 08 au 09/11/2026), à confirmer par Nicolas ; seul endroit à
-changer pour les annuler : TABLES_DU_RESPONSABLE_PROVISOIRES et DOCUMENTS_DU_RESPONSABLE_PROVISOIRES de serveur.py.
+Règles décidées (D195, D196 ; réponses aux questions 2 et 3 du L3, confirmées par Nicolas le 09/11/2026) : elles sont
+tenues par TABLES_RESERVEES_AU_RESPONSABLE et DOCUMENTS_RESERVES_AU_RESPONSABLE de serveur.py.
 
 Ce qui est vérifié, en mode serveur avec comptes (vraies sessions sur une copie du jeu f4-v2.2.0) :
     habilitations    écrite par le responsable seul : PUT et ajout du technicien refusés (403, même corps que son refus
@@ -13,8 +13,8 @@ Ce qui est vérifié, en mode serveur avec comptes (vraies sessions sur une copi
                      aussi) ; casse du nom ignorée ; colonnes relues à chaque requête ; documents de garantie et autres
                      documents inchangés ;
     sans comptes     rien ne change (écriture de habilitations, lecture des documents) ;
-    un seul endroit  les deux tuples vidés dans une copie du code : le technicien écrit habilitations et lit les
-                     justificatifs, comme avant T445.
+    règles décidées  les deux tuples de serveur.py portent exactement ces règles (habilitations ; justificatif et
+                     document) et verifier_role refuse le technicien sur elles, sans toucher au reste.
 
 Aucune donnée réelle : copie temporaire du jeu f4-v2.2.0 (tests/jeux_formats.py). Sans navigateur.
 Lancer depuis la racine du projet :
@@ -28,7 +28,6 @@ import json
 import re
 import shutil
 import tempfile
-import types
 import unittest
 from pathlib import Path
 
@@ -53,12 +52,6 @@ DOCUMENTS = (JUSTIFICATIF, CONTRAT, PARTAGE, GARANTIE, DOCUMENT_EQUIPEMENT, AUTR
 
 REFUS_TABLE = "Accès refusé : la table « habilitations » ne se modifie que par le responsable."
 REFUS_DOCUMENT = "Accès refusé : ce document n'est pas ouvert au {role}."
-
-# Lignes du seul endroit à changer (serveur.py), recopiées : le test d'annulation les remplace par « () ».
-LIGNE_TABLES = "TABLES_DU_RESPONSABLE_PROVISOIRES = ('habilitations',)"
-LIGNE_DOCUMENTS = ("DOCUMENTS_DU_RESPONSABLE_PROVISOIRES = (('habilitations', 'justificatif'), "
-                   "('contrats_prestataires', 'document'))")
-
 
 # ---------------------------------------------------------------------------
 # Données d'essai : CSV au format de Prévo, documents
@@ -186,7 +179,7 @@ class CasServeur(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# habilitations : écrite par le responsable seul (réponse provisoire Q2)
+# habilitations : écrite par le responsable seul (D195)
 # ---------------------------------------------------------------------------
 
 class TestHabilitationsDuResponsable(CasServeur):
@@ -240,13 +233,13 @@ class TestHabilitationsDuResponsable(CasServeur):
 
 
 # ---------------------------------------------------------------------------
-# Justificatifs et documents des contrats : au seul responsable (réponse provisoire Q3)
+# Justificatifs et documents des contrats : au seul responsable (D196)
 # ---------------------------------------------------------------------------
 
 class TestDocumentsReserves(CasServeur):
 
     def test_justificatifs_et_contrats_servis_au_seul_responsable(self):
-        # JUSTIFICATIF est celui du technicien du compte lui-même : refusé aussi (réponse provisoire : responsable seul).
+        # JUSTIFICATIF est celui du technicien du compte lui-même : refusé aussi (D196 : responsable seul).
         for nom in (JUSTIFICATIF, CONTRAT, PARTAGE):
             with self.subTest(nom=nom):
                 self.assertDocument(self.requete("responsable", "GET", "/api/documents/" + nom), nom)
@@ -302,23 +295,18 @@ class TestSansComptes(CasServeur):
 
 
 # ---------------------------------------------------------------------------
-# Un seul endroit pour annuler la réponse provisoire
+# Les règles décidées (D195, D196) sont celles du code
 # ---------------------------------------------------------------------------
 
-def charger_module(nom, texte=None):
-    """serveur.py chargé comme module, tel quel ou depuis un texte modifié."""
-    if texte is None:
-        specification = importlib.util.spec_from_file_location(nom, SCRIPT)
-        module = importlib.util.module_from_spec(specification)
-        specification.loader.exec_module(module)
-        return module
-    module = types.ModuleType(nom)
-    module.__file__ = str(SCRIPT)
-    exec(compile(texte, str(SCRIPT), "exec"), module.__dict__)
+def charger_module(nom):
+    """serveur.py chargé comme module."""
+    specification = importlib.util.spec_from_file_location(nom, SCRIPT)
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
     return module
 
 
-class TestUnSeulEndroit(unittest.TestCase):
+class TestReglesDecidees(unittest.TestCase):
 
     TECHNICIEN = {"identifiant": "julien.moreau", "role": "technicien", "technicien_id": "TEC-0001",
                   "appareil": False}
@@ -340,24 +328,20 @@ class TestUnSeulEndroit(unittest.TestCase):
             return False
         return True
 
-    def test_vider_les_deux_tuples_annule_t445(self):
-        texte = SCRIPT.read_text(encoding="utf-8")
-        for ligne in (LIGNE_TABLES, LIGNE_DOCUMENTS):
-            self.assertEqual(texte.count(ligne), 1, ligne)
-        annule = texte.replace(LIGNE_TABLES, LIGNE_TABLES.split(" = ")[0] + " = ()")
-        annule = annule.replace(LIGNE_DOCUMENTS, LIGNE_DOCUMENTS.split(" = ")[0] + " = ()")
-        actuel, avant = charger_module("serveur_t445_actuel"), charger_module("serveur_t445_annule", annule)
+    def test_regles_decidees_d195_d196(self):
+        module = charger_module("serveur_t481")
         ecriture, document = ("PUT", "csv/<table>"), ("GET", "documents/<nom>")
-        self.assertFalse(self.permis(actuel, ecriture, "habilitations"))
-        self.assertFalse(self.permis(actuel, document, JUSTIFICATIF))
-        # Tables décidées du format 4 (T453) gardées : seul le tuple provisoire de T445 est retiré.
-        self.assertEqual(avant.TABLES_DU_RESPONSABLE_EN_ECRITURE, ("parametres", "techniciens", "fournisseurs",
-                                                                   "reserves_controle", "garanties",
-                                                                   "contrats_prestataires"))
-        self.assertTrue(self.permis(avant, ecriture, "habilitations"))
-        self.assertTrue(self.permis(avant, ("POST", "csv/<table>/ajout"), "habilitations"))
-        self.assertTrue(self.permis(avant, document, JUSTIFICATIF))
-        self.assertFalse(self.permis(avant, ecriture, "parametres"))     # le reste des droits ne bouge pas
+        self.assertEqual(module.TABLES_RESERVEES_AU_RESPONSABLE, ("habilitations",))
+        self.assertEqual(module.DOCUMENTS_RESERVES_AU_RESPONSABLE,
+                         (("habilitations", "justificatif"), ("contrats_prestataires", "document")))
+        self.assertEqual(module.TABLES_DU_RESPONSABLE_EN_ECRITURE, ("parametres", "techniciens", "fournisseurs",
+                                                                    "reserves_controle", "garanties",
+                                                                    "contrats_prestataires", "habilitations"))
+        self.assertFalse(self.permis(module, ecriture, "habilitations"))
+        self.assertFalse(self.permis(module, ("POST", "csv/<table>/ajout"), "habilitations"))
+        self.assertFalse(self.permis(module, document, JUSTIFICATIF))
+        self.assertFalse(self.permis(module, ecriture, "parametres"))
+        self.assertTrue(self.permis(module, ("GET", "csv/<table>"), "habilitations"))   # il la lit toujours
 
 
 if __name__ == "__main__":
