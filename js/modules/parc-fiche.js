@@ -407,6 +407,7 @@ Object.assign(Parc, (() => {
             <div class="fil"><a href="#/parc">${I18n.t('parc.fiche.parc')}</a>${equipement.localisation_id ? UI.html` <span aria-hidden="true">›</span> <span>${cheminLocalisation(equipement.localisation_id)}</span>` : ''}</div>
             <h1>${libelleEquipement(equipement.id)}</h1>
             <p class="parc-badges-fiche">${badgeCriticite(equipement.criticite)} ${equipement.statut ? UI.badgeValeur('equipements', 'statut', equipement.statut) : ''}
+              ${intervenant && typeof Garanties !== 'undefined' ? Garanties.badgeEquipement(equipement) : ''}
               ${actif ? '' : UI.html`<span class="badge neutre barre">${I18n.t('parc.fiche.inactif')}</span>`}</p>
             <p><a id="lien-wiki-equipement" href="#/wiki/${idUrl}">${UI.icone('wiki')}${I18n.t('parc.fiche.wiki_equipement')}</a></p>
           </div>
@@ -448,6 +449,14 @@ Object.assign(Parc, (() => {
     // carte Préventif. Suggestions est chargé après ce fichier : appelé au moment de l'affichage.
     const encartSuggestions = Suggestions.encartEquipement(equipement.id);
     if (encartSuggestions) UI.$('.parc-preventif', conteneur).closest('.grille').after(encartSuggestions);
+
+    // Carte « Garanties et contrats » sous la carte des contrôles (technicien et responsable ; jamais de montant).
+    if (intervenant && typeof Garanties !== 'undefined') {
+      const carteGaranties = Garanties.carteEquipement(equipement, responsable);
+      const carteControlesDom = UI.$('.parc-controles', conteneur);
+      if (carteControlesDom) carteControlesDom.after(carteGaranties);
+      else UI.$('.parc-complements', conteneur).before(carteGaranties);
+    }
 
     const zone = UI.$('.parc-complements', conteneur);
     zone.appendChild(carteArticles(equipement));
@@ -502,7 +511,8 @@ Object.assign(Parc, (() => {
       id: 'equipement', route: /^#\/equipement\/(?!nouveau$)(?<id>[^/?]+)$/, get titre() { return I18n.t('commun.champ.equipement'); }, parent: 'parc',
       profils: tous,
       tables: ['equipements', 'localisations', 'ordres_travail', 'demandes', 'compteurs', 'releves',
-        'gammes', 'articles', 'article_equipement', 'mouvements_stock', 'controles_reglementaires'],
+        'gammes', 'articles', 'article_equipement', 'mouvements_stock', 'controles_reglementaires',
+        'garanties', 'contrats_prestataires', 'fournisseurs'],
       afficher: afficherFiche,
     });
   });
