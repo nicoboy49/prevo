@@ -28,17 +28,19 @@ from unittest import mock
 import commun
 from commun import RACINE, ServeurPrevo, comptes_json
 from test_recette_socle import (DERNIERE_VERSION, DONNEES_DU_DEPOT, ERREUR_CSV_ABSENT,
-                                ERREUR_SANS_SESSION, FORMAT_COURANT, MOTIF_AVANT_FORMAT, MOTIF_AVANT_MISE_A_JOUR,
+                                ERREUR_SANS_SESSION, ERREUR_TABLE_DU_FORMAT_4_ABSENTE, FORMAT_COURANT, MOTIF_AVANT_FORMAT, MOTIF_AVANT_MISE_A_JOUR,
                                 MOTIF_QUOTIDIENNE, PREFIXE_CONSOLE_FORMAT, SERVEUR, TABLES, VERROU, VERSION_APPLI,
+                                VERSION_SCHEMA_ECRITE,
                                 CasRecetteSocle, csv_de_la_racine, empreintes, fichiers_de, fichiers_du_jeu,
                                 lignes_en_dictionnaires, lire_table, sans_manifeste, sauvegardes, une_seule,
                                 valeur_comparable)
 
 JEU = "f3-v2.0.0"
+FORMAT_ORIGINE = 3                  # format du jeu de la bêta 1 ; la 2.2 le passe au format courant à l'ouverture
 # Passage suivant : la version qui suit la version courante (correctif +1), toujours plus récente (T340, T376).
 VERSION_SUIVANTE = ".".join(VERSION_APPLI.split("-")[0].split(".")[:2] + [str(int(VERSION_APPLI.split("-")[0].split(".")[2]) + 1)])
 DESIGNATION = "Pompe de refroidissement (recette bêta 2)"
-CHANGEES = {"equipements.csv": {("EQ-0005", "designation")}}
+CHANGEES = {"equipements.csv": {("EQ-0005", "designation")}, **VERSION_SCHEMA_ECRITE}
 # Fichiers de données qu'une session du responsable peut réécrire (OT préventifs générés à l'ouverture, journal).
 ECRITS_PAR_UNE_SESSION = {"equipements.csv", "journal.csv", "ordres_travail.csv", "ot_operations.csv"}
 
@@ -60,13 +62,16 @@ def version_notee(fichiers):
 class CasBeta2(CasRecetteSocle):
 
     def verifier_passage(self, origine, copies, vers, de):
-        """Une seule « avant-mise-a-jour » (aux octets d'origine, acces/ compris), aucune « avant-format-* »."""
+        """Une seule « avant-mise-a-jour » puis une seule « avant-format-v4 » (la base de la bêta 1 est au format 3),
+        toutes deux aux octets d'origine, acces/ compris."""
         maj = une_seule(copies, MOTIF_AVANT_MISE_A_JOUR)
-        self.assertEqual([n for n in copies if MOTIF_AVANT_FORMAT.match(n) or "avant-format" in n], [])
-        self.assertEqual(sorted(copies), sorted([maj, datetime.date.today().isoformat()]))
-        self.assertEqual(sans_manifeste(copies[maj]), origine)
-        self.verifier_manifeste(copies[maj], "avant-mise-a-jour", FORMAT_COURANT, "serveur" if self.mode == "serveur"
-                                else "dossier", {"de": de, "vers": vers})
+        avant_format = une_seule(copies, MOTIF_AVANT_FORMAT)
+        self.assertEqual(sorted(copies), sorted([maj, avant_format, datetime.date.today().isoformat()]))
+        mode = "serveur" if self.mode == "serveur" else "dossier"
+        for nom in (maj, avant_format):
+            self.assertEqual(sans_manifeste(copies[nom]), origine)
+        self.verifier_manifeste(copies[maj], "avant-mise-a-jour", FORMAT_ORIGINE, mode, {"de": de, "vers": vers})
+        self.verifier_manifeste(copies[avant_format], "avant-format-v%d" % FORMAT_COURANT, FORMAT_ORIGINE, mode)
         return maj
 
     mode = "serveur"
@@ -105,6 +110,7 @@ class TestBeta2Serveur(CasBeta2):
     def preparer(self):
         self.autoriser_erreur(ERREUR_CSV_ABSENT)
         self.autoriser_erreur(ERREUR_SANS_SESSION)
+        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)             # jeu du format 3 passé au format 4
         source = self.jeu(JEU)
         (source / "acces").mkdir(exist_ok=True)
         (source / "acces" / "comptes.json").write_bytes(comptes_json())      # comptes de test (mots de passe connus)
@@ -121,10 +127,10 @@ class TestBeta2Serveur(CasBeta2):
             copies = sauvegardes(demarre)
             maj = self.verifier_passage(origine, copies, VERSION_APPLI, None)
             self.assertIn("sauvegarde %s faite avant la mise à jour" % maj, console)
-            self.assertNotIn(PREFIXE_CONSOLE_FORMAT, console)
+            self.assertIn(PREFIXE_CONSOLE_FORMAT, console)                  # passage au format 4 par le serveur
             self.assertNotEqual(VERSION_APPLI, VERSION_SUIVANTE)
             self.assertEqual(version_notee(demarre), VERSION_APPLI)
-            self.assertEqual(csv_de_la_racine(demarre), csv_de_la_racine(origine))     # aucune migration
+            self.verifier_aucune_perte(origine, demarre, VERSION_SCHEMA_ECRITE)        # migration sans perte
             self.assertEqual(demarre["acces/comptes.json"], origine["acces/comptes.json"])
 
             # Le responsable se connecte par l'écran de connexion : aucun bandeau d'erreur, ni lecture seule.
@@ -142,9 +148,10 @@ class TestBeta2Serveur(CasBeta2):
             self.assertEqual(equipement["designation"], DESIGNATION)
             changes = self.verifier_aucune_perte(origine, apres, CHANGEES)
             self.assertIn("equipements.csv", changes)
-            self.assertLessEqual(set(changes), ECRITS_PAR_UNE_SESSION, changes)
-            for chemin, octets in csv_de_la_racine(origine).items():          # tous les autres CSV : à l'octet
-                if chemin not in changes:
+            session = {c for c in changes if apres[c] != demarre.get(c)}      # ce que la session a écrit après le démarrage
+            self.assertLessEqual(session, ECRITS_PAR_UNE_SESSION, session)
+            for chemin, octets in csv_de_la_racine(demarre).items():          # tous les autres CSV : à l'octet
+                if chemin not in session:
                     self.assertEqual(apres[chemin], octets, chemin)
             self.verifier_rien_sans_sauvegarde(origine, apres)
             self.assertEqual(apres["acces/comptes.json"], origine["acces/comptes.json"])
@@ -197,7 +204,10 @@ class TestBeta2Serveur(CasBeta2):
         manifeste = self.verifier_zip_export(nom_zip, noms, entrees, {}, "serveur", FORMAT_COURANT)
         self.assertEqual(manifeste["version_appli"], VERSION_APPLI)
         for table in TABLES:                       # l'export est la base A, table par table (cellules)
-            self.assertEqual(lire_table(entrees[table + ".csv"]), lire_table(base_a.get(table + ".csv", b"")), table)
+            if table + ".csv" not in base_a:     # table du format 4 jamais écrite : l'export la donne vide, en-tête seul
+                self.assertEqual(lire_table(entrees[table + ".csv"])[1], [], table)
+                continue
+            self.assertEqual(lire_table(entrees[table + ".csv"]), lire_table(base_a[table + ".csv"]), table)
 
         # Base neuve (f3-v1.2.0 : même format, autres données), comptes exigés : import par le responsable.
         cible = self.jeu("f3-v1.2.0", "neuve")
@@ -247,13 +257,15 @@ class TestBeta2Dossier(CasBeta2):
         demarre = self.instantane()
         copies = sauvegardes(demarre)
         maj = une_seule(copies, MOTIF_AVANT_MISE_A_JOUR)
+        avant_format = une_seule(copies, MOTIF_AVANT_FORMAT)          # la 2.2 passe le format 3 au format 4
         for nom, contenu in copies.items():
-            self.assertTrue(nom == maj or MOTIF_QUOTIDIENNE.match(nom), sorted(copies))      # aucune « avant-format »
+            self.assertTrue(nom in (maj, avant_format) or MOTIF_QUOTIDIENNE.match(nom), sorted(copies))
             self.assertEqual(sans_manifeste(contenu), sans_acces, nom)
-        self.verifier_manifeste(copies[maj], "avant-mise-a-jour", FORMAT_COURANT, "dossier",
+        self.verifier_manifeste(copies[maj], "avant-mise-a-jour", FORMAT_ORIGINE, "dossier",
                                 {"de": None, "vers": VERSION_APPLI})
+        self.verifier_manifeste(copies[avant_format], "avant-format-v%d" % FORMAT_COURANT, FORMAT_ORIGINE, "dossier")
         self.assertEqual(version_notee(demarre), VERSION_APPLI)
-        self.verifier_aucune_perte(origine, demarre)       # l'ouverture crée les tables absentes, génère les OT
+        self.verifier_aucune_perte(origine, demarre, VERSION_SCHEMA_ECRITE)   # crée les tables absentes, génère les OT
         self.aucun_bandeau()
         self.assertEqual(self.page.evaluate("Donnees.etatDuFormat().depart"), FORMAT_COURANT)
 
@@ -263,9 +275,10 @@ class TestBeta2Dossier(CasBeta2):
         self.assertEqual(equipement["designation"], DESIGNATION)
         changes = self.verifier_aucune_perte(origine, apres, CHANGEES)
         self.assertIn("equipements.csv", changes)
-        self.assertLessEqual(set(changes), ECRITS_PAR_UNE_SESSION, changes)
-        for chemin, octets in csv_de_la_racine(origine).items():
-            if chemin not in changes:
+        session = {c for c in changes if apres[c] != demarre.get(c)}
+        self.assertLessEqual(session, ECRITS_PAR_UNE_SESSION, session)
+        for chemin, octets in csv_de_la_racine(demarre).items():
+            if chemin not in session:
                 self.assertEqual(apres[chemin], octets, chemin)
         self.verifier_rien_sans_sauvegarde(origine, apres)
         self.assertEqual(apres["acces/comptes.json"], origine["acces/comptes.json"])

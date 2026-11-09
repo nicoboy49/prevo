@@ -207,7 +207,7 @@ CLES = {
 # Défauts du schéma (§4) des tables écrites par ces grilles
 DEFAUTS = {"equipements": {"criticite": "B", "statut": "en service", "actif": "1"},
            "articles": {"critique": "0", "actif": "1"}, "techniciens": {"actif": "1"},
-           "gammes": {"declencheur": "date", "actif": "1"}, "controles_reglementaires": {"observations_levees": "0"}}
+           "gammes": {"declencheur": "date", "actif": "1"}, "controles_reglementaires": {"observations_levees": "0", "source_periodicite": "saisie"}}
 FORMATS_ID = {"localisations": ("LOC-", 4), "equipements": ("EQ-", 4), "articles": ("ART-", 4),
               "mouvements_stock": ("MVT-", 6), "fournisseurs": ("FOU-", 4), "techniciens": ("TEC-", 4),
               "habilitations": ("HAB-", 4), "codes_defaillance": ("CD-", 4), "compteurs": ("CPT-", 4),

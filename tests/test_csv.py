@@ -50,11 +50,11 @@ CHAMPS_EQUIPEMENTS = [
     "id", "repere", "designation", "localisation_id", "parent_id", "marque", "modele",
     "num_serie", "date_mes", "criticite", "statut", "heures_fonct_jour",
     "habilitation_requise", "consignation", "document", "actif",
-    "valeur_remplacement",
+    "valeur_remplacement", "cout_arret_h",
 ]
 # Colonnes de la version 2 du format : absentes des fichiers écrits avant elle (dont les fichiers
 # de tests/fixtures/excel/, produits au lot 1 par le vrai Excel) ; leur absence est une « info ».
-COLONNES_V2_EQUIPEMENTS = ["valeur_remplacement"]
+COLONNES_V2_EQUIPEMENTS = ["valeur_remplacement", "cout_arret_h"]  # cout_arret_h : format 4
 
 
 def equipement(**valeurs):
@@ -327,10 +327,10 @@ class TestSerialiser(CasCsv):
         # (dernière cellule vide : valeur_remplacement, colonne de la version 2 du format)
         ligne1 = ("EQ-0001;'TR-01;Tour parallèle « Tournelle » HB 575;LOC-0002;;Tournelle;"
                   "\"HB 575 ; version \"\"longue\"\"\";'00123;2019-03-15;A;en service;7.5;B1V;"
-                  "\"Couper le sectionneur Q1\nCadenasser\nVérifier l'absence de tension\";tour-tr01.pdf;1;")
+                  "\"Couper le sectionneur Q1\nCadenasser\nVérifier l'absence de tension\";tour-tr01.pdf;1;;")
         ligne2 = ("EQ-0002;'1-2;'- Presse hydraulique (à contrôler);LOC-0002;;Würth;'1/2;'123456789012345;"
                   "2021-11-02;B;en service;12.25;'8:30;"
-                  "\"Purger l'accumulateur \"\"avant\"\" toute intervention\";;1;")
+                  "\"Purger l'accumulateur \"\"avant\"\" toute intervention\";;1;;")
         attendu = BOM + (entete + "\r\n" + ligne1 + "\r\n" + ligne2 + "\r\n").encode("utf-8")
         self.assertEqual(octets, attendu)
 
@@ -355,7 +355,8 @@ class TestSerialiser(CasCsv):
         self.assertEqual(cellules[15], "1")
         self.assertEqual(cellules[16], "")       # valeur_remplacement (version 2 du format), vide
         # Colonnes inconnues protégées comme un champ texte (audit I3) : « 42 » ressemble à un nombre.
-        self.assertEqual(cellules[17:], ['"dit ""urgent"""', '"\' 42 "'])
+        self.assertEqual(cellules[17], "")       # cout_arret_h (format 4), vide
+        self.assertEqual(cellules[18:], ['"dit ""urgent"""', '"\' 42 "'])
         self.assertEqual(lignes_texte[2], "")   # le fichier se termine par CRLF
 
     def test_sans_bom_et_champs_manquants(self):
@@ -487,7 +488,7 @@ class TestLectureTolerante(CasCsv):
 
         octets = self.serialiser("equipements", resultat["lignes"], resultat["colonnesInconnues"])
         lignes_texte = octets[3:].decode("utf-8").split("\r\n")
-        self.assertTrue(lignes_texte[0].endswith(";actif;valeur_remplacement;Commentaire atelier;Code SAP"))
+        self.assertTrue(lignes_texte[0].endswith(";actif;valeur_remplacement;cout_arret_h;Commentaire atelier;Code SAP"))
         self.assertTrue(lignes_texte[1].startswith("EQ-0001;'TR-01;"))
         self.assertTrue(lignes_texte[1].endswith(";À revoir;SAP-9"))
         relu = self.analyser("equipements", octets)
@@ -716,8 +717,8 @@ class TestPerformance(CasCsv):
                    problemes: resultat.problemes.length, mediane: durees[1], durees: durees,
                    octets: octets.length };
         }""")
-        # 30 colonnes du brief + anomalie_constatee (version 2) + astuce (version 3, lot 6) : seuil inchangé.
-        self.assertEqual(mesure["colonnes"], 32)
+        # 30 colonnes du brief + anomalie_constatee (version 2) + astuce (version 3, lot 6) + un champ de la version 4 : seuil inchangé.
+        self.assertEqual(mesure["colonnes"], 33)
         self.assertEqual(mesure["lignes"], 5000)
         self.assertEqual(mesure["problemes"], 0)
         print("\n    analyse de 5 000 lignes × %d colonnes (%d Ko) : médiane %.0f ms (essais : %s)"

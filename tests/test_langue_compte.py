@@ -29,6 +29,8 @@ Ce qui est vérifié :
 Lancer depuis la racine du projet (à travers le verrou du navigateur) :
     py -X utf8 -m unittest discover -s tests -p "test_langue_compte.py" -v
 """
+import csv
+import io
 import json
 import re
 import shutil
@@ -304,6 +306,28 @@ def fichiers_compares(dossier):
     return fichiers
 
 
+def lignes_par_champ(octets):
+    """Lignes d'un CSV (UTF-8 BOM, « ; ») en dictionnaires champ -> valeur."""
+    return list(csv.DictReader(io.StringIO(octets.decode("utf-8-sig"), newline=""), delimiter=";"))
+
+
+def verifier_migration_sans_perte(cas, avant, apres):
+    """Ouvrir une base d'un format plus ancien la fait passer au format courant (D183) : comptes.json reste à
+    l'octet près, et chaque ligne d'origine se retrouve avec les mêmes valeurs dans ses colonnes d'origine
+    (seules des colonnes, des lignes de journal et des fichiers de réserves s'ajoutent ; version_schema monte)."""
+    cas.assertEqual(apres["acces/comptes.json"], avant["acces/comptes.json"])
+    for nom, octets in avant.items():
+        if nom == "acces/comptes.json":
+            continue
+        with cas.subTest(fichier=nom):
+            lignes_apres = lignes_par_champ(apres[nom])
+            for ligne in lignes_par_champ(octets):
+                if nom == "parametres.csv" and ligne["cle"] == "version_schema":
+                    continue
+                cas.assertTrue(any(all(a.get(c) == v for c, v in ligne.items()) for a in lignes_apres),
+                               "ligne perdue de %s : %r" % (nom, ligne))
+
+
 class TestCompatibiliteBeta2(unittest.TestCase):
 
     def setUp(self):
@@ -340,7 +364,7 @@ class TestCompatibiliteBeta2(unittest.TestCase):
             self.assertEqual((session["role"], session["langue"]), ("responsable", ""))
             self.assertEqual(client.requete("GET", "/api/acces/comptes", cookie=connexion.cookie).statut, 200)
             self.assertEqual(client.requete("GET", "/api/csv/equipements", cookie=connexion.cookie).statut, 200)
-            self.assertEqual(fichiers_compares(lance.dossier), origine)                 # à l'octet près
+            verifier_migration_sans_perte(self, origine, fichiers_compares(lance.dossier))   # sans perte
 
     def test_chaque_role_relu_puis_langue_changee_sans_toucher_aux_autres_champs(self):
         source = self.base(avec_autres_roles=True)
@@ -357,7 +381,8 @@ class TestCompatibiliteBeta2(unittest.TestCase):
                 session = client.session(connexion.cookie)
                 self.assertEqual((session["role"], session["langue"]), (role, ""))
                 cookies[identifiant] = connexion.cookie
-            self.assertEqual(fichiers_compares(lance.dossier), origine)                 # rien changé encore
+            migre = fichiers_compares(lance.dossier)
+            verifier_migration_sans_perte(self, origine, migre)                         # rien perdu
             # Le technicien choisit l'anglais pour son compte ; le responsable met le français à la demandeuse.
             self.assertEqual(client.requete("POST", "/api/mot-de-passe", {"langue": "en"},
                                             cookie=cookies["julien.moreau"]).statut, 200)
@@ -373,7 +398,7 @@ class TestCompatibiliteBeta2(unittest.TestCase):
             self.assertEqual({k: v for k, v in sans_langue(comptes["lea.martin"]).items() if k != "modifie_le"},
                              {k: v for k, v in comptes_origine["lea.martin"].items() if k != "modifie_le"})
             self.assertEqual({nom: octets for nom, octets in apres.items() if nom != "acces/comptes.json"},
-                             {nom: octets for nom, octets in origine.items() if nom != "acces/comptes.json"})
+                             {nom: octets for nom, octets in migre.items() if nom != "acces/comptes.json"})
             # Les sessions ouvertes restent ouvertes et voient la langue.
             self.assertEqual(client.session(cookies["julien.moreau"])["langue"], "en")
             self.assertEqual(client.session(cookies["lea.martin"])["langue"], "fr")

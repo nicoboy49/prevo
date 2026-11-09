@@ -274,7 +274,7 @@ class TestBaseDeDepart(CasAssistant):
         self.assertEqual(sorted(p.name for p in donnees.glob("*.csv")), ["parametres.csv", "techniciens.csv"])
         parametres = parametres_de(donnees)
         self.assertEqual((parametres["mode_solo"], parametres["solo_technicien_id"], parametres["version_schema"]),
-                         ("1", "TEC-0001", "3"))
+                         ("1", "TEC-0001", str(commun.FORMAT_COURANT)))
         self.assertEqual(parametres["langue_defaut"], "fr")                  # T296 : sans langue_defaut reçue, le français
 
     def test_base_absente_vide_hors_solo_parametres_avec_la_langue(self):
@@ -289,7 +289,7 @@ class TestBaseDeDepart(CasAssistant):
         self.ok(client.post("terminer", {"base": "vide", "langue_defaut": "en"}))
         donnees = Path(instance.config.dossier_donnees)
         self.assertEqual(sorted(p.name for p in donnees.glob("*.csv")), ["parametres.csv"])
-        self.assertEqual(lire_csv(donnees / "parametres.csv"), (["cle", "valeur"], [["version_schema", "3"],
+        self.assertEqual(lire_csv(donnees / "parametres.csv"), (["cle", "valeur"], [["version_schema", "%d" % commun.FORMAT_COURANT],
                                                                                      ["langue_defaut", "en"]]))
 
     def test_langue_non_declaree_400_et_rien_d_ecrit(self):
@@ -357,7 +357,10 @@ class TestJeuDeDemo(unittest.TestCase):
                 self.assertEqual(entete_apres, entete)
                 changees = {entete[i] for a, b in zip(avant, apres) for i in range(len(a)) if a[i] != b[i]}
                 dates_presentes = {entete[i] for a in avant for i in range(len(a)) if MOTIF_DEBUT_DE_DATE.match(a[i])}
-                self.assertEqual(dates_presentes, types[table])              # le serveur décale par la valeur : même jeu
+                if avant:    # table du format 4 vide dans la démo (garanties, contrats) : rien à comparer
+                    self.assertEqual(dates_presentes, types[table])          # le serveur décale par la valeur : même jeu
+                else:
+                    self.assertEqual(dates_presentes, set())
                 self.assertEqual(changees, dates_presentes)
                 self.assertEqual(serveur.decaler_texte_csv(texte, 0), serveur.BOM_UTF8 + texte.encode("utf-8"))
 

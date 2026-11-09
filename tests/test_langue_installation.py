@@ -36,7 +36,7 @@ import time
 import unittest
 from pathlib import Path
 
-from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
+from commun import (FORMAT_COURANT, RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
                     preregler_profil, url_fichier)
 
 BOM = "﻿"
@@ -393,7 +393,7 @@ class TestLangueInstallation(CasNavigateur):
             self.assertEqual(self.etat(), {"langue": "en", "lang": "en", "installation": "en", "donnees": "en",
                                            "poste": None, "retenue": "en", "raison": None})
             texte = self.page.evaluate(LIRE_OPFS_JS, [NOM_DOSSIER_SIMULE, "parametres.csv"])
-            self.assertEqual(texte.lstrip(BOM).split("\r\n"), ["cle;valeur", "version_schema;'3", "langue_defaut;en", ""])
+            self.assertEqual(texte.lstrip(BOM).split("\r\n"), ["cle;valeur", "version_schema;'%d" % FORMAT_COURANT, "langue_defaut;en", ""])
 
 
 if __name__ == "__main__":

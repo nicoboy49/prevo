@@ -30,7 +30,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from commun import (RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo,
+from commun import (FORMAT_COURANT, RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo,
                     url_fichier)
 
 SCENARIOS = scenarios_demo()
@@ -614,7 +614,7 @@ def version_schema(dossier):
 
 def sauvegardes_avant_format(dossier):
     racine = Path(dossier) / "sauvegardes"
-    # Sauvegarde faite juste avant le passage au format courant (3 depuis le lot 6, ARCHITECTURE.md §20.2).
+    # Sauvegarde faite juste avant le passage au format courant (4 depuis la 2.2, ARCHITECTURE.md §20.2).
     return sorted(p.name for p in racine.glob("*_avant-format-v3")) if racine.is_dir() else []
 
 
@@ -667,7 +667,7 @@ class TestDemarrage(CasPreventif):
             self.assertEqual((serveur.dossier / "ordres_travail.csv").read_bytes(), ordres_avant)
             self.assertEqual((serveur.dossier / "ot_operations.csv").read_bytes(), operations_avant)
             alertes = self.page.inner_text("#alertes-app")
-            self.assertIn("pas encore au format 3", alertes)
+            self.assertIn("pas encore au format %d" % FORMAT_COURANT, alertes)
             self.assertIn("les OT préventifs échus ne sont pas générés automatiquement", alertes)
             self.assertEqual(self.page.evaluate("performance.getEntriesByName('prevo:preventif').length"), 1)
             # Application utilisable : écran Préventif, bouton « Générer les OT échus » du responsable

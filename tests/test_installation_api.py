@@ -332,7 +332,7 @@ class TestParcours(CasAssistant):
         self.comparer_cle_a_cle(self.configuration_ecrite(instance), ATTENDU_SOLO_CE_PC)
         parametres = parametres_de(instance.config.dossier_donnees)
         self.assertEqual((parametres["mode_solo"], parametres["cloture_une_etape"], parametres["solo_technicien_id"],
-                          parametres["version_schema"]), ("1", "1", "TEC-0001", "3"))
+                          parametres["version_schema"]), ("1", "1", "TEC-0001", str(commun.FORMAT_COURANT)))
         entete, lignes = lire_csv(Path(instance.config.dossier_donnees) / "techniciens.csv")
         self.assertEqual(entete, list(serveur.COLONNES_PAR_TABLE["techniciens"]))
         self.assertEqual(lignes, [["TEC-0001", "Briand", "Nicolas", "", "", "", "1"]])
