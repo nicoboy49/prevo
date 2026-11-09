@@ -1,4 +1,39 @@
 /* Prévo — garanties des équipements et contrats de prestataires (js/modules/garanties-*.js, 2.2, lot L4) : écran
    « Garanties et contrats », fiches, formulaires, carte et badge de la fiche équipement, rappel à la création d'un OT.
    Créée vide par T450 (squelette du L4), remplie par T455 à T457. Uniquement des variables de la charte
-   (css/style.css) : aucune couleur codée en dur. */
+   (css/style.css) : aucune couleur codée en dur.
+   Sommaire : 1 formulaires (T455). */
+
+/* =========================================================================================
+   1. Formulaires d'une garantie et d'un contrat (garanties-formulaires.js, T455)
+   ========================================================================================= */
+
+.garanties-page-formulaire h1 { overflow-wrap: anywhere; }
+.garanties-page-formulaire .entete-page p { overflow-wrap: anywhere; }
+/* Liste des fournisseurs et « Nouveau fournisseur… » côte à côte, l'un sous l'autre sur téléphone */
+.garanties-ligne-fournisseur { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.garanties-ligne-fournisseur select { flex: 1 1 14rem; min-width: 0; width: auto; max-width: 100%; }
+.garanties-ligne-fournisseur .btn { flex: 0 1 auto; }
+/* Équipements concernés : puces retirables, puis le sélecteur et « Ajouter » */
+.garanties-puces { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+.garanties-puces:empty { display: none; }
+.garanties-puce {
+  display: inline-flex; align-items: center; gap: .2rem; max-width: 100%; min-width: 0;
+  padding: 0 0 0 .8rem; border-radius: 999px; background: var(--teinte-bleu-faible); border: 1px solid var(--bord-bleu);
+  color: var(--texte);
+}
+.garanties-puce > span { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.garanties-puce .btn-icone { border-radius: 999px; flex: none; }
+.garanties-ajout-equipement { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-start; }
+.garanties-ajout-equipement .garanties-selecteur { flex: 1 1 18rem; min-width: 0; }
+.garanties-ajout-equipement > .btn { flex: 0 0 auto; }
+/* Sous le préavis : date limite de résiliation calculée à la saisie, avertissement non bloquant */
+.garanties-date-limite { margin: .1rem 0 0; font-weight: 700; color: var(--texte); }
+.garanties-avertissement:empty { display: none; }
+.garanties-avertissement .alerte { margin: .2rem 0 0; }
+.garanties-pied { display: flex; flex-direction: column; gap: .5rem; }
+.garanties-pied p { margin: 0; }
+
+@media (max-width: 640px) {
+  .garanties-ligne-fournisseur .btn, .garanties-ajout-equipement > .btn { flex: 1 1 100%; }
+}

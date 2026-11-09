@@ -292,8 +292,10 @@ Object.assign(Magasin, (() => {
     surAction(panneau, { 'modifier-fournisseur': (donnees) => ouvrirFournisseur(donnees.fournisseur) });
   }
 
-  // Écrans et fenêtres prêtés aux fichiers précédents (appelés par relais) : usage interne.
-  Object.assign(Magasin.interne, { afficherOngletACommander, afficherOngletAchats, afficherOngletFournisseurs, ouvrirDemandeAchat });
+  // Écrans et fenêtres prêtés aux fichiers précédents (appelés par relais) : usage interne. ouvrirFournisseur sert
+  // aussi à « Nouveau fournisseur… » des formulaires de garantie et de contrat (garanties-formulaires.js, 2.2).
+  Object.assign(Magasin.interne, { afficherOngletACommander, afficherOngletAchats, afficherOngletFournisseurs, ouvrirDemandeAchat,
+    ouvrirFournisseur });
 
   // ===========================================================================================
   // 17. Enregistrement des écrans (App est chargé après les modules : on attend la page)
