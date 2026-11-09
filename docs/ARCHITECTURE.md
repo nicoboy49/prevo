@@ -736,8 +736,8 @@ micro du lot 4 ; en attendant, la dictée du clavier du téléphone fonctionne s
 
 RG1 à RG4, RG7 et RG8 viennent du lot 1 (RG3 révisée au lot 2, voir ci-dessous) ; RG5 (préventif)
 et RG6 (magasin) sont détaillées aux §14.3 et §14.4 ; RG9 (contrôles réglementaires, lot 3) au
-§15.7. Depuis le lot 3, RG8 est aussi vérifiée quand on planifie un OT (§15.5), avec le même
-avertissement au journal.
+§15.7. Depuis le lot 3, RG8 est aussi vérifiée quand on planifie un OT (§15.5). Depuis la 2.2 (L3),
+RG8 ne prévient plus : elle **bloque** (D186, D191, ci-dessous).
 
 - **RG1** DI : `Nouvelle` → `Acceptée` (crée un OT, `ot_id` renseigné) · `Regroupée`
   (rattachée à un OT ouvert du même équipement) · `Différée` · `Refusée` (motif obligatoire,
@@ -786,14 +786,56 @@ avertissement au journal.
   retours se font depuis l'OT (bloc « Pièces sorties », §14.6). Le prix pris est le prix **actuel**
   de l'article (aucun prix n'est stocké dans `mouvements_stock`) : le coût d'un OT passé suit donc
   un changement de prix (limite connue de D24).
-- **RG8** (lot 1 : à l'affectation) : si l'équipement a une `habilitation_requise` (une ou
-  plusieurs, séparées par `,` ou `/`), le technicien doit avoir pour chacune une habilitation
-  d'intitulé identique (casse ignorée) avec `date_obtention` ≤ date prévue (ou aujourd'hui) ≤
-  `date_echeance`. Sinon : **avertissement** (pas de blocage) affiché et inscrit au journal
-  (« avertissement habilitation : TEC-0004 sans BR valide au 2026-10-21 »).
-  Limite côté serveur (T445, réponse provisoire, à confirmer) : RG8 est tenue par l'application seule ; en mode
-  serveur avec comptes, le serveur réserve l'écriture de `habilitations` au responsable mais ne contrôle pas RG8 dans
-  `ordres_travail` (§22.5).
+- **RG8** (bloquante depuis la 2.2, D186 et D191 ; le lot 1 ne faisait qu'avertir). Règles pures dans
+  `ordres-regles.js`, écritures dans `ordres-ecritures.js` et `planning-ecritures.js`, écrans dans
+  `ordres-habilitations.js` (§15.1).
+  - *Quand* : seulement si l'OT **exige** une habilitation. L'exigence vient de `equipements.habilitation_requise`
+    et/ou de `ordres_travail.habilitation_requise` (une ou plusieurs valeurs séparées par `,` ou `/`, casse et espaces
+    ignorés, doublons réunis ; chaque origine est lue sur sa propre ligne, jamais fusionnée). `Ordres.habilitationsExigees(ot)`
+    → `[{ intitule, origines: ['equipement' | 'ot'] }]` ; un OT sans exigence n'est **jamais** bloqué, pas plus qu'une
+    affectation sans technicien. L'intitulé se compare par `Equipe.interne.cleIntitule` (une seule règle pour RG8 et
+    l'écran Équipe).
+  - *Raisons* (`absente`, `echue`, `pas_encore_obtenue`) : à la date contrôlée (date prévue de l'OT, sinon aujourd'hui),
+    une exigence est non valide si le technicien n'a **aucune ligne** de cet intitulé (`absente`), seulement des lignes
+    **échues** ou à échéance illisible (`echue`), ou seulement des lignes **obtenues après** la date
+    (`pas_encore_obtenue`). Bornes comprises ; obtention ou échéance vide = pas de borne (une ligne sans date n'est
+    aucune des trois raisons).
+  - *Ce qui est une affectation* (contrôlé) : créer un OT avec un technicien, changer `technicien_id`, `date_prevue` ou
+    `ordres_travail.habilitation_requise` d'un OT (préparation), passer en `Planifié`, planifier ou replanifier
+    (`Planning.planifier`). *Ce qui n'en est pas* : un OT sans technicien, la mise en attente, l'annulation, la clôture,
+    une saisie de temps ou de pièces, et tout changement des habilitations d'un technicien (les OT déjà affectés ne
+    sont pas recontrôlés).
+  - API : `Ordres.controleHabilitation(ot, technicienId, date)` → `{ exigees, manquantes: [{ intitule, origines, raison,
+    echeance, obtention }], bloque, technicienId, date }` ; `Ordres.verifierHabilitation(equipement, technicienId, date)`
+    (lot 1) reste, sur l'exigence de l'équipement seule, et rend le message « TEC-0004 sans BR valide au … ».
+  - **`Ordres.verifierPassage(ot, cible)` a changé (T437)** : pour `Planifié`, il ajoute le refus RG8 à `erreurs`
+    (son message en dernier) ; son retour est `{ ok, erreurs, avertissements, piecesManquantes, habilitation }` où
+    `habilitation` est le refus (`{ otId, technicienId, date, manquantes, message }`) ou `null`, et `avertissements` est
+    **toujours vide** (gardé pour les appelants). Plus aucune entrée « avertissement habilitation : … » n'est écrite au
+    journal (`Ordres.journaliserHabilitation` est retirée, T447).
+  - *Dérogation* : le **responsable seul** peut passer outre, avec une case à cocher et un **motif obligatoire** (une
+    dérogation sans motif est refusée par l'écriture). Les écritures prennent `options = { passerOutreHabilitation,
+    motifDerogation }` (`Ordres.creer`, `modifierOt`, `changerStatut`, `Planning.planifier`) ; pour un autre profil,
+    l'option est sans effet. Sans dérogation, l'écriture lève `Donnees.ErreurValidation` portant `erreur.habilitation`
+    (`{ otId, technicienId, date, manquantes }`) et rien n'est écrit : le contrôle et l'écriture sont une seule
+    `Donnees.modifier`.
+  - *Marqueur du journal* (D156, texte fixe en français) : à la fin de l'action de l'écriture,
+    `dérogation habilitation : TEC-0004 le 2026-11-20 sans BR (échue), H0V (absente) ; motif : <texte>`
+    (`Ordres.marqueurDerogation` l'écrit, `lireDerogation` le relit ; raisons `(échue)`, `(absente)`, `(pas encore obtenue)`).
+    L'entrée du journal porte donc qui (utilisateur du journal), quand, l'OT (`id_ligne`), le technicien, la date et les
+    habilitations. `Ordres.derogationAccordee(otId, technicienId, date, manquantes)` retrouve la dérogation déjà notée pour
+    le même OT, technicien, date et ensemble d'habilitations : l'étape suivante (préparer puis « Planifier ») ne la
+    redemande pas ; un autre technicien, une autre date ou une autre habilitation, si.
+  - *Écrans* (`ordres-habilitations.js`) : bandeau du refus en direct au nouvel OT et à la préparation, information
+    « dérogation du responsable le … » sur la fiche, fenêtre « Habilitation exigée non valide » (case + motif),
+    `Ordres.avecDerogation(ecrire, contexte)` (essaie sans option ; sur un refus qui ne porte que sur RG8 et pour le
+    responsable, ouvre la fenêtre puis refait l'écriture avec la dérogation), champ « Habilitation exigée pour cet OT ».
+    Le technicien voit les bandeaux, jamais la case ni le bouton. RG8 au planning : §15.5.
+  - **Limite connue, droits serveur PROVISOIRES (T445, réponse provisoire, à confirmer par Nicolas)** : le blocage est
+    tenu **par l'application seule**. En mode serveur avec comptes, le serveur réserve l'écriture de `habilitations` au
+    responsable et ne sert les justificatifs qu'au responsable (§22.5), mais il n'a **aucun contrôle RG8 complet** : le
+    technicien reste autorisé à écrire `ordres_travail` (D126), et un appel direct de l'API peut encore s'affecter un OT
+    sans l'habilitation exigée ; à l'écran il n'en a aucun moyen (CS178). Même limite que RG3 et RG4.
 - « OT en retard » : statut ni clôturé ni annulé et `date_prevue` < aujourd'hui. « P1 ouvert » :
   priorité P1, statut ni clôturé ni annulé. « DI à traiter » : statut `Nouvelle`.
 
@@ -1611,9 +1653,14 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   `technicien_id` et `date_prevue` ; depuis `Préparé`, contrôle `Ordres.verifierPassage(ligne,
   'Planifié')` (RG3, pièces) → refus `ErreurValidation` (message de RG3, `piecesManquantes` joint)
   sinon statut `Planifié`. Journal : « planification : TEC-… le AAAA-MM-JJ (Préparé → Planifié) » ou
-  « replanification : … ». Puis RG8 : `Ordres.verifierHabilitation(equipement, technicienId, date)`
-  → message affiché et `Donnees.journaliser('ordres_travail', otId, 'avertissement habilitation : '
-  + message)` (même texte qu'au lot 1).
+  « replanification : … ». **RG8 (2.2, bloquante, §10)** : `Ordres.controlerAffectation(prochaine, options,
+  verification)` sur la ligne fraîche (en `Préparé`, ou en `Planifié` si le technicien ou la date change) ; technicien
+  sans l'habilitation exigée valide à cette date → `ErreurValidation` dont `erreur.habilitation` = `{ otId,
+  technicienId, date, manquantes }`, rien n'est écrit. `options` = `{ passerOutreHabilitation, motifDerogation }`
+  (responsable seul, motif obligatoire) : le marqueur « dérogation habilitation : … » est alors ajouté à l'action du
+  journal de la même écriture. Le retour est `{ statut, avertissements: [] }` (toujours vide). **État à ce jour** : la
+  couche d'écriture est faite (T437) ; l'écran `#/planning` (glisser et « Planifier… ») ne gère pas encore la
+  fenêtre de dérogation (T439, pas encore intégrée) : il affiche le refus comme celui de RG3.
 - Écran `#/planning` (`?semaine=AAAA-MM-JJ`, un lundi ; `?technicien=`) : grille lundi → dimanche
   (samedi et dimanche grisés), une ligne par technicien (« 38 h / 35 h », badge « surcharge » en
   texte), colonne « À planifier ». Glisser (API HTML5 drag and drop) une carte `Préparé` ou
@@ -1787,6 +1834,27 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   valeurs)`, `modifierHabilitation(id, valeurs)` (correction), `renouvelerHabilitation(id, {
   date_obtention, date_echeance })` = **nouvelle ligne** de même intitulé (l'ancienne reste) ;
   échéance ≥ obtention.
+- **Habilitations en 2.2 (L3, format 4 ; T430, T431, T432)** :
+  - *Recyclage* : `habilitations.recyclage_mois` (entier de 1 à 240, facultatif). À l'ajout et à la correction,
+    échéance vide avec recyclage connu → échéance = obtention + recyclage (`Equipe.echeanceProposee`,
+    `Controles.ajouterMois`), **proposée puis modifiable** à l'écran (calculée en direct) ; une échéance saisie est
+    gardée. Un renouvellement reprend l'intitulé, le recyclage, le type et la nature de la source de l'ancienne ligne.
+    `Equipe.recyclageDuType(hab)` → `{ propose, egal }` compare au recyclage du type.
+  - *Type du catalogue* : `habilitations.catalogue_id` (H01 à H15 de `CatalogueFR.habilitations`, §1) et
+    `nature_source` (`naturesSource()` ; l'électricité NF C 18-510 est une « recommandation »). API :
+    `typesHabilitation`, `typeHabilitation(id)`, `typeDe(hab)`, `valeursDepuisType`, `intitulePropose` (partie du type
+    avant « – » ; vide pour l'électricité, dont l'intitulé est le symbole du titre : BR, B2V…). Un type ou une nature
+    inconnus sont ramenés à vide à l'écriture.
+  - *Justificatif* : `habilitations.justificatif` (nom d'un document). `Equipe.ecrireJustificatif(technicienId,
+    intitule, date, fichier)` écrit le document avant la ligne (« habilitation-TEC-0002-CACES-R489-2021-12-02.pdf ») ;
+    formats et taille contrôlés par `verifierFichierJustificatif`, photo réduite. Lien montré au responsable, et au
+    technicien sur sa propre fiche ; en mode serveur avec comptes, le serveur ne sert ces documents qu'au responsable
+    (§22.5, provisoire, à confirmer) : le technicien voit alors « justificatif joint, visible par le responsable ».
+  - *Autorisation de conduite (CS179)* : type **H14**, distinct des CACES (H06 à H13, `estCaces`). Un CACES ne vaut pas
+    autorisation : `Equipe.cacesSansAutorisation(technicienId, jour)` rend les CACES valables sans autorisation de
+    conduite valable (rappel à l'écran) ; `justificatifsReprenables` propose de reprendre le justificatif d'un CACES.
+  - Écran (`equipe-habilitations.js`) : fenêtres « Ajouter », « Renouveler », « Corriger » avec liste des types, encart
+    du type (contenu du catalogue en français, `lang="fr"`) et phrase D182 ; RG8 bloquante : §10.
 - Écarts retenus (T46) : ajouter une habilitation d'un intitulé que le technicien a déjà est refusé (le
   message renvoie à « Renouveler » ou « Corriger ») ; un renouvellement doit dépasser l'échéance
   actuelle (sinon l'ancienne ligne compterait encore), et une habilitation sans échéance ne se
