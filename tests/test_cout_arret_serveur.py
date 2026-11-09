@@ -1,5 +1,6 @@
 """L5 — coût d'une heure d'arrêt (equipements.cout_arret_h) caché par le serveur au technicien, au demandeur et à
-l'appareil (T473 ; CS174 ; D126 prolongé ; QUESTIONS-L2-L6.md, L4-L6 Q6 ; ARCHITECTURE.md §22.5).
+l'appareil (T473 ; CS174 ; D126 prolongé ; QUESTIONS-L2-L6.md, L4-L6 Q6 ; ARCHITECTURE.md §22.5) ; rapports mensuels
+figés servis au seul responsable (T478).
 
 Même mécanisme que le taux horaire, les prix et le montant annuel (COLONNES_CACHEES_PAR_ROLE, T152 et T453), à un
 écart près : cout_arret_h est une colonne du format 4 dans une table du format 1, son nom reste donc dans l'en-tête
@@ -18,7 +19,13 @@ Ce qui est vérifié, en mode serveur avec comptes (vraies sessions sur une copi
     ajout          coût vidé dans la ligne ajoutée par le technicien ; gardé pour le responsable ;
     demandeur      ne peut écrire equipements (403), fichier inchangé ;
     responsable    écrit un coût ; aucun contrôle pour lui (controle_d_ecriture, controle_d_ajout : None) ;
-    sans comptes   rien ne change (coûts lus, coût écrit).
+    sans comptes   rien ne change (coûts lus, coût écrit) ;
+    rapports figés (T478, D126 ; écart trouvé par la recette T476) un document cité par parametres.rapports_mensuels
+                   (noms séparés par des virgules, apostrophe de protection et espaces de bord tolérés) n'est servi
+                   qu'au responsable : 403 « ce document n'est pas ouvert » au technicien (qui en lit pourtant le nom),
+                   au demandeur et à l'appareil ; casse du nom ignorée ; liste relue à chaque requête ; hors des tuples
+                   provisoires de T445 (les vider ne rouvre pas les rapports) ; autres documents et envois inchangés ;
+                   sans comptes, servis.
 
 Aucune donnée réelle : copie temporaire du jeu f4-v2.2.0 (tests/jeux_formats.py). Sans navigateur.
 Lancer depuis la racine du projet :
@@ -34,6 +41,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import commun
 from commun import RACINE
@@ -165,11 +173,17 @@ class CasServeur(unittest.TestCase):
         super().setUpClass()
         cls.racine = Path(tempfile.mkdtemp(prefix="prevo-cout-arret-serveur-"))
         cls.addClassCleanup(shutil.rmtree, cls.racine, True)
-        cls.serveur = commun.ServeurPrevo(source=preparer_source(cls.racine), comptes=cls.COMPTES)
+        source = preparer_source(cls.racine)
+        cls.completer_source(source)
+        cls.serveur = commun.ServeurPrevo(source=source, comptes=cls.COMPTES)
         cls.serveur.demarrer()
         cls.addClassCleanup(cls.serveur.arreter)
         cls.cookies = ({role: cls.serveur.session(role) for role in ("demandeur", "technicien", "responsable")}
                        if cls.COMPTES else {})
+
+    @classmethod
+    def completer_source(cls, source):
+        """Ajouts d'une classe au jeu préparé, avant le démarrage du serveur (rien par défaut)."""
 
     def requete(self, role, methode, chemin, corps=None, entetes=None):
         return requete(self.serveur, methode, chemin, corps, self.cookies.get(role), entetes)
@@ -350,6 +364,146 @@ class TestSansComptes(CasServeur):
         reponse = self.ecrire(None, ecrire_tableau(entete, lignes), lue.entetes["x-version"])
         self.assertEqual(reponse.statut, 200, reponse.octets[:300])
         self.assertEqual(couts_par_id(self.fichier())[lignes[0][0]], "42")
+
+
+# ---------------------------------------------------------------------------
+# Rapports mensuels figés : servis au seul responsable (T478 ; D126 ; écart trouvé par la recette T476)
+# ---------------------------------------------------------------------------
+
+RAPPORT = "20261001-080000-rapport-mensuel-2026-09.html"           # 1er de rapports_mensuels (apostrophe devant)
+REVISION = "20261002-090000-rapport-mensuel-2026-09-r2.html"       # 2e, après « , » (espace gardée par un tableur)
+PAS_ENCORE = "20261101-080000-rapport-mensuel-2026-10.html"        # sur le disque, cité ensuite par le responsable
+AUTRE = "20261020-101500-notice-libre.pdf"                         # cité nulle part : lisible du technicien
+REFUS_DOCUMENT = "Accès refusé : ce document n'est pas ouvert au {role}."
+VALEUR = "'%s, %s" % (RAPPORT, REVISION)     # rapports_mensuels au départ (lecture tolérante : apostrophe, espace)
+
+
+def contenu(nom):
+    return ("<!doctype html><title>Rapport mensuel (essai T478)</title><p>Coût de l'arrêt : 6043.75 € ; "
+            + nom + "</p>\n").encode("utf-8")
+
+
+def avec_rapports(octets, valeur):
+    """parametres.csv où rapports_mensuels vaut « valeur » (ligne ajoutée ou remplacée)."""
+    entete, lignes = lire_tableau(octets)
+    return ecrire_tableau(entete, [ligne for ligne in lignes if ligne[0] != "rapports_mensuels"]
+                          + [["rapports_mensuels", valeur]])
+
+
+class CasRapportsFiges(CasServeur):
+    """Jeu préparé, plus quatre documents et rapports_mensuels = RAPPORT, REVISION (lecture tolérante : apostrophe de
+    protection devant le premier, espace après la virgule)."""
+
+    @classmethod
+    def completer_source(cls, source):
+        documents = source / "documents"
+        documents.mkdir(exist_ok=True)
+        for nom in (RAPPORT, REVISION, PAS_ENCORE, AUTRE):
+            (documents / nom).write_bytes(contenu(nom))
+        parametres = source / "parametres.csv"
+        parametres.write_bytes(avec_rapports(parametres.read_bytes(), VALEUR))
+
+    def document(self, role, nom):
+        return self.requete(role, "GET", "/api/documents/" + nom)
+
+    def assertServi(self, reponse, nom):
+        self.assertEqual((reponse.statut, reponse.octets), (200, contenu(nom)), reponse.octets[:300])
+
+    def assertRefus(self, reponse, role):
+        self.assertEqual(reponse.statut, 403, reponse.octets[:300])
+        self.assertEqual(reponse.json()["erreur"], REFUS_DOCUMENT.format(role=role))
+        self.assertNotIn(b"6043.75", reponse.octets)
+
+
+class TestRapportsFiges(CasRapportsFiges):
+
+    TECHNICIEN = {"identifiant": "julien.moreau", "role": "technicien", "technicien_id": "TEC-0001", "appareil": False}
+    APPAREIL = {"identifiant": "appareil:ap-0001", "role": "demandeur", "appareil": True}
+    RESPONSABLE = {"identifiant": "nicolas.briand", "role": "responsable", "appareil": False}
+
+    def test_servis_au_seul_responsable(self):
+        for nom in (RAPPORT, REVISION):
+            with self.subTest(nom=nom):
+                self.assertServi(self.document("responsable", nom), nom)
+                self.assertRefus(self.document("technicien", nom), "technicien")
+                self.assertRefus(self.document("demandeur", nom), "demandeur")
+
+    def test_le_technicien_en_lit_le_nom_pas_le_document(self):
+        """Le nom reste dans parametres (table qu'il lit) : aucun écran du technicien n'ouvre un rapport figé."""
+        lue = self.requete("technicien", "GET", "/api/csv/parametres")
+        self.assertEqual(lue.statut, 200, lue.octets[:300])
+        self.assertIn(REVISION.encode("ascii"), lue.octets)
+        self.assertRefus(self.document("technicien", REVISION), "technicien")
+
+    def test_casse_du_nom_ignoree(self):
+        """Windows et macOS ne distinguent pas la casse : un autre nom ne doit pas ouvrir le même fichier."""
+        for nom in (RAPPORT.upper(), REVISION.replace("rapport", "Rapport")):
+            with self.subTest(nom=nom):
+                self.assertRefus(self.document("technicien", nom), "technicien")
+
+    def test_liste_relue_a_chaque_requete(self):
+        self.assertServi(self.document("technicien", PAS_ENCORE), PAS_ENCORE)        # pas encore un rapport figé
+        lue = self.requete("responsable", "GET", "/api/csv/parametres")
+        valeur = ",".join((RAPPORT, REVISION, PAS_ENCORE))                           # comme Rapport.figer
+        ecrit = self.requete("responsable", "PUT", "/api/csv/parametres", avec_rapports(lue.octets, valeur),
+                             {"X-Version-Attendue": lue.entetes["x-version"]})
+        self.assertEqual(ecrit.statut, 200, ecrit.octets[:300])
+        self.assertRefus(self.document("technicien", PAS_ENCORE), "technicien")
+        self.assertServi(self.document("responsable", PAS_ENCORE), PAS_ENCORE)
+
+    def test_autres_documents_inchanges(self):
+        self.assertServi(self.document("technicien", AUTRE), AUTRE)
+        self.assertServi(self.document("responsable", AUTRE), AUTRE)
+        self.assertEqual(self.document("demandeur", AUTRE).statut, 403)      # ni photo ni document d'équipement
+        envoi = self.requete("technicien", "PUT", "/api/documents/notice-essai-t478.pdf", b"%PDF-1.4 essai T478\n")
+        self.assertEqual(envoi.statut, 201, envoi.octets[:300])              # l'envoi n'est pas touché
+
+    def config(self, avec_parametres=True):
+        """Configuration à part (verifier_role appelé ici), parametres.csv du serveur recopié ou absent."""
+        dossier = Path(tempfile.mkdtemp(prefix="prevo-rapports-figes-"))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        config = serveur.Configuration(str(dossier), [])
+        serveur.creer_dossiers(config)
+        if avec_parametres:                     # la valeur de départ (un autre test complète celle du serveur)
+            (Path(config.dossier_donnees) / "parametres.csv").write_bytes(
+                avec_rapports((self.serveur.dossier / "parametres.csv").read_bytes(), VALEUR))
+        return config
+
+    def permis(self, config, identite, nom):
+        """Vrai si verifier_role laisse lire ce document (le 403 levé sinon)."""
+        try:
+            serveur.verifier_role(config, identite, ("GET", "documents/<nom>"), nom)
+        except serveur.ErreurHttp as erreur:
+            self.assertEqual(erreur.statut, 403)
+            return False
+        return True
+
+    def test_regle_lue_dans_parametres_et_appareil_refuse(self):
+        config = self.config()
+        self.assertEqual(serveur.rapports_figes(config), {RAPPORT, REVISION})
+        self.assertEqual(serveur.rapports_figes(self.config(avec_parametres=False)), set())
+        self.assertFalse(self.permis(config, self.APPAREIL, RAPPORT))
+        self.assertFalse(self.permis(config, self.TECHNICIEN, RAPPORT))
+        self.assertTrue(self.permis(config, self.RESPONSABLE, RAPPORT))
+        self.assertTrue(self.permis(config, self.TECHNICIEN, AUTRE))
+
+    def test_hors_des_tuples_provisoires_de_t445(self):
+        """D126 est décidé : vider DOCUMENTS_DU_RESPONSABLE_PROVISOIRES (annuler T445) ne rouvre pas les rapports."""
+        config = self.config()
+        with mock.patch.object(serveur, "DOCUMENTS_DU_RESPONSABLE_PROVISOIRES", ()):
+            self.assertFalse(self.permis(config, self.TECHNICIEN, RAPPORT))
+            self.assertFalse(self.permis(config, self.TECHNICIEN, REVISION))
+            self.assertTrue(self.permis(config, self.TECHNICIEN, AUTRE))
+
+
+class TestRapportsFigesSansComptes(CasRapportsFiges):
+
+    COMPTES = False
+
+    def test_rien_ne_change(self):
+        for nom in (RAPPORT, REVISION, AUTRE):
+            with self.subTest(nom=nom):
+                self.assertServi(self.document(None, nom), nom)
 
 
 if __name__ == "__main__":

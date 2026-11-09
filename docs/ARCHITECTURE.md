@@ -1948,7 +1948,8 @@ le rapport de <mois> » (avec élision : « d'octobre », « d'août ») ; rien 
 - Onglet « Rapports mensuels » de `#/indicateurs` : liste des rapports figés (ouvrir par
   `App.adaptateur.urlDocument`, imprimer), « Figer le mois de … » (choix du mois), « Recalculer »
   (nouvelle révision). Mode démo : le document reste en mémoire, « Télécharger » (`UI.telecharger`)
-  et export ZIP (documents en mémoire, déjà pris par `App.exporterZip`).
+  et export ZIP (documents en mémoire, déjà pris par `App.exporterZip`). Mode serveur avec les comptes : un
+  rapport figé n'est servi qu'au responsable (T478, D126, §22.5).
 - Écarts retenus (T51 et relecture) : `Rapport.donnees` prend aussi `maintenant` (horodatage « données
   au … ») et `figer(mois, options)` renvoie `{ nom, rapport }` ; le corps du courriel a des fins de
   ligne CRLF (RFC 6068) et ne parle d'aucune pièce jointe ; faits et décisions sur les contrôles et le
@@ -3979,6 +3980,18 @@ Précisions de T152 :
   d'`equipements.csv`, relue à chaque requête) ; envoi des seules photos de demandes. « Ses » demandes : le serveur ne sait
   pas relier une photo à la personne qui l'a prise (`demandeur` est un nom libre) ; le demandeur lit donc toutes les photos
   de demandes.
+- **Rapports mensuels figés** (T478, **décidé** : D126, aucun coût pour le technicien ; écart trouvé par la recette
+  T476) — changement de sécurité : un document cité par le paramètre `rapports_mensuels` de `parametres.csv`
+  (`PARAMETRE_DES_RAPPORTS_FIGES` ; noms séparés par des virgules comme `Rapport.rapportsFiges`, relus à chaque requête,
+  apostrophe de protection et espaces de bord retirés, casse ignorée) n'est servi qu'au responsable :
+  `GET /api/documents/<nom>` répond 403 `acces.document_ferme` au technicien, au demandeur et à l'appareil. Le rapport
+  porte le coût de l'arrêt et les heures d'arrêt par équipement (d'où le coût horaire caché par T473) et le coût de
+  maintenance ; avant T478, le technicien, qui lit `parametres` et donc ces noms, le recevait. Même mécanisme que les
+  documents réservés de T445 (`documents_reserves`, `segment_permis`), hors de leurs tuples provisoires : les vider ne
+  rouvre pas les rapports. Aucun écran du technicien n'ouvre un rapport figé (onglet « Rapports mensuels » de
+  l'écran Indicateurs et tuile de l'accueil au responsable, export ZIP au responsable avec les comptes) : aucun lien
+  n'échoue. Limite : un rapport écrit dont le nom n'a pas pu être ajouté à `rapports_mensuels` (écriture de
+  `parametres` échouée juste après celle du document, `Rapport.figer`) n'est pas réservé.
 - **Réponses provisoires de T445** (questions 2 et 3 du L3, nuit du 08 au 09/11/2026, **à confirmer par Nicolas**) :
   - *Habilitations* : `habilitations` s'écrit par le responsable seul ; le `PUT` et l'ajout du technicien sont refusés
     (403 `acces.table_du_responsable`, comme `parametres`) ; il la lit toujours. Aucun de ses écrans ne l'écrit (boutons
@@ -3992,7 +4005,8 @@ Précisions de T152 :
     compte technicien qui appelle l'API directement peut encore écrire `ordres_travail` et s'affecter un OT sans
     l'habilitation requise ; à l'écran, il n'en a aucun moyen (CS178). Même limite que RG3 et RG4.
   - *Annuler* : vider `TABLES_DU_RESPONSABLE_PROVISOIRES` ou `DOCUMENTS_DU_RESPONSABLE_PROVISOIRES` dans `serveur.py`
-    (seul endroit), puis remettre ce tableau et `tests/test_droits_format4.py`.
+    (seul endroit), puis remettre ce tableau et `tests/test_droits_format4.py` ; les rapports mensuels figés (T478,
+    décidé) restent réservés au responsable.
 - **Sans comptes** : rien ne change (aucune colonne ni ligne retirée, toutes les versions, aucune règle d'écriture).
 
 `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert qu'en portée « ce PC » et en modes dossier

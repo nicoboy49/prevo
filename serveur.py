@@ -6443,6 +6443,12 @@ TABLES_DU_DEMANDEUR = ('localisations', 'equipements', 'demandes', 'compteurs', 
 #        technicien, au demandeur et à l'appareil), colonnes relues à chaque requête (documents_reserves).
 TABLES_DU_RESPONSABLE_PROVISOIRES = ('habilitations',)
 DOCUMENTS_DU_RESPONSABLE_PROVISOIRES = (('habilitations', 'justificatif'), ('contrats_prestataires', 'document'))
+# --- fin des réponses provisoires de T445 ---------------------------------------------------------------------------
+# Rapports mensuels figés (T478, DÉCIDÉ : D126, aucun coût pour le technicien ; écart trouvé par la recette T476), hors
+# des tuples provisoires ci-dessus (les vider ne les rouvre pas) : coût de l'arrêt et heures d'arrêt par équipement,
+# coût de maintenance. Leurs noms sont la valeur de ce paramètre de parametres.csv (séparés par des virgules, comme
+# Rapport.rapportsFiges), relue à chaque requête (documents_reserves) : servis au seul responsable, comme ci-dessus.
+PARAMETRE_DES_RAPPORTS_FIGES = 'rapports_mensuels'
 # Écritures : le demandeur crée des demandes (PUT de demandes.csv en ajout seulement) et la ligne de journal qui va
 # avec ; le technicien écrit tout sauf les tables du responsable, qu'il lit (techniciens sans taux horaire,
 # contrats_prestataires sans montant annuel). Format 4 (T453, DÉCIDÉ : QUESTIONS-L2-L6.md, L4-L6 Q6 ; hors des tuples
@@ -6462,7 +6468,7 @@ MOTIF_PHOTO_DE_DEMANDE = re.compile(PREFIXE_NOM_DOCUMENT + r'photo-[0-9]{8}-[0-9
                                     re.ASCII)
 PHOTOS_DE_DEMANDES = 'photos de demandes'
 DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
-# Documents du technicien : tous, sauf ceux que DOCUMENTS_DU_RESPONSABLE_PROVISOIRES réserve (T445) ; marqueur.
+# Documents du technicien : tous, sauf ceux que documents_reserves réserve au responsable (T445, T478) ; marqueur.
 DOCUMENTS_DU_TECHNICIEN = 'documents_sauf_reserves'
 TOUS = (OUI, OUI, OUI, OUI)
 RESPONSABLE = (NON, NON, NON, OUI)
@@ -6579,16 +6585,34 @@ def documents_des_equipements(config):
     return documents_cites(config, 'equipements', 'document')
 
 
+def rapports_figes(config):
+    """Noms des rapports mensuels figés (T478) : valeur du paramètre PARAMETRE_DES_RAPPORTS_FIGES de parametres.csv,
+    apostrophe de protection retirée (§3.2), découpée aux virgules, espaces de bord ôtés ; vide sans la ligne ou le
+    fichier."""
+    with VERROU_ECRITURE:
+        octets = lire_octets(chemin_table(config, 'parametres'))
+    noms = set()
+    for ligne in dictionnaires_csv(octets, 'parametres'):
+        if ligne.get('cle', '').strip() != PARAMETRE_DES_RAPPORTS_FIGES:
+            continue
+        valeur = ligne.get('valeur', '').strip()
+        noms.update(nom.strip() for nom in (valeur[1:] if valeur.startswith("'") else valeur).split(','))
+    noms.discard('')
+    return noms
+
+
 def documents_reserves(config):
-    """T445 (réponse provisoire Q3) : noms des documents servis au seul responsable, en minuscules (le dossier des
-    documents ne distingue pas la casse sous Windows ni macOS : « JUSTIF.PDF » ouvrirait « justif.pdf »)."""
-    return {nom.lower() for table, colonne in DOCUMENTS_DU_RESPONSABLE_PROVISOIRES
+    """Noms des documents servis au seul responsable, en minuscules (le dossier des documents ne distingue pas la
+    casse sous Windows ni macOS : « JUSTIF.PDF » ouvrirait « justif.pdf ») : ceux des colonnes de
+    DOCUMENTS_DU_RESPONSABLE_PROVISOIRES (T445, réponse provisoire Q3) et les rapports mensuels figés (T478, D126)."""
+    noms = {nom for table, colonne in DOCUMENTS_DU_RESPONSABLE_PROVISOIRES
             for nom in documents_cites(config, table, colonne)}
+    return {nom.lower() for nom in noms | rapports_figes(config)}
 
 
 def segment_permis(config, regle, segment):
     """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin. Un document
-    réservé au responsable (documents_reserves, T445) n'est permis par aucune règle de lecture des autres rôles."""
+    réservé au responsable (documents_reserves : T445, T478) n'est permis par aucune règle de lecture d'un autre rôle."""
     if segment is None:
         return False
     if isinstance(regle, tuple):

@@ -31,8 +31,9 @@ sans coût horaire, trouvés par les données (aucun identifiant écrit en dur) 
 Puis, profil Technicien : ni menu ni adresse Indicateurs, aucune tuile de rapport ; fiches de A, B, C sans la ligne du
 coût ni « non chiffré » ; aucun montant du parcours dans la page. Avec comptes, en plus : equipements reçu avec
 cout_arret_h vide sur chaque ligne (T473 : valeurs vidées, en-tête gardé), dans la page comme dans la réponse du
-serveur ; de même pour le demandeur, à qui le rapport figé est refusé (403). Sans comptes, le serveur ne connaît pas
-les rôles : la page du technicien porte les coûts, l'écran seul les tait (comme en démo, test_parc_cout_arret).
+serveur ; de même pour le demandeur ; le rapport figé par l'écran du responsable est servi à lui seul, refusé (403) au
+technicien et au demandeur (T478). Sans comptes, le serveur ne connaît pas les rôles : la page du technicien porte les
+coûts, l'écran seul les tait (comme en démo, test_parc_cout_arret).
 
 Démo (TestParcoursDemo) : index.html en file://, horloge à la date de référence de la démo (19/10/2026, dates non
 décalées) ; Indicateurs.coutArret de septembre 2026, dernier mois de l'historique, = le calcul Python fait sur
@@ -40,11 +41,10 @@ donnees/demo ; l'équipement du rôle equipement_non_chiffre listé avec ses heu
 une page A4 ; écran Indicateurs ; coût de cet équipement saisi depuis la carte ; vue du technicien (changement de
 profil dans la même page : recharger perdrait la démo).
 
-Écart trouvé (TestRapportFigeAuTechnicien, sans navigateur) : avec comptes, le technicien lit le rapport mensuel figé
-(GET /api/documents/<nom>, nom lu dans parametres.rapports_mensuels, qu'il reçoit) : coût de l'arrêt par équipement
-et heures d'arrêt, d'où le coût horaire que T473 lui cache (et le coût de maintenance, D126). Le refus attendu est un
-test expectedFailure, cerné par un test qui passe (l'écart exact, rien d'autre) ; à trancher par l'orchestrateur
-(serveur.py : documents réservés au responsable).
+Écart trouvé par la recette, corrigé par T478 (TestRapportFigeAuTechnicien, sans navigateur) : avec comptes, le
+technicien lisait le rapport mensuel figé (GET /api/documents/<nom>, nom lu dans parametres.rapports_mensuels, qu'il
+reçoit) : coût de l'arrêt par équipement et heures d'arrêt, d'où le coût horaire que T473 lui cache (et le coût de
+maintenance, D126). serveur.py le réserve désormais au responsable (documents_reserves) : 403 au technicien.
 
 Aucune requête vers une autre adresse que l'application, sauf la lecture de version existante de T305 (CS177).
 Jamais de données réelles : copie temporaire de donnees/demo (serveur) ou démo en mémoire.
@@ -649,7 +649,7 @@ class TestParcoursServeurComptes(CasParcoursServeur):
         self.lancer()
 
     def technicien(self, serveur):
-        """Le compte technicien : la vue, puis ce qu'il reçoit (T473) ; le demandeur, et le rapport figé (403)."""
+        """Le compte technicien : la vue, puis ce qu'il reçoit (T473) ; le demandeur ; le rapport figé (403, T478)."""
         page = self.page_technicien(serveur, COMPTES_DE_TEST["technicien"][4])
         equipements = [self.jeu[cle]["id"] for cle in "ABC"]
         self.vue_du_technicien(page, equipements, MONTANTS)
@@ -672,9 +672,16 @@ class TestParcoursServeurComptes(CasParcoursServeur):
                 self.assertEqual({ligne[position] for ligne in lignes}, {""})
                 for cout in (b"1250.50", b"87.35", b"412.30", b"655.25"):
                     self.assertNotIn(cout, reponse.octets)
-        refus = requete(serveur, "GET", "/api/documents/" + self.nom_du_rapport, cookie=serveur.session("demandeur"))
-        self.assertEqual(refus.statut, 403, refus.octets[:300])
-        self.assertEqual(refus.json()["erreur"], REFUS_DOCUMENT.format(role="demandeur"))
+        # Le rapport figé par l'écran du responsable : servi à lui seul (T478, D126) ; 403 au technicien et au demandeur.
+        adresse = "/api/documents/" + self.nom_du_rapport
+        servi = requete(serveur, "GET", adresse, cookie=serveur.session("responsable"))
+        self.assertEqual((servi.statut, servi.octets),
+                         (200, (self.dossier / "documents" / self.nom_du_rapport).read_bytes()))
+        for role in ("technicien", "demandeur"):
+            with self.subTest(role=role):
+                refus = requete(serveur, "GET", adresse, cookie=serveur.session(role))
+                self.assertEqual(refus.statut, 403, refus.octets[:300])
+                self.assertEqual(refus.json()["erreur"], REFUS_DOCUMENT.format(role=role))
 
 
 # ---------------------------------------------------------------------------
@@ -747,16 +754,16 @@ class TestParcoursDemo(CasRecette):
 
 
 # ---------------------------------------------------------------------------
-# Écart trouvé : le rapport figé, servi au technicien (sans navigateur)
+# Écart trouvé par la recette, corrigé par T478 : le rapport figé, au seul responsable (sans navigateur)
 # ---------------------------------------------------------------------------
 
 class TestRapportFigeAuTechnicien(unittest.TestCase):
-    """Avec comptes, un rapport mensuel figé est un document comme un autre de donnees/documents : la règle des
-    documents du technicien (DOCUMENTS_DU_TECHNICIEN de serveur.py : tous, sauf justificatifs d'habilitation et
-    contrats signés) le lui sert, et il en reçoit le nom (parametres.rapports_mensuels, table qu'il lit). Le rapport
-    porte le coût de l'arrêt par équipement à côté des heures d'arrêt (donc le coût horaire, que T473 lui cache) et le
-    coût de maintenance (D126). Le demandeur, lui, est refusé. Le responsable fige ici comme Rapport.figer : le
-    document (PUT /api/documents), puis son nom dans rapports_mensuels (PUT de parametres)."""
+    """Avec comptes, le technicien reçoit le nom d'un rapport mensuel figé (parametres.rapports_mensuels, table qu'il
+    lit), mais pas le document : le rapport porte le coût de l'arrêt par équipement à côté des heures d'arrêt (donc le
+    coût horaire, que T473 lui cache) et le coût de maintenance (D126). T478 : serveur.py le réserve au responsable
+    (documents_reserves, PARAMETRE_DES_RAPPORTS_FIGES), comme les justificatifs et les contrats ; le demandeur était
+    déjà refusé. Le responsable fige ici comme Rapport.figer : le document (PUT /api/documents), puis son nom dans
+    rapports_mensuels (PUT de parametres). Le détail de la règle : tests/test_cout_arret_serveur.py."""
 
     CONTENU = ("<!doctype html><title>Rapport mensuel de maintenance — septembre 2026</title><p>Coût de l'arrêt : "
                "4 887,50 € ; CP-01 : 5,75 h d'arrêt, 4 887,50 € (recette T476)</p>").encode("utf-8")
@@ -784,25 +791,25 @@ class TestRapportFigeAuTechnicien(unittest.TestCase):
     def lire(self, role):
         return requete(self.serveur, "GET", "/api/documents/" + self.nom, cookie=self.cookies[role])
 
-    @unittest.expectedFailure
     def test_le_technicien_ne_lit_pas_le_rapport_fige(self):
-        """Attendu (D126 prolongé par T473 : aucun coût pour le technicien) : 403. Aujourd'hui : servi (200). Quand
-        serveur.py réservera les rapports figés au responsable, retirer expectedFailure et retourner le test cerné."""
+        """D126 (prolongé par T473 : aucun coût pour le technicien) : 403, le message des documents fermés."""
         reponse = self.lire("technicien")
         self.assertEqual(reponse.statut, 403, reponse.octets[:200])
+        self.assertEqual(reponse.json()["erreur"], REFUS_DOCUMENT.format(role="technicien"))
+        self.assertNotIn(b"887,50", reponse.octets)
 
-    def test_ecart_cerne_rapport_servi_au_technicien_seul_hors_responsable(self):
-        """L'écart exact, rien d'autre : le responsable lit le rapport, le demandeur est refusé (403) ; le technicien
-        reçoit le nom du rapport (parametres) et le document entier (200), avec ses montants."""
+    def test_rapport_fige_au_seul_responsable(self):
+        """Le responsable lit le rapport ; le technicien en reçoit le nom (parametres) et un 403 pour le document,
+        comme le demandeur."""
         self.assertEqual((self.lire("responsable").statut, self.lire("responsable").octets), (200, self.CONTENU))
-        refus = self.lire("demandeur")
-        self.assertEqual(refus.statut, 403, refus.octets[:300])
-        self.assertEqual(refus.json()["erreur"], REFUS_DOCUMENT.format(role="demandeur"))
         parametres = requete(self.serveur, "GET", "/api/csv/parametres", cookie=self.cookies["technicien"])
         self.assertEqual(parametres.statut, 200)
         self.assertIn(self.nom.encode("utf-8"), parametres.octets)
-        servi = self.lire("technicien")
-        self.assertEqual((servi.statut, servi.octets), (200, self.CONTENU))
+        for role in ("technicien", "demandeur"):
+            with self.subTest(role=role):
+                refus = self.lire(role)
+                self.assertEqual(refus.statut, 403, refus.octets[:300])
+                self.assertEqual(refus.json()["erreur"], REFUS_DOCUMENT.format(role=role))
 
 
 if __name__ == "__main__":
