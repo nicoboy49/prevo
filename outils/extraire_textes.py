@@ -53,8 +53,8 @@ EXCEPTIONS = 'outils/exceptions_textes.json'
 # Sections du dictionnaire et domaines (lien domaine → fichiers, partagé avec controler_textes.py)
 # ---------------------------------------------------------------------------------------------------------
 SECTIONS = ('commun', 'schema', 'valeurs', 'socle', 'planning', 'causes', 'dictee', 'mise', 'aide', 'ordres',
-            'demandes', 'parc', 'preventif', 'controles', 'wiki', 'suggestions', 'import', 'magasin',
-            'indicateurs', 'rapport', 'accueil', 'equipe', 'acces', 'connexion', 'poste', 'apropos',
+            'demandes', 'parc', 'preventif', 'controles', 'garanties', 'wiki', 'suggestions', 'import',
+            'magasin', 'indicateurs', 'rapport', 'accueil', 'equipe', 'acces', 'connexion', 'poste', 'apropos',
             'installation', 'porte', 'parametres', 'sauvegardes', 'zip', 'serveur', 'ia')
 # Domaine d'un module js/modules/<préfixe>-….js ou <préfixe>.js : son préfixe, sauf ceux-là.
 MODULES_PARTICULIERS = {'parametres-sauvegardes.js': 'sauvegardes', 'parametres-zip.js': 'zip',

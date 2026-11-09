@@ -2050,6 +2050,11 @@ I18n.ajouter('en', {
 });
 // ==== fin controles ====
 
+// ==== section garanties ====
+I18n.ajouter('en', {
+});
+// ==== fin garanties ====
+
 // ==== section wiki ====
 I18n.ajouter('en', {
   'wiki.actions.confirmer_rejet': 'Confirm rejection',

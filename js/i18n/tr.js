@@ -2052,6 +2052,11 @@ I18n.ajouter('tr', {
 });
 // ==== fin controles ====
 
+// ==== section garanties ====
+I18n.ajouter('tr', {
+});
+// ==== fin garanties ====
+
 // ==== section wiki ====
 I18n.ajouter('tr', {
   'wiki.actions.confirmer_rejet': 'Reddi onayla',

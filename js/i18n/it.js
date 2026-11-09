@@ -2052,6 +2052,11 @@ I18n.ajouter('it', {
 });
 // ==== fin controles ====
 
+// ==== section garanties ====
+I18n.ajouter('it', {
+});
+// ==== fin garanties ====
+
 // ==== section wiki ====
 I18n.ajouter('it', {
   'wiki.actions.confirmer_rejet': 'Conferma lo scarto',

@@ -40,7 +40,8 @@ NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "docs/brief-g
 # (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble. Chantier 2.2 (T410) : cinq
 # fichiers nouveaux, controles-reserves.js et controles-catalogue.js après controles-regles.js,
 # controles-reserves-ecrans.js après controles-ecrans.js, equipe-habilitations.js après equipe-ecrans.js,
-# ordres-habilitations.js après ordres-impression.js.
+# ordres-habilitations.js après ordres-impression.js. Lot L4 (T450) : le module Garanties (garanties-regles.js à
+# garanties-encarts.js) juste après le module Controles (controles-reserves-ecrans.js).
 ORDRE_MODULES = [
     "apropos.js", "mise-a-jour.js", "aide-ecrans-textes.js", "aide-ecrans.js", "acces-textes.js", "connexion-ecrans.js",
     "installation-etapes.js", "installation-ecrans.js", "installation-fiche.js",
@@ -56,6 +57,8 @@ ORDRE_MODULES = [
     "equipe-regles.js", "equipe-ecritures.js", "equipe-ecrans.js", "equipe-habilitations.js", "equipe-acces.js",
     "controles-regles.js", "controles-reserves.js", "controles-catalogue.js", "controles-ecritures.js",
     "controles-ecrans.js", "controles-reserves-ecrans.js",
+    "garanties-regles.js", "garanties-ecritures.js", "garanties-formulaires.js", "garanties-ecrans.js",
+    "garanties-encarts.js",
     "planning-regles.js", "planning-ecritures.js", "planning-ecrans.js",
     "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
     "rapport-contenu.js", "rapport-ecrans.js",
@@ -225,6 +228,24 @@ class TestModules(unittest.TestCase):
             with self.subTest(fichier=fichier.name):
                 self.assertIn("js/modules/" + fichier.name, charges,
                               "fichier orphelin : js/modules/%s n'est pas chargé par index.html" % fichier.name)
+
+    def test_feuille_des_garanties_juste_apres_celle_des_controles(self):
+        # Lot L4 (T450) : une feuille par module, celle des garanties juste après celle des contrôles.
+        feuilles = re.findall(r'<link rel="stylesheet" href="css/modules/([^"]+)">', lire("index.html"))
+        self.assertEqual(feuilles[feuilles.index("controles.css") + 1], "garanties.css")
+
+    def test_chaque_langue_a_les_sections_du_francais(self):
+        # Lot L4 (T450) : chaque langue déclarée a les sections de js/i18n/fr.js, dans le même ordre ; la section
+        # « garanties » (domaine du module Garanties) suit « controles ».
+        def sections(code):
+            return re.findall(r"^// ==== section (\S+) ====$", lire("js/i18n/%s.js" % code), re.MULTILINE)
+        francais = sections("fr")
+        self.assertEqual(francais[francais.index("controles") + 1], "garanties")
+        langues = re.findall(r"^I18n\.declarer\(\{ code: '([^']+)'", lire("js/i18n/langues.js"), re.MULTILINE)
+        self.assertLessEqual({"fr", "en", "tr", "it", "pt-PT"}, set(langues))
+        for code in langues:
+            with self.subTest(langue=code):
+                self.assertEqual(sections(code), francais)
 
     def test_aucun_caractere_invisible_en_clair_dans_les_sources(self):
         # Lot 4 (§17.9) : espaces insécables, fines ou de largeur nulle écrits par leur échappement

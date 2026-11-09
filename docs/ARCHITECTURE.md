@@ -77,7 +77,8 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 `parametres-solo.js` juste après `parametres-codes.js` et `parametres-sauvegardes.js` juste après `parametres-solo.js`
 (§22.11) ; la 2.2 (T410) insère `controles-reserves.js` et `controles-catalogue.js` juste après `controles-regles.js`,
 `controles-reserves-ecrans.js` juste après `controles-ecrans.js`, `equipe-habilitations.js` juste après
-`equipe-ecrans.js` et `ordres-habilitations.js` juste après `ordres-impression.js`, §15.1), `js/app.js` (en dernier).
+`equipe-ecrans.js` et `ordres-habilitations.js` juste après `ordres-impression.js`, §15.1 ; le lot L4 (T450) insère
+les cinq fichiers `garanties-*.js` juste après `controles-reserves-ecrans.js`, §15.1), `js/app.js` (en dernier).
 Langue active (T234, T295) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (le choix du poste, écrit par
 le sélecteur de langue, §24.10) puis « prevo.langue.installation » (la langue de l'installation, §24.11 ; la langue du
 compte viendra plus tard) ; la première des deux déclarée par `js/i18n/langues.js` (sinon le français) est la langue
@@ -1401,6 +1402,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   equipe-regles.js  equipe-ecritures.js  equipe-ecrans.js  equipe-habilitations.js  equipe-acces.js
   controles-regles.js  controles-reserves.js  controles-catalogue.js  controles-ecritures.js  controles-ecrans.js
   controles-reserves-ecrans.js
+  garanties-regles.js  garanties-ecritures.js  garanties-formulaires.js  garanties-ecrans.js  garanties-encarts.js
   planning-regles.js  planning-ecritures.js  planning-ecrans.js
   indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
   rapport-contenu.js  rapport-ecrans.js
@@ -1417,7 +1419,17 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   T418 à T420) après `controles-ecrans.js` ; `equipe-habilitations.js` (fenêtres et carte des habilitations, T432)
   après `equipe-ecrans.js` ; `ordres-habilitations.js` (RG8 à l'écran : bandeau, « passer outre », habilitation
   exigée, T438 à T440) après `ordres-impression.js`. Une fonction d'un fichier chargé plus tard est cherchée au moment
-  de l'appel (`Controles.interne.x(...)`), comme dans `ordres-fiche.js`. Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
+  de l'appel (`Controles.interne.x(...)`), comme dans `ordres-fiche.js`.
+  Chantier 2.2, lot L4 (T450, squelette du module des garanties et contrats de prestataires) : cinq fichiers créés
+  vides juste après le module Controles (après `controles-reserves-ecrans.js`, pour ne pas le couper), dans cet
+  ordre : `garanties-regles.js` (crée l'objet `Garanties` : règles pures, T451 ; son en-tête décrit le découpage),
+  `garanties-ecritures.js` (T452), `garanties-formulaires.js` (T455), `garanties-ecrans.js` (écran
+  « Garanties et contrats », fiches, routes, menu, T456) et `garanties-encarts.js` (carte et badge de la fiche
+  équipement, rappel à la création d'un OT correctif, T457) ; les quatre derniers complètent l'objet par
+  `Object.assign(Garanties, …)`. Feuille `css/modules/garanties.css`, juste après `controles.css` ; domaine et
+  section de textes « garanties », juste après « controles » (§24.3). Un autre module n'appelle `Garanties` que
+  derrière `typeof Garanties !== 'undefined'`.
+  Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
   écran de connexion, §22.4) se charge après `acces-textes.js` (ses textes) et avant `accueil.js` ; feuille
   `css/modules/connexion.css`. Lot 7 (T168) : `installation-etapes.js` (objet `InstallationEtapes`, les formulaires des
   huit étapes), `installation-ecrans.js` (objet `Installation`, l'écran plein de l'assistant, §22.10) et
@@ -4538,8 +4550,8 @@ Script classique, compatible `file://`. Interface :
 - Forme générale : `<section>.<composant ou écran>.<élément>`, en minuscules, avec des points et des soulignés.
   La section d'un fichier est celle de son domaine (préfixe de `js/modules/`, plus le socle). Sections actuelles :
   commun, schema, valeurs, socle, planning, causes, dictee, mise, aide, ordres, demandes, parc, preventif, controles,
-  wiki, suggestions, import, magasin, indicateurs, rapport, accueil, equipe, acces, connexion, poste, apropos,
-  installation, porte, parametres, sauvegardes, zip, serveur, ia.
+  garanties (2.2, lot L4, T450), wiki, suggestions, import, magasin, indicateurs, rapport, accueil, equipe, acces,
+  connexion, poste, apropos, installation, porte, parametres, sauvegardes, zip, serveur, ia.
 - Une clé n'est renommée que si elle est fausse ou trompeuse (le contrôle la signale).
 - `schema.tables.<table>` : nom d'une table ; `schema.<table>.<champ>` : libellé d'un champ (§4).
 - `valeurs.<table>.<champ>.<valeur stockée>` : affichage d'une valeur de liste (D155, voir 24.5).

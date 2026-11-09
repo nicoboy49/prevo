@@ -44,9 +44,9 @@ from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attend
                     preregler_profil, url_fichier)
 
 # Sections de js/i18n/fr.js : recopie du contrat du Lot 2, dans l'ordre.
-SECTIONS = ("commun schema valeurs socle planning causes dictee mise aide ordres demandes parc preventif controles wiki "
-            "suggestions import magasin indicateurs rapport accueil equipe acces connexion poste apropos installation "
-            "porte parametres sauvegardes zip serveur ia").split()
+SECTIONS = ("commun schema valeurs socle planning causes dictee mise aide ordres demandes parc preventif controles "
+            "garanties wiki suggestions import magasin indicateurs rapport accueil equipe acces connexion poste apropos "
+            "installation porte parametres sauvegardes zip serveur ia").split()
 SCRIPTS_I18N = ["js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js", "js/i18n-chargeur.js"]
 SCRIPTS_PORTE = ["/js/i18n.js", "/js/i18n/langues.js", "/js/i18n/fr.js", "/js/i18n-chargeur.js", "/acces/porte.js"]
 FICHIERS_I18N = ["js/i18n.js", "js/i18n-chargeur.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js",
