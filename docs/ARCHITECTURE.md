@@ -3893,9 +3893,12 @@ Précisions de T152 :
   y recopie le prix de l'article ; `contrats_prestataires` sans `montant_annuel` (T453, D126 prolongé, question 6 de
   la conception L4-L6). Les colonnes sont retirées des octets renvoyés (CSV réécrit au format §3.1, en-tête
   compris, nom de colonne reconnu comme à la lecture tolérante) ; `X-Version` est celle du fichier entier, pour que les
-  écritures restent possibles.
+  écritures restent possibles. `equipements.cout_arret_h` (T473, même décision), caché au technicien, au demandeur et à
+  l'appareil : colonne du format 4 dans une table du format 1, elle garde son nom dans l'en-tête et ses valeurs sont
+  vidées (retirée, le navigateur lirait `equipements` au format 3 et ne générerait plus les OT préventifs échus à
+  l'ouverture) ; même remise au `PUT` et même vidage à l'ajout que ci-dessous.
 - **Technicien, écriture** — écart voulu au refus prévu d'abord : un `PUT` du technicien sur une table dont il ne voit
-  pas toutes les colonnes (`articles`, `achats`) n'est pas refusé ; le serveur remet chaque colonne cachée depuis le
+  pas toutes les colonnes (`articles`, `achats`, `equipements`) n'est pas refusé ; le serveur remet chaque colonne cachée depuis le
   fichier actuel, ligne par ligne d'après `id`, vide pour une ligne nouvelle (`remettre_colonnes_cachees`), puis écrit.
   Raison : la sortie d'une pièce réécrit `articles` pour la colonne `stock` (`Magasin.mettreAJourStocks`, dont l'échec
   serait rattrapé sans bruit et laisserait vieillir la colonne). Les prix restent intouchables par le technicien : un

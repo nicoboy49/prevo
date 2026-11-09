@@ -6511,12 +6511,20 @@ ROLES_PAR_ROUTE = {
 
 # Ce qu'un rôle ne reçoit pas d'une table, retiré des octets renvoyés par GET /api/csv/<table> (la version X-Version
 # reste celle du fichier entier). D126 : ni taux horaire ni prix pour le technicien, ni le montant annuel d'un contrat
-# de prestataire (T453, D126 prolongé, L4-L6 Q6) ; à chacun de ses PUT, le serveur remet ces colonnes depuis le fichier
-# actuel (remettre_colonnes_cachees) : il ne peut ni les lire ni les changer (contrats_prestataires : son PUT est en
-# plus refusé, table du responsable ; la colonne resterait protégée si ce refus était levé).
+# de prestataire (T453, D126 prolongé, L4-L6 Q6), ni le coût d'une heure d'arrêt d'un équipement (T473, même décision ;
+# caché aussi au demandeur et à l'appareil, qui lisent equipements : aucun coût pour eux) ; à chacun de ses PUT, le
+# serveur remet ces colonnes depuis le fichier actuel (remettre_colonnes_cachees) : il ne peut ni les lire ni les
+# changer (contrats_prestataires : son PUT est en plus refusé, table du responsable ; la colonne resterait protégée si ce
+# refus était levé). equipements, que le technicien écrit (fiche, état de l'équipement) : cout_arret_h reprend la valeur
+# du fichier ligne par ligne, et un PUT sans la colonne est refusé avant (verifier_contenu_csv : en-tête du schéma).
+# Colonne cachée qu'un format suivant a ajoutée à sa table (PREMIER_FORMAT_DES_COLONNES : cout_arret_h) : son nom reste
+# dans l'en-tête renvoyé et ses valeurs sont vidées, au lieu d'être retirée. Retirée, le navigateur lirait equipements
+# au format 3 (Formats.formatDuFichier), croirait la base pas encore passée au format 4 et ne générerait plus les OT
+# préventifs échus à l'ouverture (passerAuFormatCourant de js/app.js, mode serveur) ; aucune valeur n'est reçue.
 COLONNES_CACHEES_PAR_ROLE = {
     'technicien': {'techniciens': ('taux_horaire',), 'articles': ('prix_unitaire',), 'achats': ('prix_unitaire',),
-                   'contrats_prestataires': ('montant_annuel',)},
+                   'contrats_prestataires': ('montant_annuel',), 'equipements': ('cout_arret_h',)},
+    'demandeur': {'equipements': ('cout_arret_h',)},
 }
 # Lignes retirées : (colonne, valeurs). D114 : ni page Technicien ni page Intervention pour le demandeur.
 LIGNES_CACHEES_PAR_ROLE = {
@@ -6700,7 +6708,8 @@ def forme_comparable(valeur):
 def filtrer_csv_pour(identite, table, octets):
     """Octets de GET /api/csv/<table> pour cette session : sans les colonnes ni les lignes que son rôle ne reçoit pas
     (COLONNES_CACHEES_PAR_ROLE, LIGNES_CACHEES_PAR_ROLE ; en-têtes et valeurs comparés comme Prévo les lit), CSV
-    réécrit au format §3.1 ; inchangés sinon (sans comptes, responsable)."""
+    réécrit au format §3.1 ; inchangés sinon (sans comptes, responsable). Colonne cachée d'un format suivant
+    (PREMIER_FORMAT_DES_COLONNES, T473 : cout_arret_h) : nom gardé dans l'en-tête, valeurs vidées."""
     if identite is None:
         return octets
     role = role_effectif(identite)
@@ -6708,13 +6717,17 @@ def filtrer_csv_pour(identite, table, octets):
     lignes_cachees = LIGNES_CACHEES_PAR_ROLE.get(role, {}).get(table)
     if not cachees and not lignes_cachees:
         return octets
+    videes = cachees & {cle_entete(colonne) for colonne in PREMIER_FORMAT_DES_COLONNES.get(table, {})}
     entete, lignes = lire_tableau(table, octets)
     cles = [cle_entete(nom) for nom in entete]
     if lignes_cachees and cle_entete(lignes_cachees[0]) in cles:
         position = cles.index(cle_entete(lignes_cachees[0]))
         refusees = {forme_comparable(valeur) for valeur in lignes_cachees[1]}
         lignes = [ligne for ligne in lignes if position >= len(ligne) or forme_comparable(ligne[position]) not in refusees]
-    retirees = {position for position, cle in enumerate(cles) if cle in cachees}
+    a_vider = {position for position, cle in enumerate(cles) if cle in videes}
+    if a_vider:
+        lignes = [['' if position in a_vider else cellule for position, cellule in enumerate(ligne)] for ligne in lignes]
+    retirees = {position for position, cle in enumerate(cles) if cle in cachees and cle not in videes}
     if retirees:
         entete = [nom for position, nom in enumerate(entete) if position not in retirees]
         lignes = [[cellule for position, cellule in enumerate(ligne) if position not in retirees] for ligne in lignes]
@@ -6733,8 +6746,9 @@ def valeurs_actuelles_par_id(table, octets_actuels, colonnes):
 
 
 def remettre_colonnes_cachees(table, octets_recus, octets_actuels, colonnes):
-    """PUT d'une table dont le rôle ne reçoit pas toutes les colonnes (technicien : articles, achats ; §22.5, écart
-    voulu au refus : la sortie d'une pièce réécrit articles pour la colonne stock). Chaque colonne cachée reprend la
+    """PUT d'une table dont le rôle ne reçoit pas toutes les colonnes (technicien : articles, achats, equipements ;
+    §22.5, écart voulu au refus : la sortie d'une pièce réécrit articles pour la colonne stock, la fiche et l'état d'un
+    équipement réécrivent equipements sans toucher à cout_arret_h, T473). Chaque colonne cachée reprend la
     valeur du fichier actuel, ligne par ligne d'après « id » ; vide pour une ligne nouvelle. Rend les octets à écrire."""
     entete, lignes = lire_tableau(table, octets_recus)
     cles = [cle_entete(nom) for nom in entete]

@@ -10,6 +10,7 @@ Ce qui est vérifié :
     technicien     ni taux_horaire (techniciens) ni prix_unitaire (articles, achats) dans les octets reçus, en-tête
                    compris, X-Version du fichier entier ; à l'écriture, prix remis depuis le fichier (gardés, prix
                    forgé ignoré, ligne nouvelle sans prix) et colonne stock bien écrite ; ajout : colonne vidée ;
+                   equipements reçu avec cout_arret_h vidé, nom gardé dans l'en-tête (T473) ;
     demandeur      liste fermée (techniciens.csv jamais reçu), /api/versions réduit à ses tables, wiki_pages sans pages
                    Technicien ni Intervention (D114) ; demandes en ajout seulement (ajout permis ; modification,
                    suppression, décision, numéro pris refusés ; version périmée toujours 409 ; demande récrite par
@@ -628,9 +629,18 @@ class TestTechnicien(unittest.TestCase):
                 self.assertEqual(entete_recu, entete[:position] + entete[position + 1:])
                 self.assertEqual(lignes_recues, [ligne[:position] + ligne[position + 1:] for ligne in lignes])
                 self.assertEqual(self.lire(table, "responsable").octets, disque)        # le responsable : tout
-        for table in ("ordres_travail", "equipements", "parametres", "mouvements_stock"):
+        for table in ("ordres_travail", "parametres", "mouvements_stock"):
             with self.subTest(table=table):
                 self.assertEqual(self.lire(table).octets, (self.serveur.dossier / (table + ".csv")).read_bytes())
+        # equipements : cout_arret_h gardé dans l'en-tête, valeurs vidées (T473, tests/test_cout_arret_serveur.py).
+        disque = (self.serveur.dossier / "equipements.csv").read_bytes()
+        entete, lignes = lire_tableau(disque)
+        position = entete.index("cout_arret_h")
+        self.assertTrue(any(ligne[position] for ligne in lignes))               # la démo chiffre des équipements
+        recu = self.lire("equipements")
+        self.assertEqual(recu.entetes["x-version"], version_de(disque))
+        self.assertEqual(lire_tableau(recu.octets), (entete, [ligne[:position] + [""] + ligne[position + 1:]
+                                                              for ligne in lignes]))
 
     def test_prix_remis_a_l_ecriture_ligne_nouvelle_sans_prix_et_stock_ecrit(self):
         chemin = self.serveur.dossier / "articles.csv"
