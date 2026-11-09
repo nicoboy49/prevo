@@ -6181,6 +6181,11 @@ ORDRE_DES_ROLES = ('demandeur', 'appareil', 'technicien', 'responsable')
 # (accueil, Signaler, demandes, parc, fiche d'équipement avec ses compteurs et relevés, wiki, Ce poste).
 TABLES_DU_DEMANDEUR = ('localisations', 'equipements', 'demandes', 'compteurs', 'releves', 'codes_defaillance',
                        'parametres', 'wiki_pages')
+# Rapports mensuels figés (correctif 2.1.1 ; D126 : aucun coût pour le technicien) : le rapport porte le coût de
+# maintenance du mois (et, au-delà d'un seuil, le coût sur 12 mois et la valeur de remplacement). Leurs noms sont la
+# valeur de ce paramètre de parametres.csv (séparés par des virgules, comme Rapport.rapportsFiges), relue à chaque
+# requête (documents_reserves) : avec les comptes, servis au seul responsable.
+PARAMETRE_DES_RAPPORTS_FIGES = 'rapports_mensuels'
 # Écritures : le demandeur crée des demandes (PUT de demandes.csv en ajout seulement) et la ligne de journal qui va
 # avec ; le technicien écrit tout sauf ces trois tables, qu'il lit (techniciens sans taux horaire).
 TABLES_DU_DEMANDEUR_EN_ECRITURE = ('demandes',)
@@ -6195,6 +6200,8 @@ MOTIF_PHOTO_DE_DEMANDE = re.compile(PREFIXE_NOM_DOCUMENT + r'photo-[0-9]{8}-[0-9
                                     re.ASCII)
 PHOTOS_DE_DEMANDES = 'photos de demandes'
 DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
+# Documents du technicien : tous, sauf ceux que documents_reserves réserve au responsable (correctif 2.1.1) ; marqueur.
+DOCUMENTS_DU_TECHNICIEN = 'documents_sauf_reserves'
 TOUS = (OUI, OUI, OUI, OUI)
 RESPONSABLE = (NON, NON, NON, OUI)
 INTERVENANTS = (NON, NON, OUI, OUI)     # technicien et responsable (l'IA : arbitrage de Nicolas du 2026-10-28)
@@ -6228,7 +6235,7 @@ ROLES_PAR_ROUTE = {
                              TABLES_DU_TECHNICIEN_EN_ECRITURE, OUI),
     ('POST', 'csv/<table>/ajout'): (TABLES_DU_DEMANDEUR_EN_AJOUT, TABLES_DU_DEMANDEUR_EN_AJOUT,
                                     TABLES_DU_TECHNICIEN_EN_ECRITURE, OUI),
-    ('GET', 'documents/<nom>'): (DOCUMENTS_DU_DEMANDEUR, DOCUMENTS_DU_DEMANDEUR, OUI, OUI),
+    ('GET', 'documents/<nom>'): (DOCUMENTS_DU_DEMANDEUR, DOCUMENTS_DU_DEMANDEUR, DOCUMENTS_DU_TECHNICIEN, OUI),
     ('PUT', 'documents/<nom>'): (PHOTOS_DE_DEMANDES, PHOTOS_DE_DEMANDES, OUI, OUI),
     ('POST', 'sauvegarde'): RESPONSABLE,
     ('POST', 'sauvegarde/tester'): RESPONSABLE,
@@ -6293,12 +6300,41 @@ def documents_des_equipements(config):
     return noms
 
 
+def rapports_figes(config):
+    """Noms des rapports mensuels figés (correctif 2.1.1) : valeur du paramètre PARAMETRE_DES_RAPPORTS_FIGES de
+    parametres.csv, apostrophe de protection retirée (§3.2), découpée aux virgules, espaces de bord ôtés ; vide sans
+    la ligne ou le fichier."""
+    with VERROU_ECRITURE:
+        octets = lire_octets(chemin_table(config, 'parametres'))
+    noms = set()
+    for ligne in dictionnaires_csv(octets, 'parametres'):
+        if ligne.get('cle', '').strip() != PARAMETRE_DES_RAPPORTS_FIGES:
+            continue
+        valeur = ligne.get('valeur', '').strip()
+        noms.update(nom.strip() for nom in (valeur[1:] if valeur.startswith("'") else valeur).split(','))
+    noms.discard('')
+    return noms
+
+
+def documents_reserves(config):
+    """Noms des documents servis au seul responsable, en minuscules (le dossier des documents ne distingue pas la
+    casse sous Windows ni macOS : « RAPPORT.HTML » ouvrirait « rapport.html ») : les rapports mensuels figés
+    (correctif 2.1.1, D126)."""
+    return {nom.lower() for nom in rapports_figes(config)}
+
+
 def segment_permis(config, regle, segment):
-    """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin."""
+    """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin. Un document
+    réservé au responsable (documents_reserves, correctif 2.1.1) n'est permis par aucune règle de lecture d'un autre
+    rôle."""
     if segment is None:
         return False
     if isinstance(regle, tuple):
         return segment in regle
+    if regle in (DOCUMENTS_DU_TECHNICIEN, DOCUMENTS_DU_DEMANDEUR) and segment.lower() in documents_reserves(config):
+        return False
+    if regle == DOCUMENTS_DU_TECHNICIEN:
+        return True
     if regle in (PHOTOS_DE_DEMANDES, DOCUMENTS_DU_DEMANDEUR) and MOTIF_PHOTO_DE_DEMANDE.fullmatch(segment):
         return True
     return regle == DOCUMENTS_DU_DEMANDEUR and segment in documents_des_equipements(config)

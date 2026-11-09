@@ -3670,7 +3670,7 @@ ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa ligne
 | `GET /api/csv/<table>` | tables du demandeur | tables du demandeur | toutes (colonnes retirées) | toutes |
 | `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
 | `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
-| `GET /api/documents/<nom>` | photos de demandes, documents des équipements | photos de demandes, documents des équipements | oui | oui |
+| `GET /api/documents/<nom>` | photos de demandes, documents des équipements (sauf rapports mensuels figés) | photos de demandes, documents des équipements (sauf rapports mensuels figés) | oui (sauf rapports mensuels figés) | oui |
 | `PUT /api/documents/<nom>` | photos de demandes | photos de demandes | oui | oui |
 | `POST /api/sauvegarde` | non | non | non | oui |
 | `POST /api/sauvegarde/tester` | non | non | non | oui |
@@ -3724,6 +3724,17 @@ Précisions de T152 :
   d'`equipements.csv`, relue à chaque requête) ; envoi des seules photos de demandes. « Ses » demandes : le serveur ne sait
   pas relier une photo à la personne qui l'a prise (`demandeur` est un nom libre) ; le demandeur lit donc toutes les photos
   de demandes.
+- **Rapports mensuels figés** (correctif 2.1.1 ; D126 : ni prix ni coût pour le technicien) : un document cité par le
+  paramètre `rapports_mensuels` de `parametres.csv` (`PARAMETRE_DES_RAPPORTS_FIGES` ; noms séparés par des virgules
+  comme `Rapport.rapportsFiges`, relus à chaque requête par `rapports_figes`, apostrophe de protection et espaces de
+  bord retirés, casse ignorée par `documents_reserves`) n'est servi qu'au responsable : `GET /api/documents/<nom>`
+  répond 403 `acces.document_ferme` au technicien (règle `DOCUMENTS_DU_TECHNICIEN` : tous les documents sauf ceux-là),
+  au demandeur et à l'appareil (`segment_permis`). Le rapport porte le coût de maintenance du mois et, au-delà du seuil,
+  le coût sur 12 mois et la valeur de remplacement ; jusqu'à la 2.1.0, le technicien, qui lit `parametres` et donc ces
+  noms, le recevait. Aucun écran du technicien n'ouvre un rapport figé (onglet « Rapports mensuels » des Indicateurs et
+  tuile de l'accueil au responsable, export ZIP au responsable avec les comptes). Limite : un rapport écrit dont le nom
+  n'a pas pu être ajouté à `rapports_mensuels` (écriture de `parametres` échouée juste après celle du document,
+  `Rapport.figer`) n'est pas réservé. Test : `tests/test_rapports_figes_serveur.py`.
 - **Sans comptes** : rien ne change (aucune colonne ni ligne retirée, toutes les versions, aucune règle d'écriture).
 
 `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert qu'en portée « ce PC » et en modes dossier
