@@ -67,6 +67,13 @@
 .controles-reserves-levees { margin-top: .6rem; }
 .controles-reserves-levees summary { cursor: pointer; color: var(--texte-bleu); min-height: 32px; display: flex; align-items: center; }
 .controles-reserves-levees[open] summary { margin-bottom: .5rem; }
+/* T419 : boutons du responsable, rappel de l'OT clôturé, fenêtres lever, modifier, ajouter */
+.controles-reserves .entete-carte .btn { flex: 0 0 auto; }
+.controles-reserve-actions { margin-top: .1rem; }
+.controles-reserve-rappel { display: flex; gap: .4rem; align-items: flex-start; font-size: .9375rem; color: var(--texte-ambre); overflow-wrap: anywhere; }
+.controles-reserve-rappel .icone { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; }
+.controles-rappel-reserve { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.controles-rappel-texte { margin: 0; padding: .4rem .7rem; border-left: 3px solid var(--trait); white-space: pre-line; overflow-wrap: anywhere; }
 .controles-fenetre .encadre { margin: 0; }
 .controles-fenetre input[type=file] { max-width: 100%; }
 .parc-controles .entete-carte .btn { flex: 0 0 auto; }
@@ -101,6 +108,8 @@
   .controles-reserves-levees summary { min-height: var(--tactile); }
   .controles-reserve-ot a { min-height: 48px; display: inline-flex; align-items: center; }
   .controles-fiche .actions .btn, .parc-controles .entete-carte .btn { flex: 1 1 100%; }
+  .controles-fiche .controles-reserve-actions .btn { flex: 1 1 0; }
+  .controles-reserves .entete-carte .btn { flex: 1 1 100%; }
   .controles-catalogue-liens a { min-height: 48px; display: inline-flex; align-items: center; }
   .controles-mise-a-jour .btn { flex: 1 1 100%; }
   .parc-controles .parc-gamme-tete > a { min-height: 48px; display: inline-flex; align-items: center; }

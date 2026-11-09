@@ -3,7 +3,9 @@
 // - T418 : la carte « Réserves » de la fiche (Controles.interne.carteReserves), les champs des réserves de la
 //   fenêtre « Enregistrer le contrôle réalisé » (champsReservesRealisation) et les entrées du journal des réserves
 //   pour l'historique de la fiche (entreesJournalReserves, marqueurs traduits à l'affichage, D156) ;
-// - T419 : les fenêtres « Lever la réserve », « Modifier la réserve », « Ajouter une réserve » ;
+// - T419 : les boutons de la carte (« Lever », « Modifier » par réserve ouverte, « Ajouter une réserve »), le rappel
+//   « L'OT … est clôturé » et les fenêtres « Lever la réserve », « Modifier la réserve », « Ajouter une réserve »
+//   (ouvrirLeveeReserve, ouvrirModificationReserve, ouvrirAjoutReserve) ;
 // - T420 : « Créer un OT » depuis une réserve (#/ot/nouveau pré-rempli ; rien n'est créé sans « Créer »).
 // Profils : le responsable écrit ; le technicien lit (aucun bouton d'écriture rendu) ; le demandeur n'a pas accès.
 // Chargé juste après controles-ecrans.js. Complète l'objet Controles ; la fiche (controles-ecrans.js) appelle ce
@@ -12,9 +14,12 @@
 Object.assign(Controles, (() => {
 
   // Règles de controles-regles.js et controles-reserves.js (chargés avant).
-  const { texte, dateIso, DELAI_LEVEE_PAR_DEFAUT_JOURS, texteCourtReserve } = Controles.interne;
+  const { texte, dateIso, DELAI_LEVEE_PAR_DEFAUT_JOURS, texteCourtReserve, verifierLeveeReserve,
+    verifierModificationReserve, verifierAjoutReserves } = Controles.interne;
   const { reservesDuControle, reservesOuvertes, reserveLevee, etatReserve, lignesDeReserves } = Controles;
   const [EN_RETARD, A_LEVER, LEVEE] = Controles.STATUTS_RESERVE;
+  // Statuts d'un OT clôturé (valeurs stockées, D155) : son OT clôturé rappelle de lever la réserve (§3.4).
+  const STATUTS_OT_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
 
   // ===========================================================================================
   // 1. Carte « Réserves » de la fiche (technicien et responsable)
@@ -62,8 +67,27 @@ Object.assign(Controles, (() => {
     return UI.html`<p class="controles-reserve-commentaire">${I18n.t('controles.carte_reserves.ce_qui_a_ete_fait', { commentaire: affiche })}</p>`;
   }
 
-  /** Une réserve : texte ; badge ; gravité s'il y en a une ; échéance (ouverte) ; OT lié ; commentaire de levée. */
-  function elementReserve(reserve, jour) {
+  /** OT lié à une réserve OUVERTE et clôturé (techniquement ou administrativement), sinon null. */
+  function otLieCloture(reserve) {
+    const otId = texte(reserve.ot_id);
+    if (!otId || reserveLevee(reserve)) return null;
+    const ot = Donnees.trouver('ordres_travail', otId);
+    return ot && STATUTS_OT_CLOTURES.includes(texte(ot.statut)) ? ot : null;
+  }
+
+  /** Responsable, réserve ouverte : rappel « L'OT … est clôturé : levez la réserve si le travail l'a corrigée. »
+   *  (OT lié clôturé), puis « Lever » et « Modifier ». */
+  function actionsReserve(reserve) {
+    const ot = otLieCloture(reserve);
+    return UI.html`${ot ? UI.html`<p class="controles-reserve-rappel" role="note">${UI.icone('alerte')}<span>${I18n.t('controles.carte_reserves.rappel_ot_cloture', { otId: ot.id })}</span></p>` : ''}
+      <div class="actions controles-reserve-actions">
+        <button type="button" class="btn btn-secondaire" data-action="lever">${UI.icone('valider')}${I18n.t('controles.carte_reserves.lever')}</button>
+        <button type="button" class="btn btn-fantome" data-action="modifier">${I18n.t('commun.bouton.modifier')}</button></div>`;
+  }
+
+  /** Une réserve : texte ; badge ; gravité s'il y en a une ; échéance (ouverte) ; OT lié ; commentaire de levée ;
+   *  responsable et réserve ouverte : rappel de l'OT clôturé et boutons (actionsReserve). */
+  function elementReserve(reserve, jour, responsable) {
     const etatCalcule = etatReserve(reserve, jour);
     const levee = etatCalcule.statut === LEVEE;
     const gravite = texte(reserve.gravite);
@@ -73,12 +97,13 @@ Object.assign(Controles, (() => {
         ${gravite ? UI.html`<span class="controles-reserve-gravite">${I18n.t('controles.carte_reserves.gravite', { gravite: Schema.libelleValeur('reserves_controle', 'gravite', gravite) })}</span>` : ''}
         ${levee ? '' : UI.html`<span class="controles-reserve-echeance">${texteEcheance(etatCalcule)}</span>`}
         ${otLie(reserve)}</p>
-      ${levee ? commentaireLevee(reserve) : ''}</li>`;
+      ${levee ? commentaireLevee(reserve) : ''}
+      ${!levee && responsable ? actionsReserve(reserve) : ''}</li>`;
   }
 
   /** Un groupe par réalisation : « Contrôle du 12/11/2025 — 2 réserves », les ouvertes, puis les levées repliées
    *  sous « Voir les réserves levées (1) ». */
-  function groupeReserves(groupe, jour) {
+  function groupeReserves(groupe, jour, responsable) {
     const n = groupe.reserves.length;
     const ouvertes = groupe.reserves.filter((reserve) => !reserveLevee(reserve));
     const levees = groupe.reserves.filter(reserveLevee);
@@ -87,31 +112,46 @@ Object.assign(Controles, (() => {
       : I18n.t('controles.carte_reserves.groupe_sans_date', { n });
     return UI.html`<section class="controles-reserves-groupe" data-date-controle="${groupe.date_controle}">
       <h3>${titre}</h3>
-      ${ouvertes.length ? UI.html`<ul class="controles-reserves-liste">${ouvertes.map((reserve) => elementReserve(reserve, jour))}</ul>` : ''}
+      ${ouvertes.length ? UI.html`<ul class="controles-reserves-liste">${ouvertes.map((reserve) => elementReserve(reserve, jour, responsable))}</ul>` : ''}
       ${levees.length ? UI.html`<details class="controles-reserves-levees"><summary>${I18n.t('controles.carte_reserves.voir_levees', { n: levees.length })}</summary>
-        <ul class="controles-reserves-liste">${levees.map((reserve) => elementReserve(reserve, jour))}</ul></details>` : ''}
+        <ul class="controles-reserves-liste">${levees.map((reserve) => elementReserve(reserve, jour, responsable))}</ul></details>` : ''}
     </section>`;
   }
 
   /**
    * Carte « Réserves » d'un contrôle (élément DOM) : titre « Réserves (5, dont 2 à lever) » (« Réserves (3, toutes
    * levées) »), un groupe par réalisation, la plus récente d'abord (Controles.reservesDuControle) ; carte vide :
-   * « Aucune réserve relevée. ». Lecture seule (technicien et responsable) : les boutons viendront avec les
-   * fenêtres de levée et de correction (T419, T420).
+   * « Aucune réserve relevée. ». Le technicien la lit seulement ; le responsable a en plus « Ajouter une réserve »
+   * (en-tête) et, par réserve ouverte, « Lever » et « Modifier » (fenêtres du §4 ; T420 y ajoutera « Créer un OT »).
    */
   function carteReserves(controle) {
     const jour = Donnees.aujourdhui();
+    const responsable = App.estResponsable();
     const groupes = reservesDuControle(controle.id);
     const total = groupes.reduce((somme, groupe) => somme + groupe.reserves.length, 0);
     const ouvertes = reservesOuvertes(controle.id).length;
     let titre = I18n.t('controles.carte_reserves.titre_vide');
     if (total && ouvertes) titre = I18n.t('controles.carte_reserves.titre', { n: total, ouvertes });
     else if (total) titre = I18n.t('controles.carte_reserves.titre_toutes_levees', { n: total });
-    return UI.element(UI.html`<article class="carte controles-reserves" data-controle="${controle.id}">
-      <h2>${titre}</h2>
-      ${total ? groupes.map((groupe) => groupeReserves(groupe, jour))
+    const carte = UI.element(UI.html`<article class="carte controles-reserves" data-controle="${controle.id}">
+      <div class="entete-carte"><h2>${titre}</h2>
+        ${responsable ? UI.html`<button type="button" class="btn btn-secondaire" data-action="ajouter">${UI.icone('ajouter')}${I18n.t('controles.carte_reserves.ajouter_reserve')}</button>` : ''}</div>
+      ${total ? groupes.map((groupe) => groupeReserves(groupe, jour, responsable))
     : UI.html`<p class="muted controles-reserves-vide">${I18n.t('controles.carte_reserves.aucune')}</p>`}
     </article>`);
+    if (responsable) carte.addEventListener('click', (evenement) => brancherBouton(evenement, controle.id));
+    return carte;
+  }
+
+  /** Clic dans la carte (responsable) : « Ajouter une réserve », « Lever », « Modifier » ouvrent leur fenêtre. */
+  function brancherBouton(evenement, controleId) {
+    const bouton = evenement.target.closest('button[data-action]');
+    if (!bouton) return;
+    const element = bouton.closest('.controles-reserve');
+    const reserveId = element ? element.dataset.reserve : '';
+    if (bouton.dataset.action === 'ajouter') ouvrirAjoutReserve(controleId);
+    else if (bouton.dataset.action === 'lever') ouvrirLeveeReserve(reserveId);
+    else if (bouton.dataset.action === 'modifier') ouvrirModificationReserve(reserveId);
   }
 
   /** Nombre de réserves relevées à la dernière réalisation (carte « Dernier contrôle ») : celles dont la date du
@@ -216,9 +256,158 @@ Object.assign(Controles, (() => {
     }));
   }
 
-  // Outils prêtés à la fiche (controles-ecrans.js), cherchés au moment de l'appel.
+  // ===========================================================================================
+  // 4. Fenêtres « Lever la réserve », « Modifier la réserve », « Ajouter une réserve » (responsable)
+  // ===========================================================================================
+  // Chaque fenêtre part de la ligne fraîche (un autre poste a pu écrire), montre les erreurs sous les champs avant
+  // d'écrire (Controles.interne.verifier… : les règles mêmes de l'écriture, rien n'est écrit sur un refus), écrit par
+  // Controles.leverReserve, modifierReserve ou ajouterReserves (refus refaits sur la ligne fraîche), puis toast et
+  // fiche redessinée (carte, statut, historique). Rend true si l'écriture est faite.
+
+  /** La réserve d'identifiant `reserveId` telle qu'en mémoire, ou null. */
+  function reserveFraiche(reserveId) {
+    const id = texte(reserveId);
+    return (id && Donnees.trouver('reserves_controle', id)) || null;
+  }
+
+  async function apresEcriture(message) {
+    App.marquerSaisie(false);
+    UI.toast(message, 'succes');
+    await App.reafficher();
+  }
+
+  /** En tête de fenêtre : « Relevée au contrôle du 12/11/2025 » et, si `avecTexte`, le texte de la réserve. */
+  function rappelReserve(reserve, avecTexte) {
+    const date = dateIso(reserve.date_controle);
+    return UI.html`<div class="controles-rappel-reserve">
+      <p class="muted">${date ? I18n.t('controles.rappel_reserve.relevee_le', { date: UI.dateFr(date) }) : I18n.t('controles.rappel_reserve.date_inconnue')}</p>
+      ${avecTexte ? UI.html`<blockquote class="controles-rappel-texte">${reserve.texte}</blockquote>` : ''}</div>`;
+  }
+
+  /** OT proposés à la levée : ceux de l'équipement du contrôle, les plus récents d'abord (« OT-2026-0042 — titre
+   *  (Clôturé techniquement) »). */
+  function optionsOt(reserve) {
+    const controle = Donnees.trouver('controles_reglementaires', texte(reserve.controle_id));
+    const equipementId = controle ? texte(controle.equipement_id) : '';
+    if (!equipementId) return [];
+    return Donnees.lignes('ordres_travail')
+      .filter((ot) => texte(ot.equipement_id) === equipementId)
+      .sort((a, b) => texte(b.date_creation).localeCompare(texte(a.date_creation))
+        || texte(b.id).localeCompare(texte(a.id), 'fr', { numeric: true }))
+      .map((ot) => ({ valeur: texte(ot.id), libelle: I18n.t('controles.ouvrir_levee_reserve.option_ot',
+        { otId: texte(ot.id), titre: texte(ot.titre), statut: Schema.libelleValeur('ordres_travail', 'statut', texte(ot.statut)) }) }));
+  }
+
+  /**
+   * Levée proposée : { date, commentaire, ot_id } — aujourd'hui, rien, l'OT lié. OT lié clôturé (§3.4) : la date de
+   * fin de l'OT (ou de sa clôture technique) quand elle est acceptable (ni future, ni avant le contrôle ; sinon
+   * aujourd'hui) et « Levée par l'OT OT-… », écrit dans la langue de l'installation (texte des données, D156).
+   */
+  function leveeProposee(reserve, jour) {
+    const proposee = { date: jour, commentaire: '', ot_id: texte(reserve.ot_id) };
+    const ot = otLieCloture(reserve);
+    if (!ot) return proposee;
+    const fin = dateIso(ot.date_fin) || dateIso(ot.date_cloture_tech);
+    const dateControle = dateIso(reserve.date_controle);
+    if (fin && fin <= jour && (!dateControle || fin >= dateControle)) proposee.date = fin;
+    proposee.commentaire = I18n.donnees('controles.ouvrir_levee_reserve.commentaire_par_ot', { otId: texte(ot.id) });
+    return proposee;
+  }
+
+  /**
+   * Fenêtre « Lever la réserve » : rappel du texte et de la date du contrôle ; « Levée le » (obligatoire, défaut
+   * aujourd'hui, ni future ni avant le contrôle) ; « Ce qui a été fait » (obligatoire) ; « OT lié (facultatif) »
+   * parmi les OT de l'équipement (défaut : l'OT lié). OT lié clôturé : pré-remplie (leveeProposee). Toast « Réserve
+   * levée. » ; les autres réserves du contrôle ne changent pas.
+   */
+  async function ouvrirLeveeReserve(reserveId) {
+    const reserve = reserveFraiche(reserveId);
+    if (!reserve) return false;
+    const jour = Donnees.aujourdhui();
+    const proposee = leveeProposee(reserve, jour);
+    const dateControle = dateIso(reserve.date_controle);
+    const fait = await UI.fenetreAction({ classe: 'controles-fenetre controles-fenetre-reserve',
+      titre: I18n.t('controles.ouvrir_levee_reserve.lever_reserve'),
+      introduction: rappelReserve(reserve, true),
+      champs: [
+        UI.champ({ nom: 'date', type: 'date', libelle: I18n.t('controles.ouvrir_levee_reserve.levee_le') }, proposee.date,
+          { obligatoire: true, attributs: dateControle ? { min: dateControle, max: jour } : { max: jour } }),
+        UI.champ({ nom: 'commentaire', type: 'texte_long', libelle: I18n.t('controles.ouvrir_levee_reserve.ce_qui_a_ete_fait') },
+          proposee.commentaire, { obligatoire: true }),
+        UI.champ({ nom: 'ot_id', type: 'ref', libelle: I18n.t('controles.ouvrir_levee_reserve.ot_lie') }, proposee.ot_id,
+          { liste: optionsOt(reserve) }),
+      ],
+      libelleValider: I18n.t('controles.ouvrir_levee_reserve.lever_reserve'),
+      verifier: (valeurs) => verifierLeveeReserve(reserveFraiche(reserve.id) || reserve, valeurs),
+      action: (valeurs) => Controles.leverReserve(reserve.id, valeurs),
+    });
+    if (fait) await apresEcriture(I18n.t('controles.ouvrir_levee_reserve.reserve_levee'));
+    return fait;
+  }
+
+  /** Fenêtre « Modifier la réserve » (réserve ouverte : une levée est un fait) : texte, gravité, échéance (vide :
+   *  30 jours après le contrôle). Toast « Réserve modifiée. » (rien de changé : « Aucune modification… »). */
+  async function ouvrirModificationReserve(reserveId) {
+    const reserve = reserveFraiche(reserveId);
+    if (!reserve) return false;
+    const dateControle = dateIso(reserve.date_controle);
+    let changes = [];
+    const fait = await UI.fenetreAction({ classe: 'controles-fenetre controles-fenetre-reserve',
+      titre: I18n.t('controles.ouvrir_modification_reserve.modifier_reserve'),
+      introduction: rappelReserve(reserve, false),
+      champs: [
+        UI.champ(Schema.champ('reserves_controle', 'texte'), texte(reserve.texte)),
+        UI.champ(Schema.champ('reserves_controle', 'gravite'), texte(reserve.gravite)),
+        UI.champ(Schema.champ('reserves_controle', 'echeance_levee'), dateIso(reserve.echeance_levee), {
+          aide: I18n.t('controles.ouvrir_modification_reserve.echeance_aide', { jours: DELAI_LEVEE_PAR_DEFAUT_JOURS }),
+          attributs: dateControle ? { min: dateControle } : {} }),
+      ],
+      libelleValider: I18n.t('commun.bouton.enregistrer'),
+      verifier: (valeurs) => verifierModificationReserve(reserveFraiche(reserve.id) || reserve, valeurs),
+      async action(valeurs) { changes = await Controles.modifierReserve(reserve.id, valeurs); },
+    });
+    if (fait) {
+      await apresEcriture(changes.length ? I18n.t('controles.ouvrir_modification_reserve.reserve_modifiee')
+        : I18n.t('commun.message.aucune_modification'));
+    }
+    return fait;
+  }
+
+  /** Fenêtre « Ajouter une réserve » (une réserve oubliée à la saisie) : date du contrôle (défaut : le dernier),
+   *  texte (une ligne par réserve), gravité, échéance. Les réserves déjà enregistrées ne changent pas. Toast
+   *  « Réserve ajoutée. » / « 2 réserves ajoutées. ». */
+  async function ouvrirAjoutReserve(controleId) {
+    const controle = Donnees.trouver('controles_reglementaires', texte(controleId));
+    if (!controle) return false;
+    const jour = Donnees.aujourdhui();
+    let creees = [];
+    const fait = await UI.fenetreAction({ classe: 'controles-fenetre controles-fenetre-reserve',
+      titre: I18n.t('controles.carte_reserves.ajouter_reserve'),
+      introduction: UI.html`<p>${I18n.t('controles.ouvrir_ajout_reserve.introduction')}</p>`,
+      champs: [
+        UI.champ(Schema.champ('reserves_controle', 'date_controle'), dateIso(controle.derniere_date),
+          { obligatoire: true, attributs: { max: jour }, aide: I18n.t('controles.ouvrir_ajout_reserve.date_aide') }),
+        UI.champ(Schema.champ('reserves_controle', 'texte'), '', { libelle: I18n.t('controles.ouvrir_ajout_reserve.reserves'),
+          aide: I18n.t('controles.ouvrir_ajout_reserve.reserves_aide') }),
+        UI.champ(Schema.champ('reserves_controle', 'gravite'), ''),
+        UI.champ(Schema.champ('reserves_controle', 'echeance_levee'), '',
+          { aide: I18n.t('controles.ouvrir_ajout_reserve.echeance_aide', { jours: DELAI_LEVEE_PAR_DEFAUT_JOURS }) }),
+      ],
+      libelleValider: I18n.t('commun.bouton.ajouter'),
+      verifier: (valeurs) => verifierAjoutReserves(valeurs),
+      async action(valeurs) { creees = await Controles.ajouterReserves(controle.id, valeurs); },
+    });
+    if (fait) {
+      await apresEcriture(creees.length ? I18n.t('controles.ouvrir_ajout_reserve.ajoutees', { n: creees.length })
+        : I18n.t('commun.message.aucune_modification'));
+    }
+    return fait;
+  }
+
+  // Outils prêtés à la fiche (controles-ecrans.js), cherchés au moment de l'appel ; fenêtres des réserves (T420 et
+  // les tests les ouvrent aussi par là).
   Object.assign(Controles.interne, { carteReserves, reservesDuDernierControle, champsReservesRealisation,
-    messageRealisation, entreesJournalReserves });
+    messageRealisation, entreesJournalReserves, ouvrirLeveeReserve, ouvrirModificationReserve, ouvrirAjoutReserve });
 
   return {};
 })());

@@ -1,7 +1,9 @@
-"""Tests des réserves des contrôles à l'écran, 2.2 (T418 ; CS170, CS176, D18, D156, D183, D187 ; CONCEPTION-L2-L3
-§3.4) : fenêtre « Enregistrer le contrôle réalisé » (réserves relevées, échéance commune, aperçu, rappel des réserves
-encore ouvertes), carte « Réserves » de la fiche (controles-reserves-ecrans.js), carte « Dernier contrôle »,
-historique (journal des réserves du contrôle).
+"""Tests des réserves des contrôles à l'écran, 2.2 (T418, T419 ; CS170, CS176, D18, D156, D183, D187 ;
+CONCEPTION-L2-L3 §3.4) : fenêtre « Enregistrer le contrôle réalisé » (réserves relevées, échéance commune, aperçu, rappel
+des réserves encore ouvertes), carte « Réserves » de la fiche (controles-reserves-ecrans.js), carte « Dernier
+contrôle », historique (journal des réserves du contrôle) ; T419 : boutons du responsable (« Lever », « Modifier »,
+« Ajouter une réserve »), fenêtres « Lever la réserve », « Modifier la réserve », « Ajouter une réserve », rappel de
+l'OT lié clôturé et levée pré-remplie.
 
     serveur  : serveur.py sur une copie du jeu de démo, CSV relus sur le disque ; aucun identifiant de contrôle écrit
                en dur (contrôle créé par le test, ou rôles de scenarios_demo()) ;
@@ -12,11 +14,18 @@ historique (journal des réserves du contrôle).
                  (repliée sous « Voir les réserves levées (1) », commentaire), réserve en retard ;
                - technicien : carte lue (réserve levée avec son OT, réserve à échéance saisie, réserve en retard à
                  l'échéance par défaut), aucun bouton ni champ ;
+               - responsable (T419) : lever une réserve sur trois (date, commentaire, OT) laisse les deux autres
+                 ouvertes, statut « réserves à lever (2) » ; refus (date future, avant le contrôle, sans commentaire)
+                 sans rien écrire ; la levée n'a plus de bouton ; modifier (texte, gravité, échéance ; échéance avant
+                 le contrôle refusée) ; ajouter deux réserves oubliées au dernier contrôle ; historique ;
     demo     : index.html en file:// ;
                - responsable : rappel « 1 réserve des contrôles précédents reste à lever », aperçu en direct, toast,
                  badge « réserves à lever (4) » ; carte vide « Aucune réserve relevée. » ;
+               - responsable (T419) : OT lié clôturé, rappel « L'OT … est clôturé : levez la réserve… » et levée
+                 pré-remplie (date de fin de l'OT, « Levée par l'OT … », OT lié) ;
                - technicien en anglais : réserve reprise levée sans date (D183) « cleared, date unknown », commentaire
-                 de la reprise traduit ; aucun bouton.
+                 de la reprise traduit ; aucun bouton ;
+               - technicien (T419) : réserve ouverte reliée à un OT clôturé : ni rappel ni bouton.
 Dates calculées depuis la date du jour de l'application (Donnees.aujourdhui()).
 
 Lancer depuis la racine du projet (au travers du verrou des navigateurs) :
@@ -62,6 +71,32 @@ RESERVE_REPRISE_JS = """async ([controleId, date]) => Donnees.modifier('reserves
     ot_id: '' });
   return id;
 })"""
+
+# Un OT clôturé de la démo (en mémoire), d'un équipement suivi, à date de fin connue et passée : le plus récent.
+OT_CLOTURE_JS = """() => {
+  const suivis = new Set(Donnees.lignes('equipements').filter((e) => String(e.actif) !== '0' && e.statut !== 'rebut')
+    .map((e) => e.id));
+  const jour = Donnees.aujourdhui();
+  const ot = Donnees.lignes('ordres_travail')
+    .filter((o) => ['Clôturé techniquement', 'Clôturé administrativement'].includes(o.statut) && suivis.has(o.equipement_id)
+      && /^\\d{4}-\\d{2}-\\d{2}/.test(o.date_fin || '') && o.date_fin.slice(0, 10) <= jour)
+    .sort((a, b) => b.date_fin.localeCompare(a.date_fin))[0];
+  return { ot: ot.id, equipement: ot.equipement_id, fin: ot.date_fin.slice(0, 10) };
+}"""
+
+# Ajoute à la démo (en mémoire) une réserve OUVERTE reliée à un OT : [controleId, date, otId] → identifiant.
+RESERVE_OUVERTE_AVEC_OT_JS = """async ([controleId, date, otId]) => Donnees.modifier('reserves_controle', (lignes, outils) => {
+  const id = outils.nouvelId(lignes);
+  lignes.push({ id, controle_id: controleId, date_controle: date, texte: 'Soupape de sûreté à tarer',
+    gravite: '', echeance_levee: '', levee: '0', date_levee: '', commentaire_levee: '', ot_id: otId });
+  return id;
+})"""
+
+# Erreur affichée sous un champ de la fenêtre ouverte.
+ERREUR_DU_CHAMP_JS = """([champ, message]) => {
+  const zone = document.querySelector('dialog [data-champ="' + champ + '"] .erreur-champ');
+  return Boolean(zone) && !zone.hidden && zone.textContent.trim() === message;
+}"""
 
 
 def lire_csv(dossier, nom):
@@ -112,7 +147,7 @@ class CasReserves(CasNavigateur):
 
     def attendre_titre(self, titre):
         self.page.wait_for_function(
-            "(t) => { const h = document.querySelector('.controles-fiche .controles-reserves > h2'); "
+            "(t) => { const h = document.querySelector('.controles-fiche .controles-reserves > .entete-carte h2'); "
             "return h && h.textContent.trim() === t; }", arg=titre)
 
     def attendre_toast(self, texte):
@@ -141,8 +176,36 @@ class CasReserves(CasNavigateur):
 
     def sans_bouton(self):
         for selecteur in (".controles-reserves button", ".controles-reserves a.btn", ".controles-reserves [name]",
+                          ".controles-reserves [data-action]", ".controles-reserve-rappel",
                           "#controle-realise", "#controle-creer-ot", ".controles-fiche [name]"):
             self.assertEqual(self.page.locator(selecteur).count(), 0, selecteur)
+
+    # --- T419 : boutons et fenêtres des réserves ---------------------------------------------------
+
+    def badges(self, controle):
+        return self.page.eval_on_selector_all(".controles-fiche .controles-statuts[data-controle='%s'] .badge" % controle,
+                                              "l => l.map((b) => b.textContent.trim())")
+
+    def boutons(self, reserve):
+        return self.page.eval_on_selector_all(".controles-reserve[data-reserve='%s'] button" % reserve,
+                                              "l => l.map((b) => b.dataset.action + ':' + b.textContent.trim())")
+
+    def ouvrir_fenetre(self, reserve, action, champ):
+        """Clic sur « Lever » / « Modifier » d'une réserve (reserve None : « Ajouter une réserve » de la carte)."""
+        if reserve is None:
+            self.page.click(".controles-reserves .entete-carte [data-action=ajouter]")
+        else:
+            self.page.click(".controles-reserve[data-reserve='%s'] [data-action=%s]" % (reserve, action))
+        self.page.wait_for_selector("dialog [name=%s]" % champ)
+
+    def valider(self):
+        self.page.click("dialog .fenetre-actions .btn-primaire")
+
+    def attendre_erreur(self, champ, message):
+        self.page.wait_for_function(ERREUR_DU_CHAMP_JS, arg=[champ, message])
+
+    def valeur(self, nom):
+        return self.page.input_value("dialog [name=%s]" % nom)
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +240,7 @@ class TestServeur(CasReserves):
             self.aller("#/controles/" + controle)
             self.attendre_fiche(controle)
             # Carte vide dite ; « Dernier contrôle » : aucune réserve
-            self.assertEqual(page.inner_text(".controles-reserves > h2"), "Réserves")
+            self.assertEqual(page.inner_text(".controles-reserves > .entete-carte h2"), "Réserves")
             self.assertEqual(page.inner_text(".controles-reserves .controles-reserves-vide"), "Aucune réserve relevée.")
             self.assertEqual(self.dernier_controle_reserves(), "aucune")
 
@@ -285,7 +348,7 @@ class TestServeur(CasReserves):
             levee = next(r for r in reserves if r["levee"] == "1")
             ouverte = next(r for r in reserves if r["levee"] != "1")
             self.assertTrue(levee["ot_id"] and ouverte["echeance_levee"], reserves)        # rôle de la démo (T417)
-            self.assertEqual(page.inner_text(".controles-reserves > h2"), "Réserves (2, dont 1 à lever)")
+            self.assertEqual(page.inner_text(".controles-reserves > .entete-carte h2"), "Réserves (2, dont 1 à lever)")
             carte = {r["id"]: r for r in self.carte()}
             statut = "en retard" if jour(ouverte["echeance_levee"]) < aujourdhui else "à lever"
             self.assertEqual((carte[ouverte["id"]]["statut"], carte[ouverte["id"]]["repliee"]), (statut, False))
@@ -312,6 +375,122 @@ class TestServeur(CasReserves):
             self.assertEqual(self.groupes(), ["Contrôle du %s — 1 réserve" % fr(jour(reserve["date_controle"]))])
             self.sans_bouton()
 
+    def test_lever_une_reserve_sur_trois_refus_sans_ecriture_puis_modifier_et_ajouter(self):
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            fichier = Path(dossier) / "reserves_controle.csv"
+            self.ouvrir(serveur, "#/controles")
+            equipement, ot = self.equipement_avec_ot(dossier)
+            controle = self.appeler("creerControle", {"equipement_id": equipement, "nature": "Installations électriques (T419)",
+                                                      "periodicite_mois": "12"})
+            aujourdhui = self.aujourdhui()
+            d1 = aujourdhui - datetime.timedelta(days=10)
+            self.appeler("enregistrerRealisation", controle, {"date": d1.isoformat(), "organisme": "Organisme T419",
+                                                              "reserves": SAISIE_TROIS})
+            self.aller("#/controles/" + controle)
+            self.attendre_fiche(controle)
+            self.attendre_titre("Réserves (3, dont 3 à lever)")
+            self.assertIn("réserves à lever (3)", self.badges(controle))
+            reserves = reserves_de(dossier, controle)
+            premiere, deuxieme, troisieme = [r["id"] for r in reserves]
+            for reserve in (premiere, deuxieme, troisieme):
+                self.assertEqual(self.boutons(reserve), ["lever:Lever", "modifier:Modifier"])
+            self.assertEqual(page.inner_text(".controles-reserves .entete-carte [data-action=ajouter]"), "Ajouter une réserve")
+            self.assertEqual(page.locator(".controles-reserve-rappel").count(), 0)          # aucun OT lié
+
+            # « Lever la réserve » : rappel du texte et de la date du contrôle, levée le (défaut aujourd'hui), OT de
+            # l'équipement proposés (aucun par défaut)
+            self.ouvrir_fenetre(deuxieme, "lever", "commentaire")
+            self.assertEqual(page.inner_text("dialog h2"), "Lever la réserve")
+            rappel = page.inner_text("dialog .controles-rappel-reserve")
+            self.assertIn("Relevée au contrôle du %s" % fr(d1), rappel)
+            self.assertIn(TEXTES_TROIS[1], rappel)
+            self.assertEqual((self.valeur("date"), self.valeur("commentaire"), self.valeur("ot_id")), (aujourdhui.isoformat(), "", ""))
+            options = page.eval_on_selector_all("dialog [name=ot_id] option", "l => l.map((o) => o.value)")
+            self.assertIn(ot, options)
+            self.assertEqual(options[0], "")
+            self.assertEqual(page.inner_text("dialog .fenetre-actions .btn-primaire"), "Lever la réserve")
+
+            # Refus, sans rien écrire : date future, date avant le contrôle, sans commentaire
+            avant = fichier.read_bytes()
+            page.fill("dialog [name=date]", (aujourdhui + datetime.timedelta(days=1)).isoformat())
+            page.fill("dialog [name=commentaire]", "Schéma mis à jour et affiché")
+            self.valider()
+            self.attendre_erreur("date", "La date de levée ne peut pas être dans le futur.")
+            page.fill("dialog [name=date]", (d1 - datetime.timedelta(days=1)).isoformat())
+            self.valider()
+            self.attendre_erreur("date", "La réserve date du contrôle du %s : une levée antérieure est refusée." % fr(d1))
+            levee_le = d1 + datetime.timedelta(days=2)
+            page.fill("dialog [name=date]", levee_le.isoformat())
+            page.fill("dialog [name=commentaire]", "")
+            self.valider()
+            self.attendre_erreur("commentaire", "Ce champ est obligatoire.")
+            self.assertEqual(fichier.read_bytes(), avant)
+            self.assertTrue(page.is_visible("dialog [name=commentaire]"))                  # la fenêtre reste ouverte
+
+            # Levée acceptée (date, commentaire, OT) : les deux autres restent ouvertes, statut « réserves à lever (2) »
+            page.fill("dialog [name=commentaire]", "Schéma mis à jour et affiché")
+            page.select_option("dialog [name=ot_id]", ot)
+            self.valider()
+            self.attendre_toast("Réserve levée.")
+            self.attendre_titre("Réserves (3, dont 2 à lever)")
+            self.assertIn("réserves à lever (2)", self.badges(controle))
+            apres = reserves_de(dossier, controle)
+            self.assertEqual((apres[1]["levee"], apres[1]["date_levee"], apres[1]["commentaire_levee"], apres[1]["ot_id"]),
+                             ("1", levee_le.isoformat(), "Schéma mis à jour et affiché", ot))
+            self.assertEqual((apres[0], apres[2]), (reserves[0], reserves[2]))               # à l'octet près
+            self.assertEqual([r["levee"] for r in apres], ["0", "1", "0"])
+            carte = {r["id"]: r for r in self.carte()}
+            self.assertEqual((carte[deuxieme]["statut"], carte[deuxieme]["repliee"]), ("levée", True))
+            self.assertEqual(self.boutons(deuxieme), [])                                    # une levée est un fait
+            self.assertEqual(self.boutons(premiere), ["lever:Lever", "modifier:Modifier"])
+
+            # « Modifier la réserve » : texte, gravité, échéance ; échéance avant le contrôle refusée sans écrire
+            self.ouvrir_fenetre(premiere, "modifier", "texte")
+            self.assertEqual(page.inner_text("dialog h2"), "Modifier la réserve")
+            self.assertEqual((self.valeur("texte"), self.valeur("gravite"), self.valeur("echeance_levee")), (TEXTES_TROIS[0], "", ""))
+            self.assertIn("Vide : 30 jours après le contrôle.", page.inner_text("dialog [data-champ=echeance_levee] .aide"))
+            avant = fichier.read_bytes()
+            page.fill("dialog [name=texte]", "Différentiel 30 mA du TGBT à remplacer")
+            page.select_option("dialog [name=gravite]", "majeure")
+            page.fill("dialog [name=echeance_levee]", (d1 - datetime.timedelta(days=1)).isoformat())
+            self.valider()
+            self.attendre_erreur("echeance_levee", "L'échéance de levée ne peut pas précéder le contrôle du %s." % fr(d1))
+            self.assertEqual(fichier.read_bytes(), avant)
+            echeance = aujourdhui + datetime.timedelta(days=20)
+            page.fill("dialog [name=echeance_levee]", echeance.isoformat())
+            self.valider()
+            self.attendre_toast("Réserve modifiée.")
+            self.page.wait_for_function("(id) => document.querySelector(\".controles-reserve[data-reserve='\" + id + \"'] .controles-reserve-gravite\")",
+                                        arg=premiere)
+            modifiee = reserves_de(dossier, controle)[0]
+            self.assertEqual((modifiee["texte"], modifiee["gravite"], modifiee["echeance_levee"], modifiee["levee"]),
+                             ("Différentiel 30 mA du TGBT à remplacer", "majeure", echeance.isoformat(), "0"))
+            carte = {r["id"]: r for r in self.carte()}
+            self.assertIn("gravité : majeure", carte[premiere]["meta"])
+            self.assertIn("échéance le %s" % fr(echeance), carte[premiere]["meta"])
+            self.assertNotIn("jours après le contrôle", carte[premiere]["meta"])
+
+            # « Ajouter une réserve » : date du dernier contrôle par défaut, une ligne par réserve
+            self.ouvrir_fenetre(None, None, "texte")
+            self.assertEqual(page.inner_text("dialog h2"), "Ajouter une réserve")
+            self.assertEqual(self.valeur("date_controle"), d1.isoformat())
+            page.fill("dialog [name=texte]", "Éclairage de secours absent\n- Porte coupe-feu à régler")
+            self.valider()
+            self.attendre_toast("2 réserves ajoutées.")
+            self.attendre_titre("Réserves (5, dont 4 à lever)")
+            toutes = reserves_de(dossier, controle)
+            self.assertEqual([(r["texte"], r["date_controle"], r["levee"]) for r in toutes[3:]],
+                             [("Éclairage de secours absent", d1.isoformat(), "0"), ("Porte coupe-feu à régler", d1.isoformat(), "0")])
+            self.assertEqual(toutes[1:3], apres[1:3])                                        # les autres ne changent pas
+            self.assertEqual(self.groupes(), ["Contrôle du %s — 5 réserves" % fr(d1)])
+            self.assertIn("réserves à lever (4)", self.badges(controle))
+            actions = self.actions_historique()
+            self.assertIn("Réserve levée le %s : Schéma mis à jour et affiché" % fr(levee_le), actions)
+            self.assertIn("Correction de la réserve", actions)
+            self.assertIn("Réserves relevées au contrôle du %s : 2" % fr(d1), actions)
+
 
 # ---------------------------------------------------------------------------
 # Démo (file://)
@@ -331,7 +510,7 @@ class TestDemo(CasReserves):
         aujourdhui = self.aujourdhui()
         self.aller("#/controles/" + RESERVE_EN_RETARD)
         self.attendre_fiche(RESERVE_EN_RETARD)
-        self.assertEqual(page.inner_text(".controles-reserves > h2"), "Réserves (1, dont 1 à lever)")
+        self.assertEqual(page.inner_text(".controles-reserves > .entete-carte h2"), "Réserves (1, dont 1 à lever)")
         ancienne = self.carte()
         self.assertEqual([r["statut"] for r in ancienne], ["en retard"])
         self.assertEqual(self.dernier_controle_reserves(), "1")
@@ -364,7 +543,7 @@ class TestDemo(CasReserves):
         # Contrôle sans réserve : carte vide dite
         self.aller("#/controles/" + SANS_RESERVE)
         self.attendre_fiche(SANS_RESERVE)
-        self.assertEqual(page.inner_text(".controles-reserves > h2"), "Réserves")
+        self.assertEqual(page.inner_text(".controles-reserves > .entete-carte h2"), "Réserves")
         self.assertEqual(page.inner_text(".controles-reserves .controles-reserves-vide"), "Aucune réserve relevée.")
         self.assertEqual(self.dernier_controle_reserves(), "aucune")
 
@@ -389,6 +568,50 @@ class TestDemo(CasReserves):
         self.assertEqual(page.evaluate("Donnees.lignes('reserves_controle').filter((r) => r.controle_id === %r)[0].commentaire_levee"
                                        % SANS_RESERVE), "levée avant la 2.2, date inconnue")
         self.sans_bouton()
+
+    def test_ot_lie_cloture_rappel_et_levee_pre_remplie(self):
+        page = self.page
+        self.ouvrir_demo("responsable")
+        cloture = page.evaluate(OT_CLOTURE_JS)
+        fin = jour(cloture["fin"])
+        date_controle = fin - datetime.timedelta(days=5)
+        controle = self.appeler("creerControle", {"equipement_id": cloture["equipement"], "nature": "Appareil à pression (T419)",
+                                                  "periodicite_mois": "12"})
+        self.appeler("enregistrerRealisation", controle, {"date": date_controle.isoformat(), "reserves": "Soupape à tarer"})
+        reserve = page.evaluate("(id) => Controles.reservesOuvertes(id)[0].id", controle)
+        self.appeler("lierOtAReserve", reserve, cloture["ot"])
+        self.aller("#/controles/" + controle)
+        self.attendre_fiche(controle)
+        self.assertEqual(page.inner_text(".controles-reserve[data-reserve='%s'] .controles-reserve-rappel" % reserve).strip(),
+                         "L'OT %s est clôturé : levez la réserve si le travail l'a corrigée." % cloture["ot"])
+
+        # « Lever » pré-rempli : date de fin de l'OT, « Levée par l'OT … », OT lié
+        self.ouvrir_fenetre(reserve, "lever", "commentaire")
+        self.assertEqual((self.valeur("date"), self.valeur("commentaire"), self.valeur("ot_id")),
+                         (fin.isoformat(), "Levée par l'OT %s" % cloture["ot"], cloture["ot"]))
+        self.valider()
+        self.attendre_toast("Réserve levée.")
+        self.attendre_titre("Réserves (1, levée)")
+        ligne = page.evaluate("(id) => Donnees.trouver('reserves_controle', id)", reserve)
+        self.assertEqual((ligne["levee"], ligne["date_levee"], ligne["commentaire_levee"], ligne["ot_id"]),
+                         ("1", fin.isoformat(), "Levée par l'OT %s" % cloture["ot"], cloture["ot"]))
+        self.assertEqual(page.locator(".controles-reserve-rappel").count(), 0)
+        self.assertEqual(self.boutons(reserve), [])
+
+    def test_technicien_ni_rappel_ni_bouton_avec_un_ot_lie_cloture(self):
+        page = self.page
+        self.ouvrir_demo("technicien", TECHNICIEN)
+        self.assertEqual(page.evaluate("App.profil.type"), "technicien")
+        cloture = page.evaluate(OT_CLOTURE_JS)
+        date = page.evaluate("(id) => Donnees.trouver('controles_reglementaires', id).derniere_date", SANS_RESERVE)
+        reserve = page.evaluate(RESERVE_OUVERTE_AVEC_OT_JS, [SANS_RESERVE, date, cloture["ot"]])
+        self.aller("#/controles/" + SANS_RESERVE)
+        self.attendre_fiche(SANS_RESERVE)
+        self.attendre_titre("Réserves (1, dont 1 à lever)")
+        self.assertIn("OT lié : %s" % cloture["ot"], self.carte()[0]["meta"])
+        self.assertEqual(self.carte()[0]["id"], reserve)
+        self.sans_bouton()                                   # ni « Lever », ni « Modifier », ni « Ajouter », ni rappel
+        self.assertEqual(page.evaluate("typeof Controles.interne.ouvrirLeveeReserve"), "function")
 
 
 if __name__ == "__main__":
