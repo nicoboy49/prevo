@@ -2,7 +2,8 @@
    « Garanties et contrats », fiches, formulaires, carte et badge de la fiche équipement, rappel à la création d'un OT.
    Créée vide par T450 (squelette du L4), remplie par T455 à T457. Uniquement des variables de la charte
    (css/style.css) : aucune couleur codée en dur.
-   Sommaire : 1 formulaires (T455) · 2 écran, liste et fiches (T456). */
+   Sommaire : 1 formulaires (T455) · 2 écran, liste et fiches (T456) · 3 encarts des autres écrans : carte et badge de
+   la fiche équipement, rappel à la création d'un OT (T457). */
 
 /* =========================================================================================
    1. Formulaires d'une garantie et d'un contrat (garanties-formulaires.js, T455)
@@ -92,4 +93,33 @@
   .garanties-fournisseur a, .garanties-document, .garanties-equipements-liste a { min-height: 48px; display: inline-flex; align-items: center; }
   .garanties-journal li { grid-template-columns: minmax(0, 1fr); }
   .garanties-journal .muted { grid-column: 1; }
+}
+
+/* =========================================================================================
+   3. Encarts des autres écrans : carte « Garanties et contrats » et badge de la fiche équipement, rappel à la création
+      d'un OT correctif (garanties-encarts.js, T457)
+   ========================================================================================= */
+
+.garanties-carte-equipement h3 { margin: 1rem 0 .5rem; font-size: 1rem; }
+.garanties-encart-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
+.garanties-encart-liste > li { display: flex; flex-direction: column; gap: .35rem; min-width: 0; padding-bottom: .9rem; border-bottom: 1px solid var(--trait); }
+.garanties-encart-liste > li:last-child { padding-bottom: 0; border-bottom: 0; }
+.garanties-encart-tete { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.garanties-encart-tete > a, .garanties-encart-tete > b, .garanties-encart-tete > span:not(.garanties-statut) { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.garanties-encart-detail { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem 1rem; color: var(--texte-2); font-size: .9375rem; overflow-wrap: anywhere; }
+.garanties-encart-en-cours .valeurs { margin-top: .2rem; }
+.garanties-encart-pas-sous-garantie { margin: 0 0 .6rem; color: var(--texte-2); }
+/* Conditions : au-delà de 3 lignes, 3 lignes affichées et un bouton qui déplie le reste */
+.garanties-encart-conditions { white-space: pre-line; overflow-wrap: anywhere; }
+.garanties-encart-conditions.replie { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.garanties-encart-deplier { padding-left: 0; margin-top: .2rem; }
+.garanties-badge-equipement { display: inline-flex; }
+/* Rappel du formulaire d'un OT et de la fenêtre « Accepter » d'une demande */
+.garanties-rappel .alerte-texte p { margin: 0; }
+.garanties-rappel .alerte-texte p + p { margin-top: .4rem; }
+.garanties-rappel-conditions { white-space: pre-line; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .garanties-carte-equipement .entete-carte .btn { flex: 1 1 100%; }
+  .garanties-encart-tete > a, .garanties-encart-detail a, .garanties-encart-deplier, .garanties-rappel a { min-height: 48px; display: inline-flex; align-items: center; }
 }

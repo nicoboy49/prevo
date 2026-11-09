@@ -671,5 +671,7 @@ Object.assign(Garanties, (() => {
     });
   });
 
+  // Pour garanties-encarts.js (carte de la fiche équipement) : mêmes badges, même fournisseur, même document.
+  Object.assign(Garanties.interne, { badge, blocFournisseur, adresseDocument, blocDocument });
   return { adresseFiche };
 })());
