@@ -17,6 +17,30 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
   sont conservées, la reprise ne se fait qu'une fois par contrôle). Une 2.1 qui rouvre cette base la lit en lecture
   seule ; une 1.2.x ou une 2.0.0 bêta 1 n'a pas cette garde : mettez-les à jour avant de rouvrir une base 2.2.
 
+## [2.1.1] - 2026-11-11
+
+**Correctif de sécurité : le rapport mensuel figé n'est plus servi au technicien (mode avec comptes).** Mise à jour
+recommandée pour les installations en mode serveur avec comptes (connexion par identifiant, accès depuis le réseau ou
+le téléphone) ; en mode dossier, en mode serveur sans comptes et dans la démo, rien ne change. Rien d'autre ne change
+(mêmes écrans, même format de données).
+
+**Ce qui pouvait arriver.** Un compte technicien pouvait obtenir un rapport mensuel figé en le demandant directement
+au serveur par son adresse : son nom figure dans les paramètres, que le technicien lit, même si aucun de ses écrans ne
+propose ce rapport. Le rapport montre notamment le coût de maintenance du mois et, pour un équipement au-delà du
+seuil « réparer ou remplacer », son coût sur 12 mois et sa valeur de remplacement : des montants que Prévo cache au
+technicien partout ailleurs. Les comptes demandeurs et les téléphones enrôlés étaient déjà refusés. Concerné : la 2.0.0
+et la 2.1.0.
+
+### Corrigé
+
+- **Rapport mensuel figé réservé au responsable** : avec les comptes, le serveur ne le sert plus qu'au responsable ;
+  le technicien reçoit le même refus que le demandeur.
+- **Rien d'autre ne change** : les autres documents restent ouverts au technicien comme avant, le responsable ouvre
+  ses rapports comme avant, et sans comptes tout reste servi.
+
+**Rien à faire.** Mettez la 2.1.1 dans le même dossier, comme pour toute mise à jour : vos données restent, aucun
+réglage n'est à changer, les rapports déjà figés restent où ils sont.
+
 ## [2.1.0] - 2026-11-08
 
 Lot 5 du chantier multilingue : turc, italien et portugais du Portugal.
@@ -345,7 +369,8 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.1.0...HEAD
+[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/nicoboy49/prevo/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.2...v2.0.0
 [2.0.0-beta.2]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.1...v2.0.0-beta.2
