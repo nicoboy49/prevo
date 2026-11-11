@@ -4,12 +4,12 @@
 
 **The free, open-source CMMS for small industrial companies.**
 
-[![Latest version](https://img.shields.io/github/v/release/nicoboy49/prevo?label=version)](https://github.com/nicoboy49/prevo/releases/latest)
+[![Latest version](https://img.shields.io/github/v/release/prevo-pro/prevo?label=version)](https://github.com/prevo-pro/prevo/releases/latest)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 [![Languages](https://img.shields.io/badge/languages-fran%C3%A7ais%20%7C%20English-green)](#languages)
 
 Website: **[prevo.pro](https://prevo.pro)** · Online demo: **[prevo.pro/demo](https://prevo.pro/demo/)** ·
-Download: **[latest version](https://github.com/nicoboy49/prevo/releases/latest)**
+Download: **[latest version](https://github.com/prevo-pro/prevo/releases/latest)**
 
 > **Prévo 2.0** brings the installation wizard, accounts and access from a phone, English alongside
 > French, a versioned data format with automatic backups, and ZIP export and import. Version 1.2.1 stays
@@ -55,7 +55,7 @@ as a ZIP. The demo data is in French (the demo set is not translated).
 
 ## Installation
 
-1. **Unzip** the zip of the [latest version](https://github.com/nicoboy49/prevo/releases/latest) and put its
+1. **Unzip** the zip of the [latest version](https://github.com/prevo-pro/prevo/releases/latest) and put its
    folder at `C:\Prevo` (recommended; elsewhere, the wizard offers to move it there).
 2. **Double-click `Lancer_GMAO.bat`**: Python is in the zip, there is nothing else to install. On Mac
    or Linux: `./lancer.sh` (Python 3.11 or newer).
@@ -69,8 +69,8 @@ Did you have Prévo 1.2 or a 2.0 beta? Put the new version in the same folder: t
 `donnees/` folder, your CSV files stay, and the wizard replaces none of them; Prévo makes a backup
 “before the Prévo update”, then brings your data to the current format.
 
-Staying on 1.2? Version [1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1) has neither wizard nor
-accounts: it installs as described in [its README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md)
+Staying on 1.2? Version [1.2.1](https://github.com/prevo-pro/prevo/releases/tag/v1.2.1) has neither wizard nor
+accounts: it installs as described in [its README](https://github.com/prevo-pro/prevo/blob/v1.2.1/README.md)
 (folder mode in Chrome or Edge, or server mode with Python 3.8 or newer).
 
 ### Which installation for you?
@@ -95,7 +95,7 @@ Configuration (`prevo.config.json` and each of its keys), reverse proxies (`tail
 IIS, Cloudflare Tunnel), start-up as a scheduled task or a service, accounts, logs, backups, updating and
 uninstalling: [docs/INSTALLATION.md](docs/INSTALLATION.md) (in French:
 [docs/INSTALLATION.fr.md](docs/INSTALLATION.fr.md)). This document is not in the zip: read it in the repository
-(https://github.com/nicoboy49/prevo/blob/main/docs/INSTALLATION.md).
+(https://github.com/prevo-pro/prevo/blob/main/docs/INSTALLATION.md).
 
 ### Firewall and phones
 
