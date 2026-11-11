@@ -7,19 +7,100 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [2.2.0-beta.1] - 2026-11-12
+
+**Bêta de la 2.2, « le dirigeant dort tranquille » : réserves des contrôles, habilitations, garanties et contrats de
+prestataires, coût de l'arrêt.** C'est une bêta : copiez votre dossier de données avant de la lancer (Prévo fait aussi
+sa propre sauvegarde `avant-format-v4`). Les données passent au format 4 ; une 2.1 les rouvre en lecture seule, une
+1.2.x ou une 2.0.0 bêta 1 n'a pas cette garde.
+
+**Le principe.** Prévo est une aide au suivi ; la responsabilité reste celle de l'employeur. Il rappelle des échéances
+et garde des preuves ; toute périodicité ou durée proposée est sourcée et modifiable, et Prévo ne dit jamais qu'un
+équipement est en règle. Cette phrase figure sur les écrans concernés, dans le guide et dans le README.
+
+### Ajouté
+
+- **Réserves des contrôles, une ligne par réserve** : à la réalisation d'un contrôle, chaque ligne saisie devient une
+  réserve. Le responsable peut la lever (date et commentaire), la modifier, en ajouter, ou créer un OT depuis elle
+  (pré-rempli et relié). Une nouvelle réalisation n'efface plus aucune réserve : celles qui ne sont pas levées restent
+  ouvertes. Le contrôle passe en « réserves à lever (n) » ; les réserves en retard sont rappelées à l'accueil et dans
+  le rapport mensuel.
+- **Catalogue de contrôles réglementaires sourcés** : créer un contrôle depuis le catalogue pré-remplit la périodicité,
+  la référence du texte, la nature de la source et la date de relecture (« relu le 08/11/2026 »), avec le lien
+  Légifrance. Modifier la périodicité la marque « saisie ». Une relecture du catalogue est proposée, jamais appliquée
+  toute seule. Les points qui dépendent de votre organisme de contrôle portent la mention « à confirmer avec votre
+  organisme de contrôle ».
+- **Habilitations plus complètes** : type choisi dans un catalogue (électricité, CACES, travail en hauteur…), recyclage
+  proposé (recommandation, jamais obligation), échéance calculée depuis l'obtention et modifiable, justificatif joint.
+  L'autorisation de conduite de l'employeur est distincte du CACES et peut s'appuyer sur lui comme justificatif. Le
+  technicien voit ses habilitations sur son accueil, sans le justificatif.
+- **Écran « Garanties et contrats »** (responsable) : liste avec compteurs, onglets et filtres, total des contrats en
+  cours (ceux sans montant sont comptés à part, jamais estimés). Chaque fiche donne l'échéance, « Écrire au
+  prestataire » (un lien mail, Prévo n'envoie rien), « Noter la résiliation », « Reconduire », « Retirer » (la ligne
+  reste) et l'historique.
+- **Alertes de garanties et de contrats** : 60 jours par défaut, réglables dans Paramètres (de 1 à 365). Un contrat à
+  reconduction tacite passe « à décider » avant sa date limite de résiliation ; une garantie ou un contrat « se
+  termine bientôt ». Une tuile « Garanties et contrats » est ajoutée à l'accueil du responsable.
+- **Sur la fiche équipement** : badge « Sous garantie jusqu'au … » et carte « Garanties et contrats » (sans montant pour
+  le technicien) ; à la création d'un OT correctif et à l'acceptation d'une demande, un rappel « appeler le fournisseur
+  avant d'intervenir ? » (il ne bloque rien).
+- **Coût de l'arrêt** : le coût d'une heure d'arrêt se saisit sur la fiche équipement (responsable seul ; vide = « non
+  chiffré »). Le coût de l'arrêt est la somme, par équipement, de la durée d'arrêt fois ce coût horaire, au centime
+  près. Le rapport mensuel gagne une tuile « Coût de l'arrêt » (« Partiel » s'il manque quelque chose), un Pareto par
+  coût et la formule dans « Comprendre » ; l'écran Indicateurs, un Pareto « Coût de l'arrêt » et une carte « Non
+  chiffré » avec le lien « Saisir le coût horaire ». Les équipements sans coût et les pannes sans durée sont listés,
+  jamais estimés.
+- **Import depuis un tableur** : les garanties, les contrats de prestataires, les réserves des contrôles et la colonne
+  du coût horaire d'arrêt des équipements s'importent comme le reste ; les observations d'un import de contrôles sont
+  reprises en réserves.
+- **Guide, aide à l'écran et glossaire** : le guide a une section « Garanties et contrats » et des compléments sur les
+  réserves, les habilitations et le coût de l'arrêt (en français et en anglais) ; l'aide à l'écran est réécrite pour
+  les nouveaux écrans ; le glossaire donne les termes de la 2.2 dans les cinq langues.
+- **Démo** : trois garanties et quatre contrats, trois réserves, six équipements chiffrés, des contrôles tirés du
+  catalogue.
+
 ### Modifié
 
+- **L'habilitation exigée par un OT bloque désormais** : créer, modifier, planifier un OT ou le passer à « Planifié »
+  est refusé si l'OT (ou son équipement) exige une habilitation que le technicien n'a pas en cours de validité. Un OT
+  sans exigence n'est jamais bloqué. Seul le responsable peut passer outre, par une fenêtre où la case à cocher et le
+  motif sont obligatoires ; le journal garde qui, quand, quel OT et quelle habilitation. Même règle au planning.
+- **Droits** : les garanties, les contrats et les réserves sont écrits par le responsable seul. Le coût horaire d'arrêt
+  et le montant annuel des contrats sont cachés au technicien, au demandeur et à l'appareil. Les justificatifs
+  d'habilitation et les documents des contrats ne sont servis qu'au responsable.
+- **Démo corrigée** : réservoir d'air à 48 mois, frigo selon la charge, aération d'après l'arrêté du 8 octobre 1987.
+- **Traductions de la 2.2 relues** : anglais (britannique), turc, italien et portugais du Portugal ; le turc, l'italien
+  et le portugais restent des traductions automatiques.
 - **Dépôt GitHub transféré à l'organisation prevo-pro** : le code, les releases et les signalements sont désormais sur
   <https://github.com/prevo-pro/prevo> ; les anciennes adresses `github.com/nicoboy49/prevo` redirigent. Prévo accepte
   les deux adresses comme lien de téléchargement d'une mise à jour, et `version.json` mène à la page de téléchargement
   de prevo.pro, la seule que les versions déjà installées gardent toutes.
-- **Format de données 4** (préparation de la 2.2, rien de visible encore à l'écran) : la base passe de 24 à 27
-  fichiers, avec de nouvelles colonnes (coût d'une heure d'arrêt, habilitation exigée par un OT, recyclage et
-  justificatif des habilitations, origine de la périodicité des contrôles) et trois tables : `reserves_controle`,
-  `garanties` et `contrats_prestataires`. Au premier lancement, Prévo fait une sauvegarde `avant-format-v4`, puis
-  reprend le texte des observations de chaque contrôle réglementaire en réserves, une par ligne (les observations
-  sont conservées, la reprise ne se fait qu'une fois par contrôle). Une 2.1 qui rouvre cette base la lit en lecture
-  seule ; une 1.2.x ou une 2.0.0 bêta 1 n'a pas cette garde : mettez-les à jour avant de rouvrir une base 2.2.
+
+### Corrigé
+
+- Un deuxième rapport de contrôle le même jour échouait dans une autre langue que le français.
+- Un contrat résilié restait « à décider » ; la résiliation d'un contrat tacite dont la fin enregistrée est passée est
+  refusée (« Reconduisez d'abord »).
+- Avec des comptes, le technicien ne peut plus lire le rapport mensuel figé (déjà corrigé dans la 2.1.1).
+- Après un changement de format, un journal abîmé n'affichait pas le bandeau du responsable ; le technicien et le
+  demandeur voient maintenant un message simple (« Fichier abîmé : prévenez le responsable »).
+- En mode serveur, une table absente (garanties d'une base tout juste passée au format 4) laissait une requête
+  ouverte.
+
+### Format de données 4
+
+- La base passe de 24 à 27 fichiers : trois tables (`reserves_controle`, `garanties`, `contrats_prestataires`) et dix
+  colonnes (coût d'une heure d'arrêt, habilitation exigée par un OT, recyclage, justificatif, type et nature de la
+  source des habilitations, origine et référence de la périodicité des contrôles).
+- Au premier lancement, Prévo fait une sauvegarde `avant-format-v4`, puis reprend le texte des observations de chaque
+  contrôle réglementaire en réserves, une par ligne (les observations sont conservées, la reprise ne se fait qu'une
+  fois par contrôle). Les réserves déjà levées reçoivent le commentaire « levée avant la 2.2, date inconnue ».
+- Une 2.1 qui rouvre cette base la lit en lecture seule, sans rien modifier ; ses sauvegardes ne contiennent que ses
+  24 tables. Une 1.2.x ou une 2.0.0 bêta 1 n'a pas cette garde : mettez-les à jour avant de rouvrir une base 2.2.
+- Aucune route serveur, aucune bibliothèque et aucune connexion réseau nouvelles.
+
+**Mise à jour.** Copiez d'abord votre dossier de données, puis placez la 2.2.0-beta.1 dans le même dossier. Pas de
+`version.json` pour une bêta : les installations existantes ne la reçoivent pas d'elles-mêmes.
 
 ## [2.1.1] - 2026-11-11
 
@@ -373,7 +454,8 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/prevo-pro/prevo/compare/v2.1.1...HEAD
+[Non publié]: https://github.com/prevo-pro/prevo/compare/v2.2.0-beta.1...HEAD
+[2.2.0-beta.1]: https://github.com/prevo-pro/prevo/compare/v2.1.1...v2.2.0-beta.1
 [2.1.1]: https://github.com/prevo-pro/prevo/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/prevo-pro/prevo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/prevo-pro/prevo/compare/v2.0.0-beta.2...v2.0.0

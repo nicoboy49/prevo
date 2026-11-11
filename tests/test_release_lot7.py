@@ -157,7 +157,7 @@ class TestTiers(CasRelease):
             self.assertTrue(all(n.startswith("prevo-2.0.0-beta.2/") for n in archive.namelist()))
         donnees = json.loads((self.dossier / "d" / "version.json").read_text(encoding="utf-8"))
         self.assertEqual(donnees["version"], "2.0.0-beta.2")
-        self.assertTrue(donnees["adresse"].endswith("/v2.0.0-beta.2"))
+        self.assertEqual(donnees["adresse"], release.ADRESSE_TELECHARGEMENT)
         self.assertEqual(donnees["nouveautes"], ["Une nouveauté."])
 
 

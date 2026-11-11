@@ -46,12 +46,12 @@ L'humain valide : le cahier des charges et chaque décision de produit ; les cho
 
 | Chiffre | Valeur | Source |
 |---|---|---|
-| Commits du dépôt | 529, du 19/10/2026 au 08/11/2026 | `git rev-list --count v2.1.0` |
+| Commits du dépôt | 529, du 19/10/2026 au 08/11/2026 (jusqu'à la 2.1.0) | `git rev-list --count v2.1.0` |
 | Étiquettes de lot | 14 (`lot-1` à `lot-7`, `lot-3-bis` ; `lot-i18n-1` à `lot-i18n-6` pour le chantier multilingue) | `git tag` |
 | Tests à la fin du lot 1 | 411 | PILOTAGE.md §4 |
 | Tests à la fin du lot 7 | 1 762 (suite jouée en 39 minutes) | PILOTAGE.md §13 |
-| Dernière suite complète | 2 362 tests sur 158 fichiers, sur la 2.1.0 | exécution complète du 08/11/2026 |
-| Versions | 1.0.0 (21/10/2026), 1.1.0 (22/10/2026), 1.2.0 (24/10/2026 selon CHANGELOG), 1.2.1 (04/11/2026), 2.0.0 bêta 1 (28/10/2026), bêta 2 (05/11/2026), 2.0.0 (08/11/2026), 2.1.0 (08/11/2026) | CHANGELOG.md, étiquettes git |
+| Tests de la dernière version | 2 831 tests sur 201 fichiers, sur la 2.2.0 bêta 1 (comptés, la suite complète est rejouée à la clôture) | `unittest discover` et `countTestCases()`, 12/11/2026 |
+| Versions | 1.0.0 (21/10/2026), 1.1.0 (22/10/2026), 1.2.0 (24/10/2026 selon CHANGELOG), 1.2.1 (04/11/2026), 2.0.0 bêta 1 (28/10/2026), bêta 2 (05/11/2026), 2.0.0 (08/11/2026), 2.1.0 (08/11/2026), 2.1.1 (11/11/2026), 2.2.0 bêta 1 (12/11/2026) | CHANGELOG.md, étiquettes git |
 | Organisation du lot 1 | 19 tâches, 7 vagues, 4 relectures, 5 défauts critiques | PILOTAGE.md §2 et §3 |
 | Organisation du lot 7 | 33 tâches en 12 vagues, 45 commits | PILOTAGE.md §13 |
 | Bibliothèques ajoutées au lot 7 | aucune | PILOTAGE.md §13 |
@@ -74,4 +74,4 @@ La liste complète (onze points) est à la section 14 de [PILOTAGE.md](PILOTAGE.
 
 ---
 
-*Chiffres datés du 08/11/2026 (Prévo 2.1.0). Plus de détail : [PILOTAGE.md](PILOTAGE.md). Projet : <https://github.com/prevo-pro/prevo>.*
+*Chiffres datés du 12/11/2026 (Prévo 2.2.0-beta.1). Plus de détail : [PILOTAGE.md](PILOTAGE.md). Projet : <https://github.com/prevo-pro/prevo>.*

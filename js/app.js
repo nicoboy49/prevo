@@ -51,8 +51,8 @@
 
 const App = (() => {
 
-  const VERSION = '2.1.0';
-  const DATE_VERSION = '2026-11-08';
+  const VERSION = '2.2.0-beta.1';
+  const DATE_VERSION = '2026-11-12';
   // Version web (démo en ligne, docs/DEPLOIEMENT_DEMO.md) : faux dans le dépôt et dans la release ;
   // outils/construire_demo_web.py le passe à vrai dans sa copie (dist/demo-web/). Vrai : l'écran de
   // démarrage ne propose que la démo et « Télécharger Prévo » (ni dossier, ni serveur), et l'assistant

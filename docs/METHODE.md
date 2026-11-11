@@ -46,12 +46,12 @@ The human validates: the requirements and every product decision; security-relat
 
 | Figure | Value | Source |
 |---|---|---|
-| Commits in the repository | 529, from 2026-10-19 to 2026-11-08 | `git rev-list --count v2.1.0` |
+| Commits in the repository | 529, from 2026-10-19 to 2026-11-08 (up to 2.1.0) | `git rev-list --count v2.1.0` |
 | Lot tags | 14 (`lot-1` to `lot-7`, `lot-3-bis`; `lot-i18n-1` to `lot-i18n-6` for the multilingual work) | `git tag` |
 | Tests at the end of lot 1 | 411 | PILOTAGE.md §4 |
 | Tests at the end of lot 7 | 1,762 (full run: 39 minutes) | PILOTAGE.md §13 |
-| Last complete suite | 2,362 tests in 158 files, on 2.1.0 | complete run of 2026-11-08 |
-| Releases | 1.0.0 (2026-10-21), 1.1.0 (2026-10-22), 1.2.0 (2026-10-24 per CHANGELOG), 1.2.1 (2026-11-04), 2.0.0 beta 1 (2026-10-28), beta 2 (2026-11-05), 2.0.0 (2026-11-08), 2.1.0 (2026-11-08) | CHANGELOG.md, git tags |
+| Tests of the latest version | 2,831 tests in 201 files, on 2.2.0 beta 1 (counted; the complete suite is replayed at closing) | `unittest discover` and `countTestCases()`, 2026-11-12 |
+| Releases | 1.0.0 (2026-10-21), 1.1.0 (2026-10-22), 1.2.0 (2026-10-24 per CHANGELOG), 1.2.1 (2026-11-04), 2.0.0 beta 1 (2026-10-28), beta 2 (2026-11-05), 2.0.0 (2026-11-08), 2.1.0 (2026-11-08), 2.1.1 (2026-11-11), 2.2.0 beta 1 (2026-11-12) | CHANGELOG.md, git tags |
 | Lot 1 organisation | 19 tasks, 7 waves, 4 reviews, 5 critical defects | PILOTAGE.md §2 and §3 |
 | Lot 7 organisation | 33 tasks in 12 waves, 45 commits | PILOTAGE.md §13 |
 | Dependencies added in lot 7 | none | PILOTAGE.md §13 |
@@ -74,4 +74,4 @@ The full list (eleven points) is in section 14 of [PILOTAGE.md](PILOTAGE.md).
 
 ---
 
-*Figures dated 2026-11-08 (Prévo 2.1.0). More detail, in French: [PILOTAGE.md](PILOTAGE.md). Project: <https://github.com/prevo-pro/prevo>.*
+*Figures dated 2026-11-12 (Prévo 2.2.0-beta.1). More detail, in French: [PILOTAGE.md](PILOTAGE.md). Project: <https://github.com/prevo-pro/prevo>.*
