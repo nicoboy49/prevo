@@ -4,12 +4,12 @@
 
 **La GMAO libre et gratuite des PME industrielles.**
 
-[![Dernière version](https://img.shields.io/github/v/release/nicoboy49/prevo?label=version)](https://github.com/nicoboy49/prevo/releases/latest)
+[![Dernière version](https://img.shields.io/github/v/release/prevo-pro/prevo?label=version)](https://github.com/prevo-pro/prevo/releases/latest)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 [![Langues](https://img.shields.io/badge/langues-fran%C3%A7ais%20%7C%20English-green)](#langues)
 
 Site : **[prevo.pro](https://prevo.pro)** · Démo en ligne : **[prevo.pro/demo](https://prevo.pro/demo/)** ·
-Téléchargement : **[dernière version](https://github.com/nicoboy49/prevo/releases/latest)**
+Téléchargement : **[dernière version](https://github.com/prevo-pro/prevo/releases/latest)**
 
 > **Prévo 2.0** apporte l'assistant d'installation, les comptes et l'accès depuis le téléphone, l'anglais à côté du
 > français, un format de données versionné avec sauvegardes automatiques, et l'export et l'import ZIP. La 1.2.1 reste
@@ -66,7 +66,7 @@ en ZIP.
 
 ## Installation
 
-1. **Dézippez** le zip de la [dernière version](https://github.com/nicoboy49/prevo/releases/latest) et placez son
+1. **Dézippez** le zip de la [dernière version](https://github.com/prevo-pro/prevo/releases/latest) et placez son
    dossier en `C:\Prevo` (conseillé ; ailleurs, l'assistant propose de l'y déplacer).
 2. **Double-cliquez sur `Lancer_GMAO.bat`** : Python est dans le zip, il n'y a rien d'autre à installer. Sur Mac
    ou Linux : `./lancer.sh` (Python 3.11 ou plus récent).
@@ -80,8 +80,8 @@ Vous aviez Prévo 1.2 ou une bêta de la 2.0 ? Mettez la nouvelle version dans l
 dossier `donnees/`, vos fichiers CSV restent, et l'assistant n'en remplace aucun ; Prévo fait une sauvegarde « avant
 mise à jour », puis met vos données au format courant.
 
-Vous restez en 1.2 ? La [1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1) n'a ni assistant ni
-comptes : elle s'installe comme décrit dans [son README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md)
+Vous restez en 1.2 ? La [1.2.1](https://github.com/prevo-pro/prevo/releases/tag/v1.2.1) n'a ni assistant ni
+comptes : elle s'installe comme décrit dans [son README](https://github.com/prevo-pro/prevo/blob/v1.2.1/README.md)
 (mode dossier dans Chrome ou Edge, ou mode serveur avec Python 3.8 ou plus récent).
 
 ### Quelle installation pour vous ?
@@ -106,7 +106,7 @@ Configuration (`prevo.config.json` et chacune de ses clés), mandataires inverse
 IIS, Cloudflare Tunnel), démarrage en tâche planifiée ou en service, comptes, journaux, sauvegardes, mise à jour et
 désinstallation : [docs/INSTALLATION.fr.md](docs/INSTALLATION.fr.md) (en anglais :
 [docs/INSTALLATION.md](docs/INSTALLATION.md)). Ce document n'est pas dans le zip : lisez-le dans le dépôt
-(https://github.com/nicoboy49/prevo/blob/main/docs/INSTALLATION.fr.md).
+(https://github.com/prevo-pro/prevo/blob/main/docs/INSTALLATION.fr.md).
 
 ### Pare-feu et téléphones
 

@@ -10,7 +10,7 @@ exists.
 Report it privately, in one of two ways:
 
 - on GitHub, with private vulnerability reporting: tab **Security**, then **Report a vulnerability**
-  (<https://github.com/nicoboy49/prevo/security/advisories/new>);
+  (<https://github.com/prevo-pro/prevo/security/advisories/new>);
 - or by e-mail to **contact@prevo.pro**, saying that you want to report a security flaw in Prévo.
 
 Do not send real company data, passwords, tokens, cookies, AI keys, or the content of the `donnees/acces/` folder or
@@ -35,7 +35,7 @@ lire les détails avant qu'un correctif existe.
 Signalez-la en privé, de l'une de ces deux façons :
 
 - sur GitHub, par le signalement privé des failles : onglet **Security**, puis **Report a vulnerability**
-  (<https://github.com/nicoboy49/prevo/security/advisories/new>) ;
+  (<https://github.com/prevo-pro/prevo/security/advisories/new>) ;
 - ou par courriel à **contact@prevo.pro**, en indiquant que vous voulez signaler une faille de sécurité dans Prévo.
 
 N'envoyez ni données réelles d'entreprise, ni mots de passe, ni jetons, ni cookies, ni clés d'IA, ni le contenu du

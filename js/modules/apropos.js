@@ -7,7 +7,7 @@ const Apropos = (() => {
   /** Adresses de Prévo, à ce seul endroit (T306 ; réutilisées par la mention « traduction automatique » du Lot 5).
    *  Les formulaires d'issue GitHub (.github/ISSUE_TEMPLATE/) se pré-remplissent par paramètre portant l'id du champ. */
   const ADRESSES = Object.freeze({
-    depot: 'https://github.com/nicoboy49/prevo',
+    depot: 'https://github.com/prevo-pro/prevo',
     suggestion: Object.freeze({ fr: '2-proposer-une-amelioration.yml', en: '3-suggest-an-improvement.yml' }),
     traduction: '4-corriger-une-traduction.yml',          // Lot 5 (T343, CS161) : formulaire bilingue
     courriel: 'contact@prevo.pro',

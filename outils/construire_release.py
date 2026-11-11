@@ -175,7 +175,10 @@ def ecrire_zip(source, chemin_zip, prefixe, date, fichiers, supplementaires=()):
 
 
 # Mise à jour signalée (ARCHITECTURE.md §21, D120) : version.json publié à la racine de prevo.pro avec chaque release.
-ADRESSE_RELEASE = "https://github.com/nicoboy49/prevo/releases/tag/v%s"
+# Adresse de téléchargement : la page de téléchargement de prevo.pro (D176 révisée le 11/11/2026). Jamais une adresse
+# github.com/prevo-pro/… : les versions 2.0.0 à 2.1.x ne gardent que prevo.pro et github.com/nicoboy49/prevo (sinon
+# aucun bandeau), et le dépôt a été transféré à l'organisation prevo-pro.
+ADRESSE_TELECHARGEMENT = "https://prevo.pro/#telecharger"
 NOUVEAUTES_MAX = 2
 MOTIF_LIEN = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 
@@ -208,7 +211,7 @@ def nouveautes_du_changelog(source, version, nombre=NOUVEAUTES_MAX):
 
 def ecrire_version_json(source, sortie, version, date):
     """Écrit sortie/version.json ({version, date, adresse, nouveautes}, UTF-8, LF) ; renvoie son chemin."""
-    contenu = {"version": version, "date": "%04d-%02d-%02d" % tuple(date[:3]), "adresse": ADRESSE_RELEASE % version,
+    contenu = {"version": version, "date": "%04d-%02d-%02d" % tuple(date[:3]), "adresse": ADRESSE_TELECHARGEMENT,
                "nouveautes": nouveautes_du_changelog(source, version)}
     chemin = Path(sortie) / "version.json"
     chemin.write_bytes((json.dumps(contenu, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))

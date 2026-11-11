@@ -4,7 +4,7 @@
 
 Ce sont des **intentions, sans dates**. Chaque version arrive quand elle est prête et éprouvée ; l'ordre et le contenu
 peuvent encore changer. Vos idées sont les bienvenues : « Suggérer une amélioration » dans Prévo (écran À propos ou
-pied du menu), ou les [issues](https://github.com/nicoboy49/prevo/issues).
+pied du menu), ou les [issues](https://github.com/prevo-pro/prevo/issues).
 
 ## 2.0 — installation, deux langues, données mieux protégées
 

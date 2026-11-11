@@ -8,8 +8,8 @@ version plus récente sur l'accueil du responsable et dans « À propos ». Ce q
                  d'information ; la case de Paramètres est cochée par défaut, son texte dit ce qui part ;
     requête      (T305) rien que la requête : aucun paramètre, ni Cookie ni Referer, l'en-tête Origin ajouté par le
                  navigateur (dit dans la doc) ; une redirection n'est jamais suivie ;
-    liste blanche (T305, D176) adresse de téléchargement : https://prevo.pro/… ou https://github.com/nicoboy49/prevo/…
-                 seulement (hôte exact, sans nom, sans port) ; sinon aucun bandeau ;
+    liste blanche (T305, D176 révisée le 11/11/2026) adresse de téléchargement : https://prevo.pro/…,
+                 https://github.com/prevo-pro/prevo/… ou l'ancienne https://github.com/nicoboy49/prevo/… seulement (hôte exact, sans nom, sans port) ; sinon aucun bandeau ;
     anglais      (T305) nouveautes_en montré dans Prévo en anglais, nouveautes sinon (et en anglais sans
                  nouveautes_en) ; texte toujours échappé ;
     accord       version plus récente : bandeau #maj-bandeau (version, date, nouveautés, « Télécharger » vers l'adresse
@@ -61,7 +61,7 @@ def version_suivante(version):
 
 
 def fichier_version(version, **champs):
-    contenu = {"version": version, "date": "2026-11-02", "adresse": "https://github.com/nicoboy49/prevo/releases/tag/v" + version,
+    contenu = {"version": version, "date": "2026-11-02", "adresse": "https://github.com/prevo-pro/prevo/releases/tag/v" + version,
                "nouveautes": ["Mise à jour signalée sur l'accueil.", "Wiki de maintenance : pages de machines."]}
     contenu.update(champs)
     return json.dumps(contenu, ensure_ascii=False).encode("utf-8")
@@ -168,7 +168,7 @@ class TestSignalement(CasMiseAJour):
             self.assertIn("(02/11/2026)", texte)
             self.assertIn("Mise à jour signalée sur l'accueil. · Wiki de maintenance : pages de machines.", texte)
             lien = page.locator("#maj-bandeau a.maj-telecharger")
-            self.assertEqual(lien.get_attribute("href"), "https://github.com/nicoboy49/prevo/releases/tag/v" + self.nouvelle)
+            self.assertEqual(lien.get_attribute("href"), "https://github.com/prevo-pro/prevo/releases/tag/v" + self.nouvelle)
             self.assertEqual(lien.get_attribute("target"), "_blank")
             self.assertEqual(page.evaluate("document.querySelector('#maj-bandeau').getAttribute('role')"), "status")
             self.assertEqual(site.requetes, ["/version.json"])
@@ -180,7 +180,7 @@ class TestSignalement(CasMiseAJour):
             self.assertEqual(len(site.requetes), 1)
             ligne = self.ligne_apropos()
             self.assertIn("Prévo %s est disponible" % self.nouvelle, ligne)
-            self.assertEqual(page.get_attribute("#apropos-maj a", "href"), "https://github.com/nicoboy49/prevo/releases/tag/v" + self.nouvelle)
+            self.assertEqual(page.get_attribute("#apropos-maj a", "href"), "https://github.com/prevo-pro/prevo/releases/tag/v" + self.nouvelle)
 
     def test_une_lecture_par_jour_et_ignorer_tient_au_rechargement(self):
         with ServeurPrevo() as serveur, FauxSite(fichier_version(self.nouvelle)) as site:
@@ -384,11 +384,13 @@ class TestActiveParDefaut(CasMiseAJour):
             permises = page.evaluate("""() => [
               'https://prevo.pro/', 'https://prevo.pro/telecharger', 'https://github.com/nicoboy49/prevo',
               'https://github.com/nicoboy49/prevo/releases/tag/v2.0.0',
+              'https://github.com/prevo-pro/prevo', 'https://github.com/prevo-pro/prevo/releases/tag/v2.2.0',
               'http://prevo.pro/', 'https://prevo.pro.exemple.com/', 'https://www.prevo.pro/', 'https://prevo.pro:8443/',
               'https://nom:secret@prevo.pro/', 'https://github.com/autre/prevo', 'https://github.com/nicoboy49/prevo-faux',
-              'https://github.com/nicoboy49', 'https://exemple.org/prevo.pro', 'javascript:alert(1)', 'pas une adresse',
+              'https://github.com/nicoboy49', 'https://github.com/prevo-pro/prevo-faux', 'https://github.com/prevo-pro',
+              'https://exemple.org/prevo.pro', 'javascript:alert(1)', 'pas une adresse',
             ].map((a) => MiseAJour.adresseDeTelechargementPermise(a))""")
-            self.assertEqual(permises, [True] * 4 + [False] * 11)
+            self.assertEqual(permises, [True] * 6 + [False] * 13)
             for adresse in ("https://exemple.org/prevo-2.zip", "https://github.com/autre/prevo/releases"):
                 with self.subTest(adresse=adresse):
                     self.assertIsNone(page.evaluate("(a) => MiseAJour.lireFichier({ version: '9.9.9', adresse: a })",
@@ -437,7 +439,9 @@ class TestVersionJsonDeLaRelease(unittest.TestCase):
             self.assertEqual(sorted(contenu), ["adresse", "date", "nouveautes", "version"])
             self.assertEqual(contenu["version"], self.version)
             self.assertEqual(contenu["date"], "%04d-%02d-%02d" % self.date)
-            self.assertEqual(contenu["adresse"], "https://github.com/nicoboy49/prevo/releases/tag/v" + self.version)
+            # D176 révisée (11/11/2026) : la page de téléchargement de prevo.pro, la seule adresse que les versions 2.0.0 à
+            # 2.1.x gardent encore après le transfert du dépôt (elles ne connaissent que prevo.pro et nicoboy49/prevo).
+            self.assertEqual(contenu["adresse"], "https://prevo.pro/#telecharger")
             self.assertEqual(contenu["nouveautes"], self.module.nouveautes_du_changelog(RACINE, self.version))
             self.assertLessEqual(len(contenu["nouveautes"]), 2)
             for nouveaute in contenu["nouveautes"]:

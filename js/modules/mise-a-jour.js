@@ -9,7 +9,8 @@
 // maj_signalee = '0' (Paramètres › Mises à jour, texte à côté de la case) ; tant que le responsable n'a rien réglé,
 // un bandeau d'information unique par poste le dit (« Compris ») ; la lecture n'envoie rien que la requête elle-même
 // (credentials omit, aucun Referer, aucune redirection suivie, aucun paramètre) ; l'adresse de téléchargement n'est
-// gardée que vers https://prevo.pro ou https://github.com/nicoboy49/prevo (sinon aucun bandeau) ; nouveautes_en
+// gardée que vers https://prevo.pro ou le dépôt GitHub de Prévo, https://github.com/prevo-pro/prevo ou son ancienne
+// adresse https://github.com/nicoboy49/prevo (D176 révisée le 11/11/2026 : transfert, les deux acceptées), sinon aucun bandeau ; nouveautes_en
 // (facultatif) est montré en anglais, sinon nouveautes. C'est la seule connexion que Prévo ouvre de lui-même.
 window.MiseAJour = (function () {
   'use strict';
@@ -20,7 +21,9 @@ window.MiseAJour = (function () {
   const CLE_IGNOREE = 'prevo.majIgnoree';    // poste : version que le responsable a choisi de ne plus voir
   const CLE_INFORMEE = 'prevo.majInformee';  // poste : le bandeau d'information unique a été lu (« Compris », T305)
   const SITE_PREVO = 'prevo.pro';            // D176 : seules adresses de téléchargement gardées (https, hôte exact)
-  const DEPOT_GITHUB = '/nicoboy49/prevo';
+  // D176 révisée (11/11/2026) : dépôt transféré à l'organisation prevo-pro ; l'ancienne adresse reste acceptée (redirigée
+  // par GitHub, et c'est la seule que les versions 2.0.0 à 2.1.x acceptent : version.json garde une adresse prevo.pro).
+  const DEPOTS_GITHUB = ['/prevo-pro/prevo', '/nicoboy49/prevo'];
   const DELAI_MS = 5000;                     // au-delà, le fichier est tenu pour injoignable (aucune erreur montrée)
   const NOUVEAUTES_MAX = 3;
   const LONGUEUR_MAX = 200;
@@ -98,7 +101,8 @@ window.MiseAJour = (function () {
     try { url = new URL(texte); } catch (erreur) { return false; }
     if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
     if (url.hostname === SITE_PREVO) return true;
-    return url.hostname === 'github.com' && (url.pathname === DEPOT_GITHUB || url.pathname.startsWith(DEPOT_GITHUB + '/'));
+    return url.hostname === 'github.com'
+      && DEPOTS_GITHUB.some((depot) => url.pathname === depot || url.pathname.startsWith(depot + '/'));
   }
 
   function nettoyerNouveautes(liste) {

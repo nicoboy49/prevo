@@ -3556,7 +3556,7 @@ installer.
   l'atelier, le navigateur (User-Agent) et l'en-tête `Origin` que le navigateur ajoute lui-même à une lecture vers un
   autre site (l'adresse locale de Prévo, par exemple `https://192.168.1.20:8443`, ou `null` en fichier local) : accepté
   par Nicolas le 07/11 et dit dans le guide (§2.9). Adresse de téléchargement en **liste blanche** (D176,
-  `MiseAJour.adresseDeTelechargementPermise`) : `https://prevo.pro/…` ou `https://github.com/nicoboy49/prevo/…`, hôte
+  `MiseAJour.adresseDeTelechargementPermise`) : `https://prevo.pro/…`, `https://github.com/prevo-pro/prevo/…` ou l'ancienne adresse `https://github.com/nicoboy49/prevo/…` (D176 révisée le 11/11/2026, transfert du dépôt), hôte
   exact, sans nom ni mot de passe, port par défaut ; sinon le fichier est ignoré (aucun bandeau). `nouveautes_en`
   (facultatif, mêmes règles que `nouveautes`) est montré dans un Prévo affiché en anglais, `nouveautes` sinon ;
   textes toujours affichés comme du texte. Règles du fichier (seule source) : docs/RELEASE.md. La seule connexion que Prévo ouvre de lui-même vers Internet est cette lecture de version.json ; s'y ajoutent, seulement si vous les utilisez, l'assistant IA en ligne et la dictée vocale.
@@ -3588,7 +3588,7 @@ installer.
 Lien visible par tous les profils dans « À propos » (`#apropos-suggestion-lien`, repli `#apropos-suggestion-courriel`)
 et au pied du menu (`#menu-suggestion-lien`, rempli par `placerSelecteurLangue` de `js/app.js`). Il ouvre un nouvel
 onglet (`target="_blank" rel="noopener noreferrer"`) sur le formulaire d'issue GitHub
-`https://github.com/nicoboy49/prevo/issues/new?template=<2-proposer-une-amelioration.yml | 3-suggest-an-improvement.yml>&title=…&contexte=…`
+`https://github.com/prevo-pro/prevo/issues/new?template=<2-proposer-une-amelioration.yml | 3-suggest-an-improvement.yml>&title=…&contexte=…`
 (modèle anglais si `I18n.langue` vaut `en`) ; `contexte` ne porte que la version de Prévo, la langue active et le
 navigateur réduit à « nom version, système » (`Apropos.navigateurReduit`, `navigator.userAgentData` sinon
 `navigator.userAgent`) : aucune donnée de la base, aucun nom, aucun jeton. Repli : `mailto:contact@prevo.pro` au même

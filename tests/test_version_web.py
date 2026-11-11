@@ -57,7 +57,7 @@ SOUS_TITRE_TELECHARGER = "Gratuit et libre : installez-le pour travailler sur vo
 TITRE_DONNEES_DEMO = "Où sont les données de cette démo ?"
 NOTE_DONNEES_DEMO = ("Nulle part : elles vivent dans cette page et disparaissent quand vous la fermez. Sur votre "
                      "installation, ce sont des fichiers CSV sur votre PC, lisibles dans Excel.")
-ADRESSE_RELEASES = "https://github.com/nicoboy49/prevo/releases/latest"
+ADRESSE_RELEASES = "https://github.com/prevo-pro/prevo/releases/latest"
 LISTE_BLANCHE_WEB = ["GUIDE.en.html", "GUIDE.html", "css", "favicon.svg", "index.html", "js"]
 DRAPEAU_DEPOT = "const VERSION_WEB = false;"
 DRAPEAU_WEB = "const VERSION_WEB = true;"

@@ -25,7 +25,7 @@ from test_version_web import version_et_date
 
 TECHNICIEN = "TEC-0001"
 MODELES = RACINE / ".github" / "ISSUE_TEMPLATE"
-DEPOT = "https://github.com/nicoboy49/prevo"
+DEPOT = "https://github.com/prevo-pro/prevo"
 
 
 class CasSuggestion(CasNavigateur):

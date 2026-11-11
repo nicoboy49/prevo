@@ -918,7 +918,7 @@ La branche principale a été envoyée sur le dépôt privé le 28 octobre, avec
 l'arbitrage sur l'assistant IA. Le zip de la release, Python et mkcert compris, se joint à la release GitHub
 (`docs/RELEASE.md`).
 
-*Mise à jour du 07/11/2026 (constat B10 du Lot 0).* Le dépôt `nicoboy49/prevo` est **public**. La version publiée le
+*Mise à jour du 07/11/2026 (constat B10 du Lot 0).* Le dépôt `nicoboy49/prevo` est **public** (transféré le 11/11/2026 à l'organisation GitHub `prevo-pro` : `prevo-pro/prevo`). La version publiée le
 28 octobre sous le numéro 2.0.0 a été renommée **2.0.0 bêta 1** le 4 novembre (pré-version), avant que la recette
 réelle soit faite ; la version stable est restée la 1.2.x (1.2.1, correctif publié le 4 novembre), et la **2.0.0
 bêta 2** a été publiée le 5 novembre. La 2.0.0 finale (français et anglais) suit le chantier multilingue, puis la

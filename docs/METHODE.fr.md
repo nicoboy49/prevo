@@ -74,4 +74,4 @@ La liste complète (onze points) est à la section 14 de [PILOTAGE.md](PILOTAGE.
 
 ---
 
-*Chiffres datés du 08/11/2026 (Prévo 2.1.0). Plus de détail : [PILOTAGE.md](PILOTAGE.md). Projet : <https://github.com/nicoboy49/prevo>.*
+*Chiffres datés du 08/11/2026 (Prévo 2.1.0). Plus de détail : [PILOTAGE.md](PILOTAGE.md). Projet : <https://github.com/prevo-pro/prevo>.*

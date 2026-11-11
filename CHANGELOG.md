@@ -9,6 +9,10 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ### Modifié
 
+- **Dépôt GitHub transféré à l'organisation prevo-pro** : le code, les releases et les signalements sont désormais sur
+  <https://github.com/prevo-pro/prevo> ; les anciennes adresses `github.com/nicoboy49/prevo` redirigent. Prévo accepte
+  les deux adresses comme lien de téléchargement d'une mise à jour, et `version.json` mène à la page de téléchargement
+  de prevo.pro, la seule que les versions déjà installées gardent toutes.
 - **Format de données 4** (préparation de la 2.2, rien de visible encore à l'écran) : la base passe de 24 à 27
   fichiers, avec de nouvelles colonnes (coût d'une heure d'arrêt, habilitation exigée par un OT, recyclage et
   justificatif des habilitations, origine de la périodicité des contrôles) et trois tables : `reserves_controle`,
@@ -274,7 +278,7 @@ sans avertissement. La sauvegarde du jour gardait l'original.
 Paramètres › Sauvegardes et clique sur « Restaurer… » devant la sauvegarde du jour, ou celle de la veille si le
 fichier était déjà abîmé (« Une seule table » ne remet que ce fichier ; Prévo copie d'abord l'état actuel dans une
 copie de sécurité). Il peut aussi réparer le fichier : ce qui ne va pas est décrit dans Paramètres › Contrôle de la
-base. Les autres profils préviennent le responsable. Aide : https://github.com/nicoboy49/prevo/issues
+base. Les autres profils préviennent le responsable. Aide : https://github.com/prevo-pro/prevo/issues
 
 ## [1.2.0] - 2026-10-24
 
@@ -369,13 +373,13 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.1.1...HEAD
-[2.1.1]: https://github.com/nicoboy49/prevo/compare/v2.1.0...v2.1.1
-[2.1.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0...v2.1.0
-[2.0.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.2...v2.0.0
-[2.0.0-beta.2]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.1...v2.0.0-beta.2
-[2.0.0-beta.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v2.0.0-beta.1
-[1.2.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/nicoboy49/prevo/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/nicoboy49/prevo/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/nicoboy49/prevo/releases/tag/v1.0.0
+[Non publié]: https://github.com/prevo-pro/prevo/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/prevo-pro/prevo/compare/v2.1.0...v2.1.1
+[2.1.0]: https://github.com/prevo-pro/prevo/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/prevo-pro/prevo/compare/v2.0.0-beta.2...v2.0.0
+[2.0.0-beta.2]: https://github.com/prevo-pro/prevo/compare/v2.0.0-beta.1...v2.0.0-beta.2
+[2.0.0-beta.1]: https://github.com/prevo-pro/prevo/compare/v1.2.0...v2.0.0-beta.1
+[1.2.1]: https://github.com/prevo-pro/prevo/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/prevo-pro/prevo/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/prevo-pro/prevo/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/prevo-pro/prevo/releases/tag/v1.0.0

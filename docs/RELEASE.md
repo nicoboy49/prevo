@@ -1,5 +1,10 @@
 # Construire le zip d'une release
 
+**Dépôt : `prevo-pro/prevo`** (organisation GitHub `prevo-pro`, depuis le transfert du 11/11/2026 ; l'ancienne adresse
+`nicoboy49/prevo` redirige). **Ne jamais recréer de dépôt nommé « prevo » sous le compte `nicoboy49`** : les
+redirections de GitHub cesseraient, et avec elles les liens des versions déjà installées. Dans `version.json`,
+l'adresse reste sur prevo.pro (voir « Champs » plus bas, D176 révisée).
+
 Le zip d'une release (`dist/prevo-<version>.zip`, produit par `outils/construire_release.py`) se
 construit **toujours depuis une copie propre de l'étiquette**, jamais depuis le dossier de travail : le
 script prend les fichiers tels qu'ils sont sur le disque, et un travail en cours (fichiers modifiés ou
@@ -55,7 +60,7 @@ page), jamais dans la démo en ligne.
 | champ | obligatoire | règle |
 |---|---|---|
 | `version` | oui | version stable `x.y.z` seulement (chaque nombre de 1 à 4 chiffres), jamais `-beta.N` : une 1.2.x ignore tout le fichier si la forme est autre (aucun bandeau). Une bêta 2.0 installée est prévenue de la finale. |
-| `adresse` | oui | `https://…`, la page de la release ou de téléchargement ; à partir de la 2.0.0, sur `prevo.pro` ou `github.com/nicoboy49/prevo` seulement, sinon aucun bandeau. |
+| `adresse` | oui | `https://…`, la page de la release ou de téléchargement ; à partir de la 2.0.0, sur `prevo.pro` ou `github.com/nicoboy49/prevo` seulement, sinon aucun bandeau ; la 2.2 accepte aussi `github.com/prevo-pro/prevo`. **Toujours la page de téléchargement de prevo.pro** (`https://prevo.pro/#telecharger`, écrite par `outils/construire_release.py`) : jamais une adresse `github.com/prevo-pro/…`, que les versions 2.0.0 à 2.1.x refusent (D176 révisée le 11/11/2026). |
 | `date` | non | `AAAA-MM-JJ`, date de publication, affichée dans le bandeau. |
 | `nouveautes` | non | liste de 3 phrases au plus (les suivantes sont ignorées), 200 caractères au plus chacune (au-delà : coupée), texte brut sans HTML, en **français**. |
 | `nouveautes_en` | non | mêmes règles que `nouveautes`, en **anglais** : une installation en anglais l'affiche s'il existe, sinon `nouveautes` en français. Lu à partir de la 2.0.0, ignoré par les 1.2.x ; pas encore écrit par le script (à ajouter à la main). |
@@ -68,7 +73,7 @@ Exemple complet :
 {
   "version": "2.0.0",
   "date": "2026-11-20",
-  "adresse": "https://github.com/nicoboy49/prevo/releases/tag/v2.0.0",
+  "adresse": "https://prevo.pro/#telecharger",
   "nouveautes": [
     "Prévo en anglais : choisissez la langue à l'écran « Ce poste ».",
     "Deuxième nouveauté, en une phrase.",

@@ -74,4 +74,4 @@ The full list (eleven points) is in section 14 of [PILOTAGE.md](PILOTAGE.md).
 
 ---
 
-*Figures dated 2026-11-08 (Prévo 2.1.0). More detail, in French: [PILOTAGE.md](PILOTAGE.md). Project: <https://github.com/nicoboy49/prevo>.*
+*Figures dated 2026-11-08 (Prévo 2.1.0). More detail, in French: [PILOTAGE.md](PILOTAGE.md). Project: <https://github.com/prevo-pro/prevo>.*
