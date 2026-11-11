@@ -653,7 +653,7 @@ ECRANS_EN = {
             "The technicians, their trade, their capacity per week, and their authorisations with their expiry "
             "date, calculated from the date obtained and the refresher interval. A renewal adds a row and keeps "
             "the history; the attached proof is seen only by the manager. A CACES does not replace the "
-            "driving authorisation, issued by the employer: record it too. Authorisations that are overdue "
+            "operating permit, issued by the employer: record it too. Authorisations that are overdue "
             "or expire within sixty days appear on the home screen. Only the manager can see the hourly rate."
         ),
         "essayez": "open a technician and add an authorisation.",

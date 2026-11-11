@@ -386,7 +386,7 @@ class TestCarte(CasEncarts):
         self.js("() => I18n.choisir('en')")
         carte = self.carte("EQ-0004", False)
         self.assertEqual(carte["titre"], "Warranties and contracts")
-        self.assertEqual(carte["sousTitres"], ["Contractor agreements"])
+        self.assertEqual(carte["sousTitres"], ["Service contracts"])    # glossaire, T493
         self.assertEqual(carte["contrats"][1]["texte"], "Maintenance des compresseurs Air Maintenance until 31/12/2026")
 
 

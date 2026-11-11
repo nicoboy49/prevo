@@ -122,7 +122,7 @@ I18n.ajouter('en', {
   'aide.ecran.controles_fiche.texte': 'An inspection: equipment, type, interval, last visit, calculated next due date, attached report and findings: each can be cleared, or give a work order.',
   'aide.ecran.controles_fiche.titre': 'Statutory inspection',
   'aide.ecran.equipe.essayez': 'open a technician and add an authorisation.',
-  'aide.ecran.equipe.texte': 'The technicians, their trade, their capacity per week, and their authorisations with their expiry date, calculated from the date obtained and the refresher interval. A renewal adds a row and keeps the history; the attached proof is seen only by the manager. A CACES does not replace the driving authorisation, issued by the employer: record it too. Authorisations that are overdue or expire within sixty days appear on the home screen. Only the manager can see the hourly rate.',
+  'aide.ecran.equipe.texte': 'The technicians, their trade, their capacity per week, and their authorisations with their expiry date, calculated from the date obtained and the refresher interval. A renewal adds a row and keeps the history; the attached proof is seen only by the manager. A CACES does not replace the operating permit, issued by the employer: record it too. Authorisations that are overdue or expire within sixty days appear on the home screen. Only the manager can see the hourly rate.',
   'aide.ecran.equipe.titre': 'Team',
   'aide.ecran.equipe_fiche.essayez': '“Add an authorisation”.',
   'aide.ecran.equipe_fiche.texte': 'A technician\'s record: trade, capacity, authorisations with their refresher interval, expiry date and proof, work orders in progress.',
