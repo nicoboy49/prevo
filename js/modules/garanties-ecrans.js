@@ -333,6 +333,9 @@ Object.assign(Garanties, (() => {
   }
 
   function afficherListe(conteneur, parametres) {
+    // En-tête du téléphone : le libellé court, comme la barre du bas (le titre long est coupé sur un iPhone en anglais et
+    // en turc, planche T497) ; le titre de l'onglet et le grand titre de la page restent complets.
+    App.definirTitreMobile(I18n.t('garanties.menu.court'));
     const requete = (parametres && parametres.requete) || new URLSearchParams();
     const actif = ONGLETS.includes(requete.get('onglet')) ? requete.get('onglet') : 'garanties';
     const jour = Donnees.aujourdhui();
