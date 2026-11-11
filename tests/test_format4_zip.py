@@ -129,12 +129,12 @@ def octets_reserves_attendus(jeu):
 
 
 def base_cible():
-    """{chemin : octets} de la base qui reçoit l'import : la démo (format courant, ses réserves), plus une garantie et
-    un contrat fabriqués."""
+    """{chemin : octets} de la base qui reçoit l'import : la démo (format courant, ses réserves), dont les garanties et
+    les contrats sont remplacés par une garantie et un contrat fabriqués (la démo en a plusieurs depuis le L4)."""
     fichiers = fichiers_demo()
     for nom, ligne in (("garanties.csv", LIGNE_GARANTIE), ("contrats_prestataires.csv", LIGNE_CONTRAT)):
-        octets = fichiers[nom]
-        fichiers[nom] = (octets if octets.endswith(b"\r\n") else octets + b"\r\n") + ligne.encode("utf-8")
+        entete = fichiers[nom].split(b"\r\n", 1)[0]
+        fichiers[nom] = entete + b"\r\n" + ligne.encode("utf-8")
     assert reserves_de_la_demo() >= 1, "la démo a des réserves"
     for table in VIDEES:
         assert len(lire_csv(fichiers[table + ".csv"])[1]) == 1, table
