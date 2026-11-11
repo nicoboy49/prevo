@@ -383,7 +383,7 @@ Termes relevés tels qu'ils sont déjà écrits dans `js/i18n/*.js` (T488) ; le 
 
 | fr | en | tr | it | pt-PT | remarque |
 |---|---|---|---|---|---|
-| réserve (d'un contrôle) | finding | bulgu | rilievo | reserva | une observation à lever relevée lors d'un contrôle. Table « Réserves des contrôles » : inspection findings / kontrol bulguları / rilievi delle verifiche / reservas das inspeções. pt-PT garde « reserva » (usage portugais). |
+| réserve (d'un contrôle) | finding | bulgu | rilievo | reserva | une observation à lever relevée lors d'un contrôle. tr : « bulgu » est réservé à la réserve ; l'« observation » (texte libre du contrôle) est « gözlem », et le « constat » est « tespit ». Table « Réserves des contrôles » : inspection findings / kontrol bulguları / rilievi delle verifiche / reservas das inspeções. pt-PT garde « reserva » (usage portugais). |
 | lever une réserve, levée | clear, clearing | gidermek, giderme | risolvere, risoluzione | resolver, resolução | « Lever la réserve » : Clear the finding / Bulguyu gider / Risolvi il rilievo / Resolver a reserva. « à lever » : to be cleared / giderilecek / da risolvere / por resolver. Même verbe que « levée d'observations » (section 4). |
 | catalogue (Prévo) | catalogue | katalog | catalogo | catálogo | catalogue de contrôles et de types d'habilitation, réglementation française. Anglais britannique : catalogue. Rien n'est changé sans l'utilisateur. |
 | nature de la source | source type | kaynağın niteliği | natura della fonte | natureza da fonte | libellé du champ (contrôles et habilitations). Valeurs : voir les trois lignes suivantes. |
@@ -393,9 +393,9 @@ Termes relevés tels qu'ils sont déjà écrits dans `js/i18n/*.js` (T488) ; le 
 | à confirmer | to be confirmed | onaylanacak | da confermare | a confirmar | seul emploi relevé : proposition de l'IA à l'import (« proposée par l'IA : à confirmer »). La formule « à confirmer avec votre organisme de contrôle » n'existe pas encore dans les dictionnaires : à traduire avec ce terme quand elle sera écrite. |
 | relu le (catalogue) | reviewed on | gözden geçirildi | riletto il | relido em | « relu le {date} » : reviewed on {date} / {date} tarihinde gözden geçirildi / riletto il {date} / relido em {date}. Champ « Catalogue relu le » : Catalogue reviewed on. |
 | habilitation exigée | authorisation required | gerekli yetkilendirme | abilitazione richiesta | habilitação exigida | habilitation demandée par l'OT. Cohérent avec « habilitation » (section 5). |
-| passer outre, dérogation | override | kuralı aşmak, istisna | deroga | exceção | bouton « Passer outre et enregistrer » : Override and save / Kuralı aş ve kaydet / Deroga e salva / Abrir exceção e guardar. « Motif de la dérogation » : Reason for the override / İstisna gerekçesi / Motivo della deroga / Motivo da exceção. |
+| passer outre, dérogation | override | istisna tanımak, istisna | deroga | exceção | bouton « Passer outre et enregistrer » : Override and save / İstisna tanı ve kaydet / Deroga e salva / Abrir exceção e guardar. « Motif de la dérogation » : Reason for the override / İstisna gerekçesi / Motivo della deroga / Motivo da exceção. |
 | recyclage (habilitation) | refresher interval | yenileme | aggiornamento | reciclagem | durée en mois entre deux remises à niveau : « Recyclage (mois) » : Refresher interval (months). |
-| justificatif | supporting document | dayanak belge | giustificativo | comprovativo | pièce jointe à une habilitation (titre, attestation, CACES). |
+| justificatif | supporting document | destekleyici belge | giustificativo | comprovativo | pièce jointe à une habilitation (titre, attestation, CACES). |
 | autorisation de conduite | operating permit | kullanma yetkisi | autorizzazione alla conduzione | autorização de condução | délivrée par l'employeur ; le CACES en est un justificatif. |
 | garantie | warranty | garanti | garanzia | garantia | « Fin de garantie » : Warranty end / Garanti bitişi / Fine garanzia / Fim da garantia. |
 | contrat de prestataire | service contract | hizmet sözleşmesi | contratto di servizio | contrato de prestador | pt-PT : « prestador » (de serviços). |
@@ -411,9 +411,9 @@ Incohérences relevées entre écrans (aucune corrigée ici) :
 
 - **Préavis, anglais** : résolu en T493, « Notice period » partout (champ du schéma compris).
 - **Autorisation, anglais** : résolu en T493, « habilitation » = « authorisation » ; « autorisation de conduite » = « operating permit » (deux mots distincts) ; sans ambiguïté en italien, portugais et turc (yetkilendirme / yetki).
-- **Dérogation, turc** : « Kuralı aş » (bouton) contre « istisna » (motif, bandeau) ; l'italien et le portugais emploient « deroga » / « exceção » partout (le bouton pt-PT dit « Abrir exceção »).
-- **Réserve, turc** : « bulgu » traduit aussi « observation » ; pas de distinction réserve / observation.
-- **Justificatif, turc** : « dayanak belge » rappelle « dayanak metin » (texte de référence, section 4).
+- **Dérogation, turc** : résolu en T494, « istisna » partout (bouton « İstisna tanı ve kaydet », verbe « istisna tanımak », jamais « kuralı aşmak ») ; l'italien et le portugais emploient « deroga » / « exceção » partout (le bouton pt-PT dit « Abrir exceção »).
+- **Réserve, turc** : résolu en T494, « bulgu » = réserve seulement ; « gözlem » = observation ; « tespit » = constat.
+- **Justificatif, turc** : résolu en T494, « destekleyici belge » ; « dayanak metin » reste réservé au texte de référence.
 
 ## Choix tranchés par Nicolas (06/11/2026)
 
