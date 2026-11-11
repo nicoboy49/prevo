@@ -200,7 +200,7 @@ class TestDonneesLangue(CasNavigateur):
                 self.assertNotIn(textes["ecran"], document)
         # Nombres à la française : virgule décimale, jamais « 92.4 » ni « 1,234 ».
         valeurs = re.findall(r'<div class="val">([^<]*)</div>', document)
-        self.assertEqual(len(valeurs), 3)
+        self.assertEqual(len(valeurs), 4)    # disponibilité, coût, part du préventif, coût de l'arrêt (L5, T470)
         for valeur in valeurs:
             with self.subTest(valeur=valeur):
                 self.assertIsNone(re.search(r"\d\.\d|\d,\d{3}(?!\d)", valeur))
