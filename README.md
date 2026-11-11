@@ -16,6 +16,14 @@ Download: **[latest version](https://github.com/nicoboy49/prevo/releases/latest)
 > available for anyone who does not want to change yet. Before updating, copy your data folder; report
 > any problem in the *Issues* tab.
 
+> **Coming in 2.2 (not yet released)** — the principle, as shown on screen: « Prévo est une aide au suivi ; la responsabilité reste celle de l'employeur. »
+> (Prévo is an aid to follow-up; the responsibility remains the employer's.) It reminds you of due dates and keeps
+> the evidence; every periodicity or duration it suggests has a stated source (nature of the source, reference, review
+> date) and can be changed. New: inspection reservations kept line by line, a sourced catalogue of inspections and
+> qualifications, blocking of work orders that require a qualification the technician does not hold (the manager
+> alone can override, on the record), warranties and service contracts with alerts, and the cost of an hour of
+> downtime in the monthly report.
+
 ## Who it is for, and why
 
 In many small companies, maintenance lives in a notebook, a spreadsheet or the technician's memory.

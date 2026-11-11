@@ -16,6 +16,13 @@ Téléchargement : **[dernière version](https://github.com/nicoboy49/prevo/rele
 > disponible pour qui ne veut pas encore changer. Avant de mettre à jour, copiez votre dossier de données ; signalez
 > tout problème dans l'onglet *Issues*.
 
+> **À venir en 2.2 (pas encore publiée)** — le principe : Prévo est une aide au suivi ; la responsabilité reste celle de l'employeur.
+> Il rappelle des échéances et garde des preuves ; toute périodicité ou durée proposée est sourcée (nature de la source,
+> référence, date de relecture) et modifiable. Nouveautés : réserves des contrôles ligne par ligne, catalogue sourcé des
+> contrôles et des habilitations, blocage des OT qui exigent une habilitation que le technicien n'a pas (le responsable
+> seul passe outre, journal à l'appui), garanties et contrats de prestataires avec alertes, coût d'une heure d'arrêt
+> dans le rapport mensuel.
+
 ## Pour qui, pourquoi
 
 Dans beaucoup de PME, la maintenance tient sur un cahier, un tableur ou la mémoire
