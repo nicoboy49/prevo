@@ -7,7 +7,7 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
-## [2.1.1] - 2026-11-09
+## [2.1.1] - 2026-11-11
 
 **Correctif de sécurité : le rapport mensuel figé n'est plus servi au technicien (mode avec comptes).** Mise à jour
 recommandée pour les installations en mode serveur avec comptes (connexion par identifiant, accès depuis le réseau ou
