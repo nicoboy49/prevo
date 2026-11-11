@@ -4012,7 +4012,7 @@ I18n.ajouter('en', {
   'rapport.onglet.langue_du_rapport': 'Report language',
   'rapport.onglet.mois': 'Month',
   'rapport.onglet.ouvrir': 'Open',
-  'rapport.onglet.page_4_direction_disponibilite': 'One A4 page for management: availability, cost, preventive share (compared with the previous month and the previous year), highlights, proposed decisions. The report is saved in the documents (an HTML file that reopens without Prévo and can be printed to PDF) and is never overwritten: “Recalculate” creates a revision.',
+  'rapport.onglet.page_4_direction_disponibilite': 'One A4 page for management: availability, cost, preventive share (compared with the previous month and the previous year), downtime cost, highlights, proposed decisions. The report is saved in the documents (an HTML file that reopens without Prévo and can be printed to PDF) and is never overwritten: “Recalculate” creates a revision.',
   'rapport.onglet.rapports_figes': 'Finalised reports',
   'rapport.onglet.recalculer': 'Recalculate',
   'rapport.onglet.revision_revision': 'revision {revision}',

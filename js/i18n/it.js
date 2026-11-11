@@ -4014,7 +4014,7 @@ I18n.ajouter('it', {
   'rapport.onglet.langue_du_rapport': 'Lingua del rapporto',
   'rapport.onglet.mois': 'Mese',
   'rapport.onglet.ouvrir': 'Apri',
-  'rapport.onglet.page_4_direction_disponibilite': 'Una pagina A4 per la direzione: disponibilità, costo, quota di manutenzione preventiva (confrontati con il mese precedente e con l\'anno precedente), fatti rilevanti, decisioni proposte. Il rapporto è salvato nei documenti (file HTML riapribile senza Prévo, stampabile in PDF) e non viene mai sovrascritto: «Ricalcola» crea una revisione.',
+  'rapport.onglet.page_4_direction_disponibilite': 'Una pagina A4 per la direzione: disponibilità, costo, quota di manutenzione preventiva (confrontati con il mese precedente e con l\'anno precedente), costo del fermo, fatti rilevanti, decisioni proposte. Il rapporto è salvato nei documenti (file HTML riapribile senza Prévo, stampabile in PDF) e non viene mai sovrascritto: «Ricalcola» crea una revisione.',
   'rapport.onglet.rapports_figes': 'Rapporti finalizzati',
   'rapport.onglet.recalculer': 'Ricalcola',
   'rapport.onglet.revision_revision': 'revisione {revision}',

@@ -4014,7 +4014,7 @@ I18n.ajouter('pt-PT', {
   'rapport.onglet.langue_du_rapport': 'Idioma do relatório',
   'rapport.onglet.mois': 'Mês',
   'rapport.onglet.ouvrir': 'Abrir',
-  'rapport.onglet.page_4_direction_disponibilite': 'Uma página A4 para a direção: disponibilidade, custo, peso da manutenção preventiva (comparados com o mês anterior e com o ano anterior), factos relevantes, decisões propostas. O relatório é guardado nos documentos (ficheiro HTML que se reabre sem o Prévo, imprimível em PDF) e nunca é substituído: «Recalcular» cria uma revisão.',
+  'rapport.onglet.page_4_direction_disponibilite': 'Uma página A4 para a direção: disponibilidade, custo, peso da manutenção preventiva (comparados com o mês anterior e com o ano anterior), custo da paragem, factos relevantes, decisões propostas. O relatório é guardado nos documentos (ficheiro HTML que se reabre sem o Prévo, imprimível em PDF) e nunca é substituído: «Recalcular» cria uma revisão.',
   'rapport.onglet.rapports_figes': 'Relatórios finalizados',
   'rapport.onglet.recalculer': 'Recalcular',
   'rapport.onglet.revision_revision': 'revisão {revision}',

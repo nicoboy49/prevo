@@ -4010,7 +4010,7 @@ I18n.ajouter('fr', {
   'rapport.onglet.langue_du_rapport': 'Langue du rapport',
   'rapport.onglet.mois': 'Mois',
   'rapport.onglet.ouvrir': 'Ouvrir',
-  'rapport.onglet.page_4_direction_disponibilite': 'Une page A4 pour la direction : disponibilité, coût, part du préventif (comparés au mois précédent et à l\'année précédente), faits marquants, décisions proposées. Le rapport est enregistré dans les documents (fichier HTML rouvrable sans Prévo, imprimable en PDF) et n\'est jamais écrasé : « Recalculer » crée une révision.',
+  'rapport.onglet.page_4_direction_disponibilite': 'Une page A4 pour la direction : disponibilité, coût, part du préventif (comparés au mois précédent et à l\'année précédente), coût de l\'arrêt, faits marquants, décisions proposées. Le rapport est enregistré dans les documents (fichier HTML rouvrable sans Prévo, imprimable en PDF) et n\'est jamais écrasé : « Recalculer » crée une révision.',
   'rapport.onglet.rapports_figes': 'Rapports figés',
   'rapport.onglet.recalculer': 'Recalculer',
   'rapport.onglet.revision_revision': 'révision {revision}',

@@ -4015,7 +4015,7 @@ I18n.ajouter('tr', {
   'rapport.onglet.langue_du_rapport': 'Rapor dili',
   'rapport.onglet.mois': 'Ay',
   'rapport.onglet.ouvrir': 'Aç',
-  'rapport.onglet.page_4_direction_disponibilite': 'Yönetim için tek A4 sayfası: kullanılabilirlik, maliyet, önleyici bakım payı (önceki ay ve önceki yılla karşılaştırmalı), önemli olaylar, önerilen kararlar. Rapor belgelere kaydedilir (Prévo olmadan yeniden açılabilen, PDF olarak yazdırılabilen bir HTML dosyası) ve asla üzerine yazılmaz: “Yeniden hesapla” bir revizyon oluşturur.',
+  'rapport.onglet.page_4_direction_disponibilite': 'Yönetim için tek A4 sayfası: kullanılabilirlik, maliyet, önleyici bakım payı (önceki ay ve önceki yılla karşılaştırmalı), duruş maliyeti, önemli olaylar, önerilen kararlar. Rapor belgelere kaydedilir (Prévo olmadan yeniden açılabilen, PDF olarak yazdırılabilen bir HTML dosyası) ve asla üzerine yazılmaz: “Yeniden hesapla” bir revizyon oluşturur.',
   'rapport.onglet.rapports_figes': 'Kesinleştirilmiş raporlar',
   'rapport.onglet.recalculer': 'Yeniden hesapla',
   'rapport.onglet.revision_revision': 'revizyon {revision}',
