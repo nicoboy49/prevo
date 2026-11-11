@@ -12,7 +12,7 @@ Sans navigateur (TestTextes) :
 En démo (TestEcransControles, index.html en file://, profil Responsable) : la phrase est affichée sur la liste
 #/controles, sur le formulaire #/controles/nouveau (en saisie libre comme avec une ligne du catalogue choisie) et sur
 la fiche d'un contrôle ; aucun de ces écrans ne dit « conforme », même avec la ligne C18 du catalogue choisie (son
-résumé validé dit « équipement fixe conforme » : réponse provisoire n° 1, remplacé à l'affichage).
+résumé validé dit « équipement fixe conforme » : D194, remplacé à l'affichage).
 En démo (TestEcransHabilitations, T432, profil Responsable) : la phrase est sur la carte « Habilitations » de la fiche
 d'un technicien, sur la vue #/equipe?filtre=a-renouveler et dans la fenêtre « Ajouter une habilitation »
 (en saisie libre comme avec un type du catalogue choisi : électricité, TST avec sa mention, CACES, autorisation de

@@ -1,6 +1,5 @@
 """Recette du L3 de la 2.2 « habilitations, blocage RG8 » (T449 ; CDC CS172, CS175 côté Habilitations, CS178, CS179,
-CS180 ; décisions D182, D185, D186, D191 ; QUESTIONS-L2-L6 : motif obligatoire (Q7), réponses PROVISOIRES n° 2 et 3,
-à confirmer par Nicolas). De bout en bout, à l'écran, comme un responsable puis comme un technicien ; les tests de
+CS180 ; décisions D182, D185, D186, D191 ; QUESTIONS-L2-L6 : motif obligatoire (Q7), D195 et D196, confirmées le 09/11). De bout en bout, à l'écran, comme un responsable puis comme un technicien ; les tests de
 chaque partie (test_habilitations*, test_rg8_*, test_droits_format4, test_principe_suivi, test_planning) ne sont pas
 recopiés ici.
 

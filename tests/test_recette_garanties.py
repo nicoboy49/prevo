@@ -1,6 +1,6 @@
 """Recette du L4 de la 2.2 « garanties et contrats de prestataires » (T461, T463 ; CDC §3.4, CS173, CS175 côté Garanties et
-contrats, CS177 côté réseau ; décisions D182, D187, D190 ; QUESTIONS-L2-L6 : L4-L6 Q1, Q3, Q6, Q7, Q12, et réponse
-PROVISOIRE n° 3 pour les contrats signés, à confirmer par Nicolas). De bout en bout, à l'écran, comme un responsable
+contrats, CS177 côté réseau ; décisions D182, D187, D190 ; QUESTIONS-L2-L6 : L4-L6 Q1, Q3, Q6, Q7, Q12, et D196 pour
+les contrats signés, confirmée le 09/11). De bout en bout, à l'écran, comme un responsable
 puis comme un technicien, horloge du navigateur figée (jamais la date réelle) ; les tests de chaque partie
 (test_garanties_*, test_parc_garanties, test_ordres_garantie, test_parametres_alerte) ne sont pas recopiés ici ;
 l'alerte d'accueil de CS173 est au L6 (T485, QUESTIONS-L2-L6 L4-L6 Q8).

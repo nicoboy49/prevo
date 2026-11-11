@@ -1,7 +1,7 @@
 """L4 — droits du serveur sur les garanties, les contrats de prestataires et les réserves des contrôles (T453 ; CS173 ;
 D126 prolongé ; QUESTIONS-L2-L6.md, L4-L6 Q6 ; ARCHITECTURE.md §22.5).
 
-Décidé (pas une réponse provisoire, contrairement à habilitations, T445) : reserves_controle, garanties et
+Décidé dès le L4 (les habilitations l'ont été ensuite, D195) : reserves_controle, garanties et
 contrats_prestataires s'écrivent par le responsable seul ; montant_annuel est caché au technicien.
 
 Ce qui est vérifié, en mode serveur avec comptes (vraies sessions sur une copie du jeu f4-v2.2.0, montants changés) :

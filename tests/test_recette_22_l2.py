@@ -1,5 +1,5 @@
 """Recette du L2 de la 2.2 « réserves des contrôles et catalogue » (T429 ; CDC CS170, CS171, CS175 côté Contrôles ;
-décisions D182, D183, D187, D192, D193 ; QUESTIONS-L2-L6 : réponse provisoire n° 1 pour C18). De bout en bout, à
+décisions D182, D183, D187, D192, D193 ; D194 pour C18). De bout en bout, à
 l'écran, comme un responsable ; les tests de chaque partie (test_reserves*, test_catalogue_*, test_principe_suivi,
 test_accueil_lot3, test_bento, test_rapport, test_recette_format4) ne sont pas recopiés ici.
 
@@ -290,7 +290,7 @@ class CasRecette(Ecran, CasNavigateur):
                          (C13["nature"], "", "recommandation", [MENTION]))
         self.assertEqual(releve["aidePeriodicite"], AIDE_SANS_PERIODICITE)
         self.verifier_principe("formulaire, C13")
-        # C18 : son résumé validé dit « conforme » ; l'écran jamais (réponse provisoire n° 1).
+        # C18 : son résumé validé dit « conforme » ; l'écran jamais (D194).
         releve = self.choisir("C18")
         self.assertIn(C18_AFFICHE, releve["texteEncart"])
         self.verifier_principe("formulaire, C18")
