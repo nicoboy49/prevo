@@ -396,10 +396,10 @@ Termes relevés tels qu'ils sont déjà écrits dans `js/i18n/*.js` (T488) ; le 
 | passer outre, dérogation | override | kuralı aşmak, istisna | deroga | exceção | bouton « Passer outre et enregistrer » : Override and save / Kuralı aş ve kaydet / Deroga e salva / Abrir exceção e guardar. « Motif de la dérogation » : Reason for the override / İstisna gerekçesi / Motivo della deroga / Motivo da exceção. |
 | recyclage (habilitation) | refresher interval | yenileme | aggiornamento | reciclagem | durée en mois entre deux remises à niveau : « Recyclage (mois) » : Refresher interval (months). |
 | justificatif | supporting document | dayanak belge | giustificativo | comprovativo | pièce jointe à une habilitation (titre, attestation, CACES). |
-| autorisation de conduite | operating authorisation | kullanma yetkisi | autorizzazione alla conduzione | autorização de condução | délivrée par l'employeur ; le CACES en est un justificatif. |
+| autorisation de conduite | operating permit | kullanma yetkisi | autorizzazione alla conduzione | autorização de condução | délivrée par l'employeur ; le CACES en est un justificatif. |
 | garantie | warranty | garanti | garanzia | garantia | « Fin de garantie » : Warranty end / Garanti bitişi / Fine garanzia / Fim da garantia. |
 | contrat de prestataire | service contract | hizmet sözleşmesi | contratto di servizio | contrato de prestador | pt-PT : « prestador » (de serviços). |
-| préavis (de résiliation) | termination notice | fesih ihbarı | preavviso di recesso | pré-aviso de rescisão | délai en mois. Anglais : « Termination notice » (champ) mais « Notice period » (fiche du contrat) : à unifier. |
+| préavis (de résiliation) | notice period | fesih ihbarı | preavviso di recesso | pré-aviso de rescisão | délai en mois. Anglais : « Notice period » partout (tranché en T493). |
 | date limite de résiliation | termination deadline | fesih için son tarih | termine ultimo di recesso | data limite de rescisão | fin − préavis. « préavis dépassé » : notice deadline passed / ihbar süresi geçti / termine di recesso superato / pré-aviso ultrapassado. |
 | reconduction tacite | automatic renewal | otomatik yenileme | rinnovo tacito | renovação tácita | le contrat se renouvelle seul s'il n'est pas résilié. |
 | coût de l'arrêt | downtime cost | duruş maliyeti | costo del fermo | custo da paragem | indicateurs et rapport mensuel. |
@@ -409,8 +409,8 @@ Termes relevés tels qu'ils sont déjà écrits dans `js/i18n/*.js` (T488) ; le 
 
 Incohérences relevées entre écrans (aucune corrigée ici) :
 
-- **Préavis, anglais** : « Termination notice (months) » (champ du schéma) contre « Notice period » (fiche du contrat, avertissement) ; le turc, l'italien et le portugais sont constants.
-- **Autorisation, anglais** : « habilitation » et « autorisation de conduite » donnent tous deux « authorisation » (« operating authorisation » pour la seconde) ; sans ambiguïté en italien, portugais et turc (yetkilendirme / yetki).
+- **Préavis, anglais** : résolu en T493, « Notice period » partout (champ du schéma compris).
+- **Autorisation, anglais** : résolu en T493, « habilitation » = « authorisation » ; « autorisation de conduite » = « operating permit » (deux mots distincts) ; sans ambiguïté en italien, portugais et turc (yetkilendirme / yetki).
 - **Dérogation, turc** : « Kuralı aş » (bouton) contre « istisna » (motif, bandeau) ; l'italien et le portugais emploient « deroga » / « exceção » partout (le bouton pt-PT dit « Abrir exceção »).
 - **Réserve, turc** : « bulgu » traduit aussi « observation » ; pas de distinction réserve / observation.
 - **Justificatif, turc** : « dayanak belge » rappelle « dayanak metin » (texte de référence, section 4).
