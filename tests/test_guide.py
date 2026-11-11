@@ -41,7 +41,9 @@ CAPTURES = {"accueil", "signaler", "ot", "indicateurs", "planning", "suggestions
             "wiki", "wiki-page",
             # Lot 7 (T177) : connexion, assistant (étape 1 et récapitulatif avec la fiche d'accès), Équipe › Accès,
             # porte d'entrée vue d'un Android et d'un iPhone (profils Playwright).
-            "connexion", "equipe-acces", "installation", "installation-fiche", "porte-android", "porte-iphone"}
+            "connexion", "equipe-acces", "installation", "installation-fiche", "porte-android", "porte-iphone",
+            # 2.2 (L4, T497) : garanties et contrats de prestataires.
+            "garanties"}
 PREFIXE_JPEG = "data:image/jpeg;base64,"
 
 # Chapitres demandés par §17.8, puis par le lot 6 (§20, T125 : « Le wiki de maintenance »), §21 (mise à jour

@@ -156,6 +156,9 @@ def E(nom, route, profils=TOUS, **options):
 
 
 ECRANS = [
+    # 2.2 : l'accueil du technicien porte « Mes habilitations » (T480), celui du responsable la tuile « Garanties et
+    # contrats » (T485) ; le coût de l'arrêt (L5) se lit au parc, sur la fiche et les formulaires d'un équipement, et
+    # aux indicateurs : pas d'écran à lui.
     E("accueil", "#/accueil", capture=True),
     E("liste-di", "#/di", capture=True),
     E("nouvelle-di", "#/di/nouvelle", capture=True, erreurs="#contenu .di-envoyer"),
@@ -166,6 +169,8 @@ ECRANS = [
     E("fiche-di:refusee", lambda: "#/di/" + scenario("di_statut_refusee")),
     E("liste-ot", "#/ot", INTERVENANTS, capture=True),
     E("nouvel-ot", "#/ot/nouveau", RESPONSABLE, capture=True, erreurs='#contenu form button[type="submit"]'),
+    # 2.2 (L3, T440) : champ « Habilitation exigée par l'OT » et son aide « En plus de celle de l'équipement (BR)… ».
+    E("nouvel-ot:habilitation", lambda: "#/ot/nouveau?equipement=" + scenario("equipement_br"), RESPONSABLE),
     E("fiche-ot:en-cours", lambda: "#/ot/" + scenario("ot_statut_en_cours"), INTERVENANTS, capture=True,
       fenetres=(("mettre-en-attente", '#contenu button[data-action="transition"][data-cible="En attente"]'),)),
     E("fiche-ot:planifie", lambda: "#/ot/" + scenario("ot_statut_planifie"), INTERVENANTS,
@@ -174,6 +179,10 @@ ECRANS = [
     E("fiche-ot:cloture-technique", lambda: "#/ot/" + scenario("ot_statut_cloture_technique"), INTERVENANTS,
       fenetres=(("cloturer", '#contenu button[data-action="transition"][data-cible="Clôturé administrativement"]'),)),
     E("fiche-ot:verrouille", lambda: "#/ot/" + scenario("ot_statut_cloture_administratif"), INTERVENANTS),
+    # 2.2 (L3, T440) : en-tête « Habilitation exigée : H0V (OT) », onglet préparation avec le champ ; et l'OT à BR de
+    # l'équipement (« BR (équipement) »).
+    E("fiche-ot:habilitation-exigee", lambda: "#/ot/" + scenario("ot_habilitation_exigee"), INTERVENANTS),
+    E("fiche-ot:habilitation-equipement", lambda: "#/ot/" + scenario("ot_a_planifier_br"), INTERVENANTS),
     E("parc", "#/parc", capture=True),
     E("parc-etiquettes", "#/parc/etiquettes", RESPONSABLE),
     E("equipement", lambda: "#/equipement/" + scenario("causes_equipement_2"), capture=True,
@@ -190,8 +199,34 @@ ECRANS = [
     E("magasin-article", lambda: "#/magasin/article/" + scenario("kit_garniture"), INTERVENANTS),
     E("magasin-article-nouveau", "#/magasin/article/nouveau", RESPONSABLE),
     E("controles", "#/controles", INTERVENANTS, capture=True),
-    E("controles-fiche", lambda: "#/controles/" + scenario("controle_en_retard"), INTERVENANTS),
+    E("controles-fiche", lambda: "#/controles/" + scenario("controle_en_retard"), INTERVENANTS,
+      fenetres=(("realise", "#contenu #controle-realise"),)),
+    # 2.2 (L2) : carte « Réserves » avec une réserve ouverte et une levée (AE-01), ses trois fenêtres.
+    E("controles-fiche:reserves", lambda: "#/controles/" + scenario("controle_reserves"), INTERVENANTS,
+      fenetres=(("lever-reserve", '#contenu .controles-reserve [data-action="lever"]'),
+                ("modifier-reserve", '#contenu .controles-reserve [data-action="modifier"]'),
+                ("ajouter-reserve", '#contenu .controles-reserves [data-action="ajouter"]'))),
     E("controles-nouveau", "#/controles/nouveau", RESPONSABLE),
+    # 2.2 (L4) : garanties et contrats de prestataires (responsable seul) : liste (compteurs, onglets Garanties et
+    # Contrats), fiches par les rôles de scénario du jeu de démo, fenêtres des actions, formulaires.
+    E("garanties", "#/garanties", RESPONSABLE, capture=True),
+    E("garanties-garantie", lambda: "#/garanties/garantie/" + scenario("garantie_en_cours"), RESPONSABLE,
+      fenetres=(("retirer", "#contenu #garantie-retirer"),)),
+    E("garanties-garantie:bientot-finie", lambda: "#/garanties/garantie/" + scenario("garantie_bientot_finie"),
+      RESPONSABLE),
+    E("garanties-contrat", lambda: "#/garanties/contrat/" + scenario("contrat_a_decider"), RESPONSABLE,
+      fenetres=(("noter-resiliation", "#contenu #contrat-resiliation"), ("reconduire", "#contenu #contrat-reconduire"),
+                ("retirer", "#contenu #contrat-retirer"))),
+    E("garanties-contrat:a-mettre-a-jour", lambda: "#/garanties/contrat/" + scenario("contrat_a_mettre_a_jour"),
+      RESPONSABLE),
+    E("garanties-garantie-nouvelle", "#/garanties/garantie/nouvelle", RESPONSABLE,
+      erreurs='#contenu form button[type="submit"]'),
+    E("garanties-garantie-modifier", lambda: "#/garanties/garantie/" + scenario("garantie_en_cours") + "/modifier",
+      RESPONSABLE),
+    E("garanties-contrat-nouveau", "#/garanties/contrat/nouveau", RESPONSABLE,
+      erreurs='#contenu form button[type="submit"]'),
+    E("garanties-contrat-modifier", lambda: "#/garanties/contrat/" + scenario("contrat_a_decider") + "/modifier",
+      RESPONSABLE),
     E("indicateurs", "#/indicateurs", RESPONSABLE, capture=True),
     E("wiki", "#/wiki", capture=True),
     E("wiki-liste:machines", "#/wiki/machines"),
@@ -207,9 +242,13 @@ ECRANS = [
     E("wiki-ecrire", lambda: "#/wiki-ecrire/" + scenario("causes_equipement_2"), RESPONSABLE),
     E("import", "#/import", RESPONSABLE, capture=True),
     E("equipe", "#/equipe", INTERVENANTS, capture=True),
+    # 2.2 (L3, T432, CS175) : vue « à renouveler » et sa phrase D182.
+    E("equipe:a-renouveler", "#/equipe?filtre=a-renouveler", INTERVENANTS),
+    # 2.2 (L3, T432) : fenêtre « Corriger l'habilitation » en plus (type, recyclage, échéance, justificatif).
     E("equipe-fiche", lambda: "#/equipe/" + scenario("technicien_br_valide"), INTERVENANTS,
       fenetres=(("ajouter-habilitation", "#contenu #equipe-ajouter-habilitation"),
-                ("renouveler", '#contenu button[data-action="renouveler"]'))),
+                ("renouveler", '#contenu button[data-action="renouveler"]'),
+                ("corriger", '#contenu button[data-action="corriger"]'))),
     E("equipe-fiche:habilitation-echue", lambda: "#/equipe/" + scenario("technicien_br_echue"), INTERVENANTS),
     E("equipe-nouveau", "#/equipe/nouveau", RESPONSABLE),
     E("equipe-acces", "#/equipe/acces", RESPONSABLE, modes=("serveur",), capture=True,

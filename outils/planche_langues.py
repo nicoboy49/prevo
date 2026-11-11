@@ -29,7 +29,9 @@ APPAREILS = {"bureau": {"viewport": {"width": 1440, "height": 900}, "device_scal
              "android": "Pixel 7", "iphone": "iPhone 14"}
 ECRANS = [("accueil", "#/accueil"), ("demandes", "#/di"), ("nouvelle demande", "#/di/nouvelle"),
           ("ordres de travail", "#/ot"), ("parc", "#/parc"), ("préventif", "#/preventif"), ("planning", "#/planning"),
-          ("magasin", "#/magasin"), ("contrôles", "#/controles"), ("indicateurs", "#/indicateurs"),
+          ("magasin", "#/magasin"), ("contrôles", "#/controles"),
+          ("garanties et contrats", "#/garanties"),          # 2.2 (L4, T497)
+          ("indicateurs", "#/indicateurs"),
           ("wiki", "#/wiki"), ("équipe", "#/equipe"), ("paramètres", "#/parametres"), ("ce poste", "#/poste"),
           ("à propos", "#/apropos")]
 

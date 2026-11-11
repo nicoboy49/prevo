@@ -143,6 +143,9 @@ CAPTURES = [
      "attendre": "#contenu .sg-carte"},
     {"nom": "poste", "appareil": "bureau", "profil": "responsable", "route": "#/poste",
      "attendre": "#contenu #carte-ia"},
+    # 2.2 (L4, T497) : garanties et contrats de prestataires (compteurs, onglets, liste des garanties).
+    {"nom": "garanties", "appareil": "bureau", "profil": "responsable", "route": "#/garanties",
+     "attendre": "#contenu .garanties-liste table"},
     {"nom": "import", "appareil": "bureau", "profil": "responsable", "route": "#/import",
      "attendre": '#contenu .import-etape[data-etape="1"]', "preparer": "import"},
     # Lot 6 (T125) : l'accueil du wiki (responsable : « Suivi du wiki » affiché) et la page d'une machine de la
