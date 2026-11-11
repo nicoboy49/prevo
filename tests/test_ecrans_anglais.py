@@ -289,7 +289,9 @@ class Examen:
         adresses) sont retirés aussi."""
         texte = texte.lower()
         candidats = set()
-        for mot in set(re.findall(r"\w+", texte)):
+        # Mots entiers, et aussi les suites de lettres seules : un repère en gras collé au nom (« <b>AE-03</b>Armoire »,
+        # séparés à l'écran par une marge CSS) donne « ae-03armoire » dans le texte lu.
+        for mot in set(re.findall(r"\w+", texte)) | set(re.findall(r"[^\W\d_]+", texte)):
             candidats.update(self.par_mot.get(mot, ()))
         if texte.endswith("…") and any(segment.startswith(texte[:-1].rstrip()) for segment in candidats):
             return ""
