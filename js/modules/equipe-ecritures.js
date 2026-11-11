@@ -11,7 +11,7 @@
 // - un renouvellement AJOUTE une ligne de même intitulé : l'ancienne reste telle quelle (historique),
 //   et c'est la nouvelle, à l'échéance la plus lointaine, qui compte (Equipe.habilitationsQuiComptent) ;
 // - les habilitations (et leurs justificatifs) ne sont écrites que sous le profil responsable (2.2,
-//   réponse provisoire n° 2 de QUESTIONS-L2-L6, à confirmer) : ici côté application ; le refus côté
+//   D195) : ici côté application ; le refus côté
 //   serveur est une tâche séparée.
 // Complète l'objet Equipe créé par equipe-regles.js.
 
@@ -56,7 +56,7 @@ Object.assign(Equipe, (() => {
     return lu === null ? texte(valeur) : String(Math.round(lu * 1e6) / 1e6);
   }
 
-  // Habilitations et justificatifs : profil responsable seulement (réponse provisoire n° 2, à confirmer).
+  // Habilitations et justificatifs : profil responsable seulement (D195).
   function exigerResponsable() {
     const responsable = typeof App !== 'undefined' && Boolean(App) && typeof App.estResponsable === 'function'
       && App.estResponsable();

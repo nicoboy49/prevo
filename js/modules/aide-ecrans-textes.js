@@ -157,6 +157,12 @@ const AideEcransTextes = {
     get texte() { return I18n.t('aide.ecran.equipe_fiche.texte'); },
     get essayez() { return I18n.t('aide.ecran.equipe_fiche.essayez'); },
   },
+  garanties: {
+    get titre() { return I18n.t('aide.ecran.garanties.titre'); },
+    ancre: 'garanties',
+    get texte() { return I18n.t('aide.ecran.garanties.texte'); },
+    get essayez() { return I18n.t('aide.ecran.garanties.essayez'); },
+  },
   indicateurs: {
     get titre() { return I18n.t('aide.ecran.indicateurs.titre'); },
     ancre: 'indicateurs',

@@ -162,7 +162,8 @@ ECRANS = {
                     "Quatre onglets : Préparation (travail à faire, pièces, technicien, date), Exécution "
                     "(check-list, temps, sorties de pièces), Compte rendu (symptôme, cause, remède, astuce "
                     "pour la prochaine fois) et Historique de l'équipement. Prévo refuse de planifier s'il "
-                    "manque une pièce en stock et avertit si le technicien n'a pas l'habilitation requise."
+                    "manque une pièce en stock et refuse d'affecter un technicien sans l'habilitation requise "
+                    "valable à la date prévue : seul le responsable passe outre, en écrivant un motif."
                 ),
                 "essayez": "onglet Préparation, bouton Planifier.",
             },
@@ -231,8 +232,10 @@ ECRANS = {
         "ancre": "parc",
         "texte": (
             "L'arborescence du site : ateliers, lignes, équipements. Chaque fiche a son QR code, sa criticité "
-            "A, B ou C, ses compteurs, ses gammes, ses contrôles et son historique. Le responsable ajoute et "
-            "modifie ; les étiquettes QR s'impriment par atelier ou par ligne, planche A4 de 24 ou de 8."
+            "A, B ou C, son coût d'une heure d'arrêt, ses compteurs, ses gammes, ses contrôles et son "
+            "historique. Sans coût d'une heure d'arrêt, l'équipement est « non chiffré » dans les "
+            "indicateurs : rien n'est estimé. Le responsable ajoute et modifie ; les étiquettes QR "
+            "s'impriment par atelier ou par ligne, planche A4 de 24 ou de 8."
         ),
         "essayez": "dépliez l'Atelier Usinage et ouvrez une machine.",
     },
@@ -260,10 +263,11 @@ ECRANS = {
         "titre": "Contrôles réglementaires",
         "ancre": "controles",
         "texte": (
-            "L'échéancier par équipement : en retard, observations à lever, à planifier sous trente jours, à "
-            "jour. On enregistre un contrôle réalisé avec son rapport, on lève les observations, on crée un "
-            "ordre réglementaire pré-rempli. Prévo calcule la date suivante d'après la périodicité que vous "
-            "saisissez ; il ne fait pas de veille réglementaire."
+            "L'échéancier par équipement : en retard, réserves à lever, à planifier sous trente jours, à "
+            "jour. On enregistre un contrôle réalisé avec son rapport et ses réserves, une par ligne, on lève "
+            "chaque réserve, on crée un ordre réglementaire pré-rempli. À la création, le catalogue Prévo "
+            "pré-remplit la périodicité et dit d'où elle vient. Prévo calcule la date suivante d'après la "
+            "périodicité du contrôle ; il ne fait pas de veille réglementaire."
         ),
         "essayez": "ouvrez un contrôle « en retard ».",
     },
@@ -272,7 +276,7 @@ ECRANS = {
         "ancre": "controles",
         "texte": (
             "Un contrôle : équipement, type, périodicité, dernier passage, prochaine échéance calculée, "
-            "rapport joint et observations à lever."
+            "rapport joint et réserves : chacune se lève, ou donne un ordre de travail."
         ),
         "essayez": "« Enregistrer le contrôle réalisé ».",
     },
@@ -281,9 +285,11 @@ ECRANS = {
         "ancre": "equipe",
         "texte": (
             "Les techniciens, leur métier, leur capacité par semaine, et leurs habilitations avec leur "
-            "échéance. Un renouvellement ajoute une ligne et garde l'historique. Les habilitations échues ou "
-            "qui expirent sous soixante jours remontent sur l'accueil. Le taux horaire n'est visible que du "
-            "responsable."
+            "échéance, calculée depuis l'obtention et le recyclage. Un renouvellement ajoute une ligne et garde "
+            "l'historique ; le justificatif joint n'est vu que du responsable. Le CACES ne remplace pas "
+            "l'autorisation de conduite, délivrée par l'employeur : enregistrez-la aussi. Les habilitations "
+            "échues ou qui expirent sous soixante jours remontent sur l'accueil. Le taux horaire n'est "
+            "visible que du responsable."
         ),
         "essayez": "ouvrez un technicien et ajoutez une habilitation.",
     },
@@ -291,19 +297,31 @@ ECRANS = {
         "titre": "Technicien",
         "ancre": "equipe",
         "texte": (
-            "La fiche d'un technicien : métier, capacité, habilitations et leur validité, ordres de travail en "
-            "cours."
+            "La fiche d'un technicien : métier, capacité, habilitations avec leur recyclage, leur échéance et "
+            "leur justificatif, ordres de travail en cours."
         ),
         "essayez": "« Ajouter une habilitation ».",
+    },
+    "garanties": {
+        "titre": "Garanties et contrats",
+        "ancre": "garanties",
+        "texte": (
+            "Les garanties des équipements et les contrats de prestataires, avec leurs échéances et leurs "
+            "documents. Les compteurs du haut filtrent la liste ; deux onglets, Garanties et Contrats. Un "
+            "contrat à reconduction tacite passe à « à décider » avant sa date limite de résiliation. Prévo "
+            "rappelle, il n'envoie rien : « Écrire au prestataire » ouvre votre messagerie."
+        ),
+        "essayez": "cliquez sur le compteur « Contrats à décider ».",
     },
     "indicateurs": {
         "titre": "Indicateurs",
         "ancre": "indicateurs",
         "texte": (
-            "Disponibilité, MTBF, MTTR, durée d'arrêt, part et respect du préventif, retards, délais, coûts et "
-            "valeur du stock, sur la période, la criticité et l'atelier de votre choix. Chaque chiffre dit sur "
-            "combien d'ordres il porte et donne la liste de ses sources ; un chiffre impossible à calculer dit "
-            "pourquoi au lieu d'afficher zéro. L'onglet Rapports mensuels tient sur une page A4."
+            "Disponibilité, MTBF, MTTR, durée d'arrêt, coût de l'arrêt, part et respect du préventif, retards, "
+            "délais, coûts et valeur du stock, sur la période, la criticité et l'atelier de votre choix. "
+            "Chaque chiffre dit sur combien d'ordres il porte et donne la liste de ses sources ; un chiffre "
+            "impossible à calculer dit pourquoi au lieu d'afficher zéro, et l'arrêt sans coût horaire reste "
+            "« non chiffré ». L'onglet Rapports mensuels tient sur une page A4."
         ),
         "essayez": "cliquez sur le MTBF pour voir ses ordres sources.",
     },
@@ -314,7 +332,7 @@ ECRANS = {
             "Les réglages partagés par tous les postes : nom de l'entreprise, délais par priorité, seuils du "
             "préventif et des suggestions, seuil « réparer ou remplacer », codes de défaillance. Et les outils "
             "de la base : sauvegardes et restauration, contrôle de la base, import depuis Excel ou CSV, export "
-            "en ZIP des 24 fichiers."
+            "en ZIP des 27 fichiers."
         ),
         "essayez": "les délais par priorité.",
     },
@@ -522,8 +540,9 @@ ECRANS_EN = {
                 "texte": (
                     "Four tabs: Preparation (work to be done, parts, technician, date), Execution (checklist, "
                     "times, parts issued), Job report (symptom, cause, remedy, tip for next time) and the "
-                    "equipment history. Prévo refuses to schedule if a part is out of stock and warns you if the "
-                    "technician does not have the required authorisation."
+                    "equipment history. Prévo refuses to schedule if a part is out of stock and refuses to assign a "
+                    "technician without the required authorisation, valid on the planned date: only the manager "
+                    "can override it, by writing a reason."
                 ),
                 "essayez": "Preparation tab, Schedule button.",
             },
@@ -586,8 +605,9 @@ ECRANS_EN = {
         "titre": "Equipment",
         "texte": (
             "The site tree: workshops, lines, equipment. Each record has its QR code, its criticality A, B or "
-            "C, its meters, its task lists, its inspections and its history. The manager adds and edits; QR "
-            "labels are printed by workshop or by line, on A4 sheets of 24 or 8."
+            "C, its downtime cost per hour, its meters, its task lists, its inspections and its history. With no "
+            "downtime cost per hour, the equipment is “not costed” in the indicators: nothing is estimated. "
+            "The manager adds and edits; QR labels are printed by workshop or by line, on A4 sheets of 24 or 8."
         ),
         "essayez": "expand the Machining workshop and open a machine.",
     },
@@ -611,10 +631,11 @@ ECRANS_EN = {
     "controles": {
         "titre": "Statutory inspections",
         "texte": (
-            "The schedule by equipment: overdue, observations to clear, to be scheduled within thirty days, up "
-            "to date. You record a completed inspection with its report, clear the observations, and create a "
-            "pre-filled statutory work order. Prévo calculates the next date from the interval you enter; it "
-            "does not monitor regulations."
+            "The schedule by equipment: overdue, findings to be cleared, to be scheduled within thirty days, up "
+            "to date. You record a completed inspection with its report and its findings, one per line, clear "
+            "each finding, and create a pre-filled statutory work order. When you create an inspection, the "
+            "Prévo catalogue pre-fills the interval and says where it comes from. Prévo calculates the next "
+            "date from the inspection's interval; it does not monitor regulations."
         ),
         "essayez": "open an “overdue” inspection.",
     },
@@ -622,7 +643,7 @@ ECRANS_EN = {
         "titre": "Statutory inspection",
         "texte": (
             "An inspection: equipment, type, interval, last visit, calculated next due date, attached report and "
-            "observations to clear."
+            "findings: each can be cleared, or give a work order."
         ),
         "essayez": "“Save the completed inspection”.",
     },
@@ -630,25 +651,39 @@ ECRANS_EN = {
         "titre": "Team",
         "texte": (
             "The technicians, their trade, their capacity per week, and their authorisations with their expiry "
-            "date. A renewal adds a row and keeps the history. Authorisations that are overdue or expire within "
-            "sixty days appear on the home screen. Only the manager can see the hourly rate."
+            "date, calculated from the date obtained and the refresher interval. A renewal adds a row and keeps "
+            "the history; the attached proof is seen only by the manager. A CACES does not replace the "
+            "driving authorisation, issued by the employer: record it too. Authorisations that are overdue "
+            "or expire within sixty days appear on the home screen. Only the manager can see the hourly rate."
         ),
         "essayez": "open a technician and add an authorisation.",
     },
     "equipe-fiche": {
         "titre": "Technician",
         "texte": (
-            "A technician's record: trade, capacity, authorisations and their validity, work orders in progress."
+            "A technician's record: trade, capacity, authorisations with their refresher interval, expiry date "
+            "and proof, work orders in progress."
         ),
         "essayez": "“Add an authorisation”.",
+    },
+    "garanties": {
+        "titre": "Warranties and contracts",
+        "texte": (
+            "Equipment warranties and service contracts, with their due dates and documents. The counters at "
+            "the top filter the list; two tabs, Warranties and Contracts. A contract with automatic renewal "
+            "becomes “decision due” before its termination deadline. Prévo reminds you, it sends nothing: "
+            "“Write to the contractor” opens your email application."
+        ),
+        "essayez": "click the “Contracts: decision due” counter.",
     },
     "indicateurs": {
         "titre": "Indicators",
         "texte": (
-            "Availability, MTBF, MTTR, downtime, preventive share and compliance, delays, response times, "
-            "costs and stock value, for the period, criticality and workshop of your choice. Each figure says "
-            "how many work orders it covers and lists its sources; a figure that cannot be calculated says why "
-            "instead of showing zero. The Monthly reports tab fits on one A4 page."
+            "Availability, MTBF, MTTR, downtime, downtime cost, preventive share and compliance, delays, response "
+            "times, costs and stock value, for the period, criticality and workshop of your choice. Each figure "
+            "says how many work orders it covers and lists its sources; a figure that cannot be calculated says "
+            "why instead of showing zero, and downtime with no hourly cost stays “not costed”. The Monthly "
+            "reports tab fits on one A4 page."
         ),
         "essayez": "click the MTBF to see its source work orders.",
     },
@@ -657,7 +692,7 @@ ECRANS_EN = {
         "texte": (
             "The settings shared by every workstation: company name, deadlines by priority, preventive and "
             "suggestion thresholds, the “repair or replace” threshold, failure codes. And the database tools: "
-            "backups and restore, database check, import from Excel or CSV, ZIP export of the 24 files."
+            "backups and restore, database check, import from Excel or CSV, ZIP export of the 27 files."
         ),
         "essayez": "the deadlines by priority.",
     },

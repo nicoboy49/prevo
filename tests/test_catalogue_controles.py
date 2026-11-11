@@ -12,8 +12,8 @@ file://, en français puis en anglais) et en mode serveur (serveur.py sur une CO
 Règles pures du catalogue (T414, CONCEPTION-L2-L3 §4.1, js/modules/controles-catalogue.js), sur une page vide qui
 ne charge que les scripts utiles : valeurs copiées d'une ligne (C14 : 48 mois, sa référence, obligation, catalogue,
 C14, 2026-11-08 ; aucune périodicité pour C13 et C24), provenance, source après une saisie (une valeur changée rend
-« saisie », C14 gardé), mention « à confirmer », familles, résumé de C18 affiché sans « conforme » (réponse
-provisoire n° 1, CS175), listes vides sans CatalogueFR, et une page où CatalogueFR est remplacé par une version
+« saisie », C14 gardé), mention « à confirmer », familles, résumé de C18 affiché sans « conforme » (D194,
+CS175), listes vides sans CatalogueFR, et une page où CatalogueFR est remplacé par une version
 modifiée (tirée de docs/catalogue par outils/generer_catalogue.py) : l'écart est proposé, rien n'est changé.
 
 Écritures du catalogue (T415, CONCEPTION-L2-L3 §4.2, js/modules/controles-ecritures.js), par l'API (Controles.*) en
@@ -174,7 +174,7 @@ SCRIPTS_REGLES = ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", SC
                   "js/stockage-demo.js", "js/interface.js", "js/modules/controles-regles.js",
                   "js/modules/controles-reserves.js", "js/modules/controles-catalogue.js"]
 MENTION = "à confirmer avec votre organisme de contrôle"
-# Réponse provisoire n° 1 de QUESTIONS-L2-L6 (à confirmer) : le résumé de C18 affiché sans « conforme ».
+# D194 : le résumé de C18 affiché sans « conforme ».
 C18_AFFICHE = ("3 mois ; 6 mois si un système de détection des fuites est installé (obligatoire pour les équipements"
                " fixes, donc 6 mois pour un équipement fixe répondant aux exigences du règlement)")
 MOT_CONFORME = re.compile(r"\bconformes?\b", re.IGNORECASE)
@@ -824,7 +824,7 @@ class TestCatalogueEcranDemo(CasCatalogueEcran):
         self.assertEqual((releve["periodicite"], releve["natureSource"], releve["mentions"]),
                          ("", "recommandation", [MENTION]))
         self.assertEqual(releve["aidePeriodicite"], AIDE_SANS_PERIODICITE)
-        # C18 : jamais « conforme » à l'écran (réponse provisoire n° 1).
+        # C18 : jamais « conforme » à l'écran (D194).
         releve = self.choisir("C18")
         self.assertIn(C18_AFFICHE, releve["texteEncart"])
         self.assertIsNone(MOT_CONFORME.search(releve["page"]), "« conforme » à l'écran")

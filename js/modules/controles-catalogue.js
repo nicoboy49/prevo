@@ -22,7 +22,7 @@ Object.assign(Controles, (() => {
   // La nature (intitulé du contrôle) n'en est pas : on peut la renommer et rester « catalogue ».
   const CHAMPS_SOURCE = Object.freeze(['periodicite_mois', 'texte_reference', 'nature_source']);
 
-  // Remplacements à l'affichage, en ce seul endroit : réponse provisoire n° 1 de QUESTIONS-L2-L6 (C18, CS175, D182),
+  // Remplacements à l'affichage, en ce seul endroit : D194 (C18, CS175, D182),
   // à confirmer par Nicolas. L'écran n'affiche jamais « conforme » ; le catalogue validé (docs/catalogue/*.json,
   // window.CatalogueFR) n'est pas modifié. Si la ligne est reformulée dans le catalogue, l'entrée ne joue plus :
   // la retirer.

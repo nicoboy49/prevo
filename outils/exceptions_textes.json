@@ -343,7 +343,7 @@
         "js/modules/controles-catalogue.js"
       ],
       "classe": "D146",
-      "raison": "Morceau du résumé de la ligne C18 du catalogue Prévo remplacé à l'affichage (réponse provisoire n° 1, CS175 : jamais « conforme » à l'écran) : contenu du catalogue, en français dans toutes les langues (CDC 2.2 §3.2), comme js/catalogue/fr.js (T414)."
+      "raison": "Morceau du résumé de la ligne C18 du catalogue Prévo remplacé à l'affichage (D194, CS175 : jamais « conforme » à l'écran) : contenu du catalogue, en français dans toutes les langues (CDC 2.2 §3.2), comme js/catalogue/fr.js (T414)."
     }
   ],
   "textes": [

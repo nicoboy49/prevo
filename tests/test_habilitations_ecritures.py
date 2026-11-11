@@ -7,7 +7,7 @@ Par l'API (Equipe.*) dans l'application ouverte, sans passer par les fenêtres (
                dans documents/ et nommé sur la ligne ; correction (échéance vidée → recalculée) ; renouvellement
                (intitulé, recyclage, type et nature repris, échéance depuis la nouvelle obtention, justificatif
                nouveau facultatif, ancienne ligne intacte) ; refus sans rien écrire (recyclage, type ou taille du
-               fichier) ; profil technicien : rien d'écrit (réponse provisoire n° 2, côté application) ;
+               fichier) ; profil technicien : rien d'écrit (D195, côté application) ;
     demo     : index.html en file://, « Essayer avec les données de démo » (aucun horodatage devant les noms) : nom
                « habilitation-<technicien>-<intitulé>-<date>.pdf », « -2 », « -3 » si pris, accents retirés, photo
                réduite à 2 400 px en JPEG ; documents relus par App.adaptateur.lireDocument.
@@ -239,7 +239,7 @@ class TestServeur(CasEcritures):
                         fichier={"nom": "gros.pdf", "type": "application/pdf", "taille": NEUF_MO + 1})
             self.assertEqual((chemin.read_bytes(), documents_presents()), (octets, avant_documents))
 
-            # Profil technicien : seul le responsable écrit les habilitations (réponse provisoire n° 2)
+            # Profil technicien : seul le responsable écrit les habilitations (D195)
             contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1280, "height": 800})
             self.addCleanup(contexte.close)
             contexte.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
