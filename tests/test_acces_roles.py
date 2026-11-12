@@ -840,6 +840,7 @@ class TestDemandeur(unittest.TestCase):
             ligne_j[entete_j.index(nom)] = valeur
         reponse = self.requete("POST", "/api/csv/journal/ajout", ecrire_tableau(entete_j, [ligne_j], bom=False))
         self.assertEqual(reponse.statut, 200, reponse.octets)
+        ligne_j[entete_j.index("profil")] = "Demandeur Léa Martin"      # T505 : le profil de la session, imposé
         self.assertEqual(lire_tableau(journal.read_bytes())[1][-1], ligne_j)
 
     def test_documents_du_demandeur(self):

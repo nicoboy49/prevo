@@ -3934,8 +3934,8 @@ ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa ligne
 | `POST /api/acces/appareils/<id>/revoquer` | non | non | non | oui |
 | `POST /api/acces/appareils/revoquer-tous` | non | non | non | oui |
 | `GET /api/csv/<table>` | tables du demandeur | tables du demandeur | toutes (colonnes retirées) | toutes |
-| `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `reserves_controle`, `garanties`, `contrats_prestataires`, `habilitations` | toutes |
-| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `reserves_controle`, `garanties`, `contrats_prestataires`, `habilitations` | toutes |
+| `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `reserves_controle`, `garanties`, `contrats_prestataires`, `habilitations` (le journal : ajout seulement) | toutes |
+| `POST /api/csv/<table>/ajout` | `demandes`, `journal` (à son profil) | `demandes`, `journal` (à son profil) | toutes sauf `parametres`, `techniciens`, `fournisseurs`, `reserves_controle`, `garanties`, `contrats_prestataires`, `habilitations` (le journal : à son profil) | toutes |
 | `GET /api/documents/<nom>` | photos de demandes, documents des équipements (sauf documents réservés) | photos de demandes, documents des équipements (sauf documents réservés) | oui (sauf documents réservés) | oui |
 | `PUT /api/documents/<nom>` | photos de demandes | photos de demandes | oui | oui |
 | `POST /api/sauvegarde` | non | non | non | oui |
@@ -3996,7 +3996,19 @@ Précisions de T152 :
   dans le fichier (rien d'une ligne existante ne vient du demandeur), puis les nouvelles, écrites depuis les valeurs
   contrôlées (T500 : la première colonne d'une clé, jamais la ligne brute reçue). Ce contrôle suit celui de la
   version : une version périmée rend toujours 409. `POST /api/csv/demandes/ajout` suit les mêmes règles pour les lignes
-  ajoutées, `POST /api/csv/journal/ajout` est permis ; tout autre `PUT` ou ajout : 403.
+  ajoutées, `POST /api/csv/journal/ajout` est permis (règles du journal ci-dessous) ; tout autre `PUT` ou ajout : 403.
+- **Journal, écriture par un rôle autre que le responsable** (T505 ; D186 : le journal est la trace d'une dérogation
+  d'habilitation) : il ne s'écrit que par ajout. `POST /api/csv/journal/ajout` (technicien, demandeur, appareil) :
+  chaque ligne ajoutée reçoit dans `profil` celui de la session, quoi que le client ait envoyé (`profil_au_journal` :
+  le texte de `libelleJournal` de `js/app.js`, « Technicien TEC-0002 », « Demandeur Léa Martin », le nom saisi pour un
+  appareil, dans la langue de l'installation), et son `id` doit être neuf : vide, déjà pris ou écrit avec autre chose
+  que des lettres, des chiffres et des tirets, 403. `PUT /api/csv/journal` du technicien : accepté seulement s'il
+  garde chaque ligne actuelle inchangée (à la forme près, comme pour les demandes) et n'en ajoute que de nouvelles, aux
+  mêmes règles (`garder_le_journal_actuel` ; c'est le repli de `Donnees.ajouter` quand l'ajout rend 409, §5.4) ; les
+  lignes actuelles sont réécrites d'après le fichier ; un journal vidé, une ligne retirée ou modifiée : 403 « la table
+  « journal » ne se modifie que par le responsable ». Le demandeur n'a pas ce `PUT`. `poste` reste un texte libre (le
+  serveur ne connaît pas le nom du poste). Le responsable, et tout le monde sans comptes, écrivent le journal comme
+  avant. Limite : le serveur ne juge pas le texte de `action` ; la règle RG8 reste tenue par l'application (§10).
 - **Documents du demandeur** : lecture des photos de demandes (`photo-AAAAMMJJ-HHMMSS-XXXX.<jpg|jpeg|png|gif|webp>`, nom
   donné par `nomPhoto`, enregistré derrière le préfixe `AAAAMMJJ-HHMMSS-` que le serveur impose (audit F4, §22.12) :
   `MOTIF_PHOTO_DE_DEMANDE` accepte ce préfixe en option, l'envoi étant contrôlé sur le nom demandé, sans préfixe) et des
