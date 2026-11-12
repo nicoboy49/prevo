@@ -5954,7 +5954,7 @@ def ecrire_fichier_de_donnees(config, table, octets, actuel=A_LIRE, *, ajout=Fal
 
 
 def enregistrer_csv(config, table, octets, version_attendue, controle=None, remplacer_abime=False,
-                    abime_depuis=None):
+                    abime_depuis=None, voiler=None):
     """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2).
     controle (lot 7, §22.5) : (octets reçus, octets actuels) → octets à écrire, appelé après le contrôle de version
     (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon). Puis
@@ -5963,13 +5963,14 @@ def enregistrer_csv(config, table, octets, version_attendue, controle=None, remp
     avec remplacer_abime) : l'import écrit tel quel un CSV que son ZIP marque abîmé ; son en-tête n'est alors pas
     comparé au schéma si le serveur le voit abîmé lui aussi (raisons_fichier_abime ; UTF-8 et cellules dangereuses
     toujours contrôlés). Après une écriture avec remplacer_abime, fichiers-abimes.json suit la table
-    (noter_table_importee)."""
+    (noter_table_importee). voiler (T506, voile_des_versions) : la version comparée et rendue à cette session."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
+    voiler = voiler or (lambda version: version)
     abimee = bool(remplacer_abime and raisons_fichier_abime(octets))
     verifier_contenu_csv(table, octets, entete_libre=abimee and abime_depuis is not None)
     chemin = chemin_table(config, table)
     actuel = lire_octets(chemin)
-    version_actuelle = empreinte(actuel) if actuel is not None else None
+    version_actuelle = voiler(empreinte(actuel)) if actuel is not None else None
     attendue = None if version_attendue == 'aucune' else version_attendue
     if attendue != version_actuelle:
         if version_actuelle is None:
@@ -5986,7 +5987,7 @@ def enregistrer_csv(config, table, octets, version_attendue, controle=None, remp
                                         sauvegarde_du_jour=True)
     if remplacer_abime:
         noter_table_importee(config, table, abimee, abime_depuis)
-    return version
+    return voiler(version)
 
 
 def decouper_corps_ajout(corps):
@@ -6269,6 +6270,26 @@ MESSAGE_RESERVE_AU_RESPONSABLE = traduisible('acces.reserve_au_responsable', 'Ac
 def role_effectif(identite):
     """Rôle dont la session a les droits : celui du compte, « demandeur » pour un appareil enrôlé (D125)."""
     return 'demandeur' if identite.get('appareil') else str(identite.get('role') or '')
+
+
+def voile_des_versions(config, identite, table):
+    """Fonction version → version rendue à cette session (T506, §22.5). Un rôle qui ne reçoit pas toutes les colonnes
+    d'une table (COLONNES_CACHEES_PAR_ROLE) n'en reçoit pas non plus l'empreinte : il recomposerait le fichier avec
+    une valeur candidate et la reconnaîtrait à l'empreinte. Il reçoit, de même forme, un HMAC-SHA-256 de l'empreinte
+    avec une clé que le serveur seul connaît (donnees/acces/.cle-versions, 256 bits en texte, tirés au premier
+    besoin, gardés entre deux démarrages, jamais copiés dans une sauvegarde) ; même valeur dans GET /api/csv, /api/versions, la
+    réponse d'un PUT, d'un ajout et d'un 409, et c'est elle que le serveur compare à X-Version-Attendue. Inchangée
+    pour les autres (sans comptes, responsable, table sans colonne cachée). À appeler en tenant VERROU_ECRITURE."""
+    if identite is None or not COLONNES_CACHEES_PAR_ROLE.get(role_effectif(identite), {}).get(table):
+        return lambda version: version
+    chemin = os.path.join(dossier_acces(config), '.cle-versions')
+    cle = lire_octets(chemin)
+    if cle is None or len(cle) != 64:
+        cle = secrets.token_hex(32).encode('ascii')
+        os.makedirs(dossier_acces(config), exist_ok=True)
+        ecrire_atomique(chemin, cle)
+    return lambda version: version and hmac.new(cle, ('%s:%s' % (table, version)).encode('utf-8'),
+                                                hashlib.sha256).hexdigest()[:16]
 
 
 def regle_du_role(identite, route):
@@ -7448,6 +7469,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         """GET /api/versions : version de chaque table ; pour le demandeur, seulement celles qu'il lit (§22.5)."""
         with VERROU_ECRITURE:
             tables = versions_des_tables(self.config)
+            for table, detail in tables.items():            # T506 : version voilée si le rôle a des colonnes cachées
+                if detail is not None:
+                    detail['version'] = voile_des_versions(self.config, self.session, table)(detail['version'])
         lisibles = tables_lisibles(self.session)
         if lisibles is not None:
             tables = {table: version for table, version in tables.items() if table in lisibles}
@@ -7455,15 +7479,17 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     def api_csv_lire(self, table, corps):
         """GET /api/csv/<table> : le fichier, sans les colonnes ni les lignes que le rôle de la session ne reçoit pas
-        (§22.5) ; X-Version est celle du fichier entier, pour que les écritures restent possibles."""
+        (§22.5) ; X-Version est celle du fichier entier, pour que les écritures restent possibles, voilée pour un
+        rôle qui n'en reçoit pas toutes les colonnes (T506, voile_des_versions)."""
         chemin = chemin_table(self.config, table)            # 404 si table inconnue
         with VERROU_ECRITURE:
             octets = lire_octets(chemin)
+            voiler = voile_des_versions(self.config, self.session, table)
         if octets is None:
             raise ErreurHttp(404, traduisible('csv.absent',
                                               'Le fichier {table}.csv n\'existe pas encore.', table=table))
         self.envoyer(200, filtrer_csv_pour(self.session, table, octets), 'text/csv; charset=utf-8',
-                     {'X-Version': empreinte(octets)})
+                     {'X-Version': voiler(empreinte(octets))})
 
     def api_csv_ecrire(self, table, corps):
         version_attendue = self.headers.get('X-Version-Attendue')
@@ -7488,14 +7514,22 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         with VERROU_ECRITURE:
             version = enregistrer_csv(self.config, table, corps, version_attendue.strip(),
                                       controle_d_ecriture(self.session, table, self.config),
-                                      remplacer_abime=remplacer_abime,
-                                      abime_depuis=abime_depuis)
+                                      remplacer_abime=remplacer_abime, abime_depuis=abime_depuis,
+                                      voiler=voile_des_versions(self.config, self.session, table))
         self.envoyer_json(200, {'version': version})
 
     def api_ajout(self, table, corps):
         with VERROU_ECRITURE:
-            version = ajouter_au_csv(self.config, table, corps, controle_d_ajout(self.session, table, self.config))
-        self.envoyer_json(200, {'version': version})
+            voiler = voile_des_versions(self.config, self.session, table)      # T506 : 200 et 409 voilés de même
+            try:
+                version = ajouter_au_csv(self.config, table, corps, controle_d_ajout(self.session, table,
+                                                                                     self.config))
+            except ErreurHttp as erreur:
+                if erreur.champs_supplementaires.get('version_actuelle'):
+                    erreur.champs_supplementaires['version_actuelle'] = voiler(
+                        erreur.champs_supplementaires['version_actuelle'])
+                raise
+        self.envoyer_json(200, {'version': voiler(version)})
 
     def api_document_lire(self, nom, corps):
         chemin = chemin_document(self.config, nom)          # 400 si nom refusé, 415 si type refusé
