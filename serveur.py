@@ -5082,18 +5082,20 @@ def lister_sauvegardes(config):
             for nom in noms]
 
 
-def tables_a_restaurer(dossier_sauvegarde, tables_demandees):
-    """Tables à restaurer : toutes celles de la sauvegarde, ou celles demandées (contrôlées)."""
+def tables_a_restaurer(dossier_sauvegarde, tables_demandees, dans_la_base=()):
+    """Tables à restaurer : toutes celles de la sauvegarde, ou celles demandées (contrôlées). T502 : avec celles de la
+    base (dans_la_base) qui sont absentes de la sauvegarde — elles n'existaient pas alors — et que restaurer vide :
+    toutes à la restauration complète ; à la demande, une table absente des deux reste refusée (400)."""
     disponibles = tables_presentes(dossier_sauvegarde)
     if tables_demandees is None:
-        return disponibles
+        return [table for table in TABLES if table in disponibles or table in dans_la_base]
     if not isinstance(tables_demandees, list):
         raise ErreurHttp(400, traduisible('restauration.tables_liste',
                                           '« tables » doit être une liste de noms de tables.'))
     for table in tables_demandees:
         if not isinstance(table, str) or table not in TABLES:
             raise ErreurHttp(400, traduisible('csv.table_inconnue', 'Table inconnue : {table}.', table=table))
-        if table not in disponibles:
+        if table not in disponibles and table not in dans_la_base:
             raise ErreurHttp(400, traduisible('restauration.table_absente',
                                               'La table {table} est absente de cette sauvegarde.', table=table))
     return [table for table in TABLES if table in tables_demandees]
@@ -5102,19 +5104,24 @@ def tables_a_restaurer(dossier_sauvegarde, tables_demandees):
 def restaurer(config, nom_sauvegarde, tables_demandees):
     """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde. T200 : la restauration est le
     remède à un fichier abîmé, elle le remplace (ecrire_fichier_de_donnees, remplacer_abime). T206 : puis
-    fichiers-abimes.json à jour (une table restaurée saine en est retirée)."""
+    fichiers-abimes.json à jour (une table restaurée saine en est retirée). T502 : une table de la base absente de la
+    sauvegarde (restauration complète, ou table demandée : annulation d'un import qui l'a créée) est vidée, en-tête du
+    format courant, après la copie de sécurité, qui la contient ; son fichier n'est jamais supprimé (« videes »)."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     verifier_nom_sauvegarde(nom_sauvegarde)
     dossier_sauvegarde = chemin_sous(config.dossier_sauvegardes, nom_sauvegarde)
     if not sauvegarde_complete(dossier_sauvegarde):
         raise ErreurHttp(404, traduisible('sauvegardes.introuvable',
                                           'Sauvegarde introuvable ou incomplète : {nom}.', nom=nom_sauvegarde))
-    tables = tables_a_restaurer(dossier_sauvegarde, tables_demandees)
+    tables = tables_a_restaurer(dossier_sauvegarde, tables_demandees, tables_presentes(config.dossier_donnees))
+    dans_la_sauvegarde = tables_presentes(dossier_sauvegarde)
     copie_securite = nouveau_nom_horodate(config, '_avant-restauration')
     copier_tables_dans_sauvegarde(config, copie_securite)
-    restaurees = []
+    restaurees, videes = [], []
     for table in tables:
-        octets = lire_octets(os.path.join(dossier_sauvegarde, table + '.csv'))
+        absente = table not in dans_la_sauvegarde
+        octets = (ecrire_tableau_csv(colonnes_du_format(table), []) if absente
+                  else lire_octets(os.path.join(dossier_sauvegarde, table + '.csv')))
         try:
             ecrire_fichier_de_donnees(config, table, octets, remplacer_abime=True, sauvegarde_du_jour=False)
         except ErreurHttp as erreur:
@@ -5133,9 +5140,9 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
                                       'sauvegarde {copie}.',
                                       erreur=erreur.message, table=table, copie=copie_securite)
             raise ErreurHttp(erreur.statut, message, restaurees=restaurees, copie_securite=copie_securite)
-        restaurees.append(table)
+        (videes if absente else restaurees).append(table)
     noter_fichiers_abimes(config)
-    return {'restaurees': restaurees, 'copie_securite': copie_securite}
+    return {'restaurees': restaurees, 'videes': videes, 'copie_securite': copie_securite}
 
 
 # --- « Tester une sauvegarde » (D133) : relire chaque CSV, compter les lignes, ne rien écrire ----------------------

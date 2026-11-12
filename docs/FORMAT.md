@@ -196,6 +196,13 @@ l'étape 3→4 ajoute en fin. Seule la place de la colonne diffère : aucune val
 - **Restaurer** une sauvegarde (Paramètres › Sauvegardes) remet ses tables (les CSV) et rien d'autre : restaurer une
   sauvegarde `avant-import-zip` ne recopie **pas** les documents de son dossier `documents/`. Pour les retrouver, on
   les copie à la main de `sauvegardes/<nom>/documents/` vers `documents/`.
+- **Retour complet** (« Toutes les tables ») à une sauvegarde qui n'a pas toutes les tables de la base, par exemple
+  `avant-format-v4` ou une quotidienne d'avant la 2.2 (sans `reserves_controle`, `garanties`,
+  `contrats_prestataires`) : ces tables n'existaient pas alors, elles sont **vidées** (l'en-tête reste, le fichier
+  n'est pas supprimé). Leurs lignes sont dans la copie de sécurité `avant-restauration`, faite juste avant ; les
+  documents qu'elles citaient (justificatifs, documents de contrats) restent dans `documents/`. La restauration
+  d'« Une seule table » ne touche que cette table. Après le retour à une base d'un format plus ancien, Prévo refait
+  le passage au format courant à l'ouverture suivante (mode serveur : au redémarrage du serveur).
 - La version notée est dans `derniere-version.json`, à la racine du dossier de données : `{"version", "depuis"}`
   (version de l'appli, date `AAAA-MM-JJTHH:MM:SS`). Elle est écrite après la sauvegarde `avant-mise-a-jour`, et
   seulement si celle-ci a réussi (base vide : voir plus bas).

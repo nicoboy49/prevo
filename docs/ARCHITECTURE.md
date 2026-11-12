@@ -426,7 +426,14 @@ d'un format plus récent, §5.6), ses écritures (`enregistrer`, `ajouter`, `ecr
 Version d'un fichier = empreinte SHA-256 du contenu, 16 premiers caractères hexadécimaux
 (décision D7). Sauvegarde quotidienne : avant la **première écriture de la journée**, copie de
 tous les CSV dans `sauvegardes/AAAA-MM-JJ/` (si ce dossier n'existe pas). Une restauration copie
-d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`. Le passage au
+d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/` (échec de cette copie : rien
+n'est restauré). Une table de la base absente de la sauvegarde (elle n'existait pas alors : `reserves_controle`,
+`garanties`, `contrats_prestataires` pour une sauvegarde d'avant le format 4) est ensuite **vidée** (en-tête du
+format courant, aucune ligne ; fichier jamais supprimé ; la copie de sécurité la contient) et nommée dans `videes`,
+pas dans `restaurees` : toutes à la restauration complète (sans `tables`), et celles demandées dans `tables`
+(annulation d'un import qui a créé la table, §18.7) ; une table demandée absente de la sauvegarde et de la base
+reste refusée. Les documents cités par les lignes ainsi retirées restent dans `documents/`. Après la restauration
+d'une base d'un format plus ancien, le passage suivant (§5.6) reprend sur ces tables vides. Le passage au
 format N (§5.6 ; serveur au démarrage, navigateur en mode dossier) copie d'abord tous les CSV dans
 `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-format-vN/`. Noms de sauvegarde acceptés (serveur et dossier, mêmes règles) :
 `AAAA-MM-JJ`, `AAAA-MM-JJ_HHMMSS`, `AAAA-MM-JJ_HHMMSS_avant-restauration`,
@@ -477,7 +484,7 @@ par `--hote` — sinon 403 (un suffixe quelconque permettrait le « DNS rebindin
 | `PUT /api/documents/<nom>` | 201 `{"nom"}` avec le **nom imposé par le serveur** `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules : le navigateur garde ce nom, jamais celui qu'il a demandé) · 400 nom refusé, ou image dont le contenu n'a pas la signature de son format (`verifier_signature_image` : `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`) · 409 même nom demandé dans la même seconde (jamais d'écrasement) · 413 dossier `documents/` plein (`quota_documents_mo`, 4096 par défaut depuis T250, mesuré à chaque envoi) · 415 extension inconnue (`.doc` et `.xls` retirés) ; rien n'est écrit en cas de refus |
 | `POST /api/sauvegarde` | corps vide → sauvegarde manuelle `{"sauvegarde": "AAAA-MM-JJ_HHMMSS"}` ; corps JSON facultatif `{"motif": "avant-format-v2"}` → `{"sauvegarde": "AAAA-MM-JJ_HHMMSS_avant-format-v2"}` (motif `avant-import` depuis le lot 5, §18.1) ; motif hors de la liste fermée `MOTIFS_SAUVEGARDE`, corps qui n'est pas un objet JSON, JSON invalide ou trop imbriqué → 400 (contrôlé avant toute écriture) |
 | `GET /api/sauvegardes` | `{"sauvegardes": [{"nom", "tables": [...]}]}` |
-| `POST /api/restauration` | corps `{"sauvegarde": "…", "tables": [...] (facultatif)}` → `{"restaurees", "copie_securite"}` |
+| `POST /api/restauration` | corps `{"sauvegarde": "…", "tables": [...] (facultatif)}` → `{"restaurees", "videes", "copie_securite"}` |
 
 Règles : noms de tables limités aux 22 du schéma (liste recopiée dans `serveur.py`, avec un
 commentaire de renvoi vers `js/schema.js`, cohérence vérifiée par un test) ; nom de document demandé

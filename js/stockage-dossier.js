@@ -1012,22 +1012,30 @@ const StockageDossier = (() => {
       return resultat;
     }
 
-    // Tables à restaurer : toutes celles de la sauvegarde, ou celles demandées (contrôlées).
-    function choisirTablesARestaurer(disponibles, tablesDemandees) {
-      if (tablesDemandees === undefined || tablesDemandees === null) { return disponibles; }
+    // Tables à restaurer : toutes celles de la sauvegarde, ou celles demandées (contrôlées). T502 (comme serveur.py,
+    // tables_a_restaurer) : avec celles de la base (dansLaBase) absentes de la sauvegarde, que restaurer vide : toutes
+    // à la restauration complète ; à la demande, une table absente des deux reste refusée.
+    function choisirTablesARestaurer(disponibles, tablesDemandees, dansLaBase) {
+      if (tablesDemandees === undefined || tablesDemandees === null) {
+        return Schema.nomsTables().filter(function (table) {
+          return disponibles.indexOf(table) !== -1 || dansLaBase.indexOf(table) !== -1;
+        });
+      }
       if (!Array.isArray(tablesDemandees)) {
         throw erreurStockage(I18n.t('socle.creer.tables_doit_etre_liste'));
       }
       tablesDemandees.forEach(function (table) {
         verifierNomTable(table);
-        if (disponibles.indexOf(table) === -1) {
+        if (disponibles.indexOf(table) === -1 && dansLaBase.indexOf(table) === -1) {
           throw erreurStockage(I18n.t('socle.creer.table_absente_sauvegarde', { table }));
         }
       });
       return Schema.nomsTables().filter(function (table) { return tablesDemandees.indexOf(table) !== -1; });
     }
 
-    // Copie de sécurité de l'état actuel (…_avant-restauration), puis copie des tables voulues.
+    // Copie de sécurité de l'état actuel (…_avant-restauration), puis copie des tables voulues. T502 : une table de
+    // la base absente de la sauvegarde (elle n'existait pas alors) est vidée, en-tête du format courant, après la
+    // copie de sécurité, qui la contient ; son fichier n'est jamais supprimé (« videes » dans le résultat).
     async function restaurer(nom, tables) {
       verifierNomSauvegarde(nom);
       return enSerie(async function () {
@@ -1037,22 +1045,26 @@ const StockageDossier = (() => {
         if (await trouverFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS)) {
           throw erreurStockage(I18n.t('socle.creer.sauvegarde_incomplete_copie_interrompue', { nom }));
         }
-        const aRestaurer = choisirTablesARestaurer(await tablesPresentes(dossierSauvegarde), tables);
+        const dansLaSauvegarde = await tablesPresentes(dossierSauvegarde);
+        const aRestaurer = choisirTablesARestaurer(dansLaSauvegarde, tables, await tablesPresentes(racine));
 
         const copieSecurite = await nouveauNomHorodate(SUFFIXE_AVANT_RESTAURATION);
         await creerSauvegarde(copieSecurite, await tablesPresentes(racine), { motif: MOTIF_AVANT_RESTAURATION });
 
         const restaurees = [];
+        const videes = [];
         for (const table of aRestaurer) {
+          const absente = dansLaSauvegarde.indexOf(table) === -1;
           try {
-            const poigneeFichier = await dossierSauvegarde.getFileHandle(table + '.csv');
-            await ecrireFichier(racine, table + '.csv', await poigneeFichier.getFile());
+            const contenu = absente ? Donnees.csv.serialiser(table, [], [])
+              : await (await dossierSauvegarde.getFileHandle(table + '.csv')).getFile();
+            await ecrireFichier(racine, table + '.csv', contenu);
           } catch (erreur) {
             const interrompue = traduireErreur(erreur, I18n.t('socle.creer.restauration'));
             const dejaRestaurees = restaurees.join(', ') || I18n.t('socle.creer.aucune_table_restauree');
             throw erreurStockage(I18n.t('socle.creer.restauration_interrompue_table_tables', { interrompueMessage: interrompue.message, table, dejaRestaurees, copieSecurite }), erreur);
           }
-          restaurees.push(table);
+          (absente ? videes : restaurees).push(table);
         }
         try {
           const abimees = [];
@@ -1064,7 +1076,7 @@ const StockageDossier = (() => {
           console.warn('Prévo : ' + NOM_FICHIERS_ABIMES + ' non mis à jour (' + (erreurNote && erreurNote.message) + ').',
             erreurNote);
         }
-        return { restaurees: restaurees, copieSecurite: copieSecurite };
+        return { restaurees: restaurees, videes: videes, copieSecurite: copieSecurite };
       });
     }
 
