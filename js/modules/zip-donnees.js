@@ -88,6 +88,19 @@ const ZipDonnees = (() => {
     return typeof nom === 'string' && MOTIF_NOM_DOCUMENT.test(nom) && nom.indexOf('..') === -1;
   }
 
+  // T507 : signatures des images, celles de serveur.py (SIGNATURES_IMAGES, verifier_signature_image), qui refuse (400)
+  // un document d'image dont le contenu ne commence pas par la signature du type que son extension annonce.
+  const SIGNATURES_IMAGES = { jpg: [[0xFF, 0xD8, 0xFF]], jpeg: [[0xFF, 0xD8, 0xFF]], png: [[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]],
+    gif: [[0x47, 0x49, 0x46, 0x38, 0x37, 0x61], [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]], webp: [[0x52, 0x49, 0x46, 0x46]] };
+  /** Vrai si `nom` annonce une image (jpg, jpeg, png, gif, webp) et que `octets` (Uint8Array) n'en est pas une de ce type. */
+  function imageRefusee(nom, octets) {
+    const type = nom.indexOf('.') === -1 ? '' : nom.slice(nom.lastIndexOf('.') + 1).toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(SIGNATURES_IMAGES, type)) return false;
+    const commence = (signature, depart) => signature.every((octet, rang) => octets[depart + rang] === octet);
+    const reconnue = SIGNATURES_IMAGES[type].some((signature) => commence(signature, 0));
+    return !(reconnue && (type !== 'webp' || commence([0x57, 0x45, 0x42, 0x50], 8)));
+  }
+
   /**
    * Documents à exporter, sans doublon, dans l'ordre : ceux des trois colonnes (table par table, ligne par ligne),
    * puis les rapports figés (même règle que Rapport.rapportsFiges : rapports_mensuels, séparés par des virgules).
@@ -522,6 +535,7 @@ const ZipDonnees = (() => {
     NOM_MANIFESTE,
     AVERTISSEMENT,
     nomDocumentValide,
+    imageRefusee,
     nomsDocuments,
     exportPermis,
     depassements,

@@ -56,6 +56,13 @@ const Import = (() => {
   const EXPLICATIONS = { date: () => I18n.t('import.explication.date'), date_heure: () => I18n.t('import.explication.date_heure'),
     decimal: () => I18n.t('import.explication.decimal'), entier: () => I18n.t('import.explication.entier'), booleen: () => I18n.t('import.explication.booleen') };
   const MOTIF_ABIME_PAR_EXCEL = /^[0-9]+,[0-9]+E\+[0-9]+$|^#(NOM|NAME)\?$/i;
+  // T507 : « 1.200 », « 1,200 » : un seul séparateur suivi d'exactement trois chiffres, après un à trois chiffres. Lu en
+  // décimal (1,2), comme un fichier de Prévo ; un tableur qui sépare les milliers voulait dire 1200 : note à l'aperçu.
+  const MOTIF_MILLIERS_AMBIGU = /^[+-]?[1-9]\d{0,2}[.,]\d{3}$/;
+  function noteMilliers(valeur, lue) {
+    const decimales = (lue.split('.')[1] || '').length;
+    return I18n.t('import.convertir.nombre_lu_comme', { valeur, lue: UI.nombreFr(lue, decimales), milliers: UI.nombreFr(valeur.replace(/[.,]/, ''), 0) });
+  }
   function convertirChoix(champ, valeur) {
     const [lu, cherche] = [Donnees.normaliser.choix(valeur, champ.valeurs), comparable(valeur)];
     let trouvee = lu.ok ? lu.valeur : propre(EQUIVALENCES[champ.table + '.' + champ.champ] || {}, cherche);
@@ -83,6 +90,7 @@ const Import = (() => {
     else if (champ.type === 'decimal' || champ.type === 'entier') {
       lu = Donnees.normaliser[champ.type](valeur);
       if (lu.ok) lu.valeur = nombreCanonique(lu.valeur);
+      if (lu.ok && MOTIF_MILLIERS_AMBIGU.test(valeur)) return { valeur: lu.valeur, note: noteMilliers(valeur, lu.valeur) };
     } else return { valeur };
     return lu.ok ? { valeur: lu.valeur } : { valeur, erreur: EXPLICATIONS[champ.type]() };
   }
@@ -410,6 +418,8 @@ const Import = (() => {
     const existante = ligne._existante;
     if (!existante) { ligne.action = 'creer'; return; }
     ligne.cible = existante.id;
+    // T507 : fiche retirée (actif = 0) d'un type sans colonne « Actif » (garanties, contrats) : dit, elle le reste.
+    if (!estActif(existante) && !champDe(contexte.description, 'actif')) ligne.raisons.push(I18n.t('import.decider.fiche_retiree'));
     const changes = {};
     for (const cible of ligne._cibles) {
       const avant = cible.avant !== undefined ? cible.avant : texte(existante[cible.colonne]);
@@ -562,7 +572,13 @@ const Import = (() => {
     const dejaLevee = Boolean(existante) && texte(existante.levee) === '1';
     const levee = v.levee !== undefined ? v.levee === '1' : (v.date_levee !== undefined || dejaLevee);
     if ((v.levee === '0' && v.date_levee !== undefined) || (!levee && v.commentaire_levee !== undefined)) return refuser(ligne, I18n.t('import.seconde_reserve.levee_contradictoire'));
-    if (levee && v.levee === undefined) poserReference(ligne, champDe(contexte.description, 'levee'), 'levee', '1');
+    if (levee && v.levee === undefined) {
+      const champ = champDe(contexte.description, 'levee');
+      poserReference(ligne, champ, 'levee', '1');
+      // T507 : la note « Levée vide : « non » par défaut » de la première passe ne vaut plus (levée déduite de la date).
+      const note = I18n.t('import.premiere_passe.vide_defaut', { champ: champ.libelle, defaut: I18n.t('import.premiere_passe.non') });
+      ligne.raisons = ligne.raisons.filter((raison) => raison !== note);
+    }
     if (levee && !dejaLevee && v.date_levee === undefined && v.commentaire_levee === undefined) {
       poserReference(ligne, champDe(contexte.description, 'commentaire_levee'), 'commentaire_levee', Formats.COMMENTAIRE_LEVEE_REPRISE);
     }

@@ -296,8 +296,11 @@ const ParametresZip = (() => {
     return base + suffixe + extension;
   }
 
-  function estNomPris(erreur) {
-    return erreur instanceof Donnees.ErreurStockage && /existe déjà|porte déjà ce nom/.test(erreur.message);
+  // Refus « nom déjà pris » de l'adaptateur, reconnu dans la langue de l'écran, celle où il l'écrit (T507, comme
+  // documentExisteDeja de controles-ecritures.js, T413) : il n'a pas de code d'erreur pour ce cas.
+  function estNomPris(erreur, nom) {
+    return erreur instanceof Donnees.ErreurStockage
+      && [I18n.t('socle.creer.document_existe_deja', { nom }), I18n.t('socle.creer.document_porte_deja_nom')].includes(erreur.message);
   }
 
   async function memesOctets(blob, octets) {
@@ -331,7 +334,7 @@ const ParametresZip = (() => {
         pris.add(candidat.toLowerCase());
         return { nom: nom, repris: false };
       } catch (erreur) {
-        if (!estNomPris(erreur)) {
+        if (!estNomPris(erreur, candidat)) {
           throw new Donnees.ErreurStockage(I18n.t('zip.ecrire_un_document.document_zip_pas_pu', { jointNom: joint.nom, sansPoint: sansPoint(erreur) }), erreur);
         }
       }
@@ -341,25 +344,31 @@ const ParametresZip = (() => {
 
   // Un document relu depuis le ZIP puis écrit, dans sa propre trame : une fois finie, plus rien ne garde ses octets
   // (une variable de la boucle de ecrireDocuments les garderait pendant la relecture du suivant).
+  // T507 : en mode serveur, une image dont le contenu n'est pas celui que son nom annonce (le mode dossier l'accepte,
+  // le serveur la refuse : 400) n'est pas envoyée : sautée ({ saute }), dite à la fin de l'import, qui continue.
   async function ecrireDepuisLeZip(lu, nom, pris) {
-    return ecrireUnDocument({ nom: nom, octets: await ZipLecture.lireDocument(lu, nom) }, pris);
+    const octets = await ZipLecture.lireDocument(lu, nom);
+    if (App.mode === 'serveur' && ZipDonnees.imageRefusee(nom, octets)) return { saute: true };
+    return ecrireUnDocument({ nom: nom, octets: octets }, pris);
   }
 
   /**
-   * Écrit les documents du ZIP lu, dans son ordre → { parNom: Map(nom dans le ZIP → nom rendu), repris }. Seconde passe
+   * Écrit les documents du ZIP lu, dans son ordre → { parNom: Map(nom dans le ZIP → nom rendu), repris, sautes }. Seconde passe
    * de la lecture (T205) : chaque document est décompressé à nouveau depuis le ZIP, son empreinte revérifiée
    * (ZipLecture.lireDocument ; refus → échec de l'import, avant les tables), écrit, puis oublié avant le suivant.
    */
   async function ecrireDocuments(lu) {
     const parNom = new Map();
     const pris = new Set();
+    const sautes = [];
     let repris = 0;
     for (const decrit of lu.documents) {
       const resultat = await ecrireDepuisLeZip(lu, decrit.nom, pris);
+      if (resultat.saute) { sautes.push(decrit.nom); continue; }
       parNom.set(decrit.nom, resultat.nom);
       if (resultat.repris) repris += 1;
     }
-    return { parNom: parNom, repris: repris };
+    return { parNom: parNom, repris: repris, sautes: sautes };
   }
 
   /**
@@ -515,7 +524,8 @@ const ParametresZip = (() => {
       const abimes = new Map(lu.abimes.map((abime) => [abime.table, abime]));
       for (const nomTable of nomsTables) await remplacerTable(nomTable, tables[nomTable], abimes.get(nomTable));
       const action = 'import ZIP : ' + nomFichier + ', ' + pluriel(nomsTables.length, 'table') + ', '
-        + pluriel(lu.documents.length, 'document') + (abimes.size ? ' ; importés tels quels, abîmés : '
+        + pluriel(lu.documents.length - documents.sautes.length, 'document')
+        + (documents.sautes.length ? ' ; non repris (contenu qui n\'est pas l\'image annoncée) : ' + documents.sautes.join(', ') : '') + (abimes.size ? ' ; importés tels quels, abîmés : '
           + lu.abimes.map((abime) => abime.fichier).join(', ') : '')
         + (sansDocuments(lu) ? ' ; données seules : documents gardés tels quels' : '')
         + ' ; sauvegarde ' + sauvegarde + ' faite juste avant';
@@ -526,8 +536,8 @@ const ParametresZip = (() => {
     } catch (erreur) {
       return restaurerApresEchec(sauvegarde, erreur);
     }
-    return { ok: true, sauvegarde: sauvegarde, tables: nomsTables.length, documents: lu.documents.length,
-      repris: documents.repris, abimes: lu.abimes.map((abime) => abime.fichier), sansDocuments: sansDocuments(lu) };
+    return { ok: true, sauvegarde: sauvegarde, tables: nomsTables.length, documents: lu.documents.length - documents.sautes.length,
+      repris: documents.repris, sautes: documents.sautes, abimes: lu.abimes.map((abime) => abime.fichier), sansDocuments: sansDocuments(lu) };
   }
 
   // ===========================================================================================
@@ -587,7 +597,8 @@ const ParametresZip = (() => {
         ? I18n.t('zip.importer.documents_deja_present_repris', { n: resultat.documents, repris: resultat.repris })
         : I18n.t('zip.importer.documents_aucun_document_existant', { n: resultat.documents });
     }
-    const message = I18n.t('zip.importer.sauvegarde_faite_juste_avant', { tables, documentsDits, sauvegarde: resultat.sauvegarde });
+    const message = I18n.t('zip.importer.sauvegarde_faite_juste_avant', { tables, documentsDits, sauvegarde: resultat.sauvegarde })
+      + (resultat.sautes.length ? ' ' + I18n.t('zip.importer.documents_non_repris', { n: resultat.sautes.length, noms: resultat.sautes.join(', ') }) : '');
     await montrerMessage('import-zip-termine', I18n.t('zip.importer.import_zip_termine'), 'succes', message,
       [{ libelle: I18n.t('zip.importer.recharger_prevo'), valeur: 'ok', classe: 'btn-primaire', defaut: true }]);
     location.reload();                                     // étape 8 : l'application repart des nouvelles données
