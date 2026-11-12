@@ -5778,10 +5778,13 @@ def versions_des_tables(config):
     return resultat
 
 
-# Cellule qu'Excel exécuterait à l'ouverture d'un CSV (audit E2) : =, +, @, tabulation, retour chariot, ou un tiret qui
-# n'introduit pas un nombre. Prévo protège ces valeurs par une apostrophe à l'écriture (§3.2) ; le serveur refuse ce
-# qu'un autre client enverrait sans elle. Un texte qui commence par une espace n'est pas une formule pour Excel.
-MOTIF_CELLULE_DANGEREUSE = re.compile(r'^(?:[=+@\t\r]|-(?![0-9.,]))')
+# Cellule qu'Excel exécuterait à l'ouverture d'un CSV (audit E2) : =, +, @, tabulation, retour chariot, ou un tiret,
+# comme MOTIF_DEBUT_DANGEREUX de js/donnees.js. Prévo protège ces valeurs par une apostrophe à l'écriture (§3.2) ; le
+# serveur refuse ce qu'un autre client enverrait sans elle. Un texte qui commence par une espace n'est pas une formule
+# pour Excel. Seule exception au tiret (T505 ; relecture R4) : la cellule ENTIÈRE est un nombre négatif (« -12 »,
+# « -12.5 », « -12,5 », « -.5 », « -1e-7 » : une colonne numérique s'écrit sans apostrophe) ; « -1+cmd|… » et
+# « -2+WEBSERVICE(…) », que l'ancienne exception (un chiffre après le tiret) laissait passer, sont refusées.
+MOTIF_CELLULE_DANGEREUSE = re.compile(r'^(?:[=+@\t\r]|-(?!(?:[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+)(?:[eE][+-]?[0-9]+)?\Z))')
 
 
 def verifier_contenu_csv(table, octets, corps_d_ajout=False, entete_libre=False):
@@ -6592,9 +6595,118 @@ def garder_les_demandes_actuelles(octets_recus, octets_actuels):
     return ecrire_tableau_csv(entete, gardees + nouvelles)
 
 
-def controle_d_ecriture(identite, table):
+# Journal écrit par un rôle autre que le responsable (T505 ; relecture R4, M3 : le journal est la trace d'un
+# avertissement d'habilitation, RG8 : qui, quand, quel OT). Mode serveur avec comptes seulement :
+#   - il ne s'écrit que par ajout. POST /api/csv/journal/ajout : lignes_de_journal_du_role. PUT /api/csv/journal du
+#     technicien (le demandeur n'a pas ce PUT) : garder_le_journal_actuel, qui ne laisse passer que le repli de
+#     Donnees.ajouter (js/donnees.js : après un 409 de l'ajout, en-tête différent, le navigateur relit le fichier et le
+#     renvoie entier avec ses lignes en plus) ; une ligne retirée ou modifiée, un journal vidé : 403 ;
+#   - une ligne ajoutée porte le profil de la session (profil_au_journal), quoi que le client ait écrit, et un numéro
+#     neuf (ni vide, ni déjà pris, ni autre chose que lettres, chiffres et tirets : il se cherche tel quel dans le
+#     fichier) ; 403 sinon. « poste » reste un texte libre : le serveur ne connaît pas le nom du poste.
+MOTIF_NUMERO_DE_JOURNAL = re.compile(r'[A-Za-z0-9-]+', re.ASCII)
+# Profil inscrit au journal par libelleJournal de js/app.js : clé de js/i18n/<langue>.js (socle.libelle_journal.<clé>),
+# modèle français, variable. Un rôle inconnu a le profil le plus restreint, comme profilDepuisSession.
+PROFILS_AU_JOURNAL = {'technicien': ('technicien_technicien_id', 'Technicien {technicienId}', '{technicienId}'),
+                      'demandeur': ('demandeur_p_nom', 'Demandeur {nom}', '{nom}')}
+
+
+def profil_au_journal(identite, config=None):
+    """Colonne profil d'une ligne de journal écrite par cette session, comme libelleJournal de js/app.js :
+    « Technicien TEC-0002 », « Demandeur Léa Martin » (un appareil enrôlé : le nom saisi), dans la langue de
+    l'installation (D156 ; modèle lu dans js/i18n/<langue>.js, le français sans réglage ou sans le fichier)."""
+    role = role_effectif(identite)
+    cle, modele, variable = PROFILS_AU_JOURNAL.get(role, PROFILS_AU_JOURNAL['demandeur'])
+    langue = langue_de_l_installation(config) if config is not None else ''
+    if langue and langue != LANGUE_PAR_DEFAUT:
+        try:
+            source = (lire_octets(os.path.join(DOSSIER_APPLICATION, *DOSSIER_TEXTES, langue + '.js')) or b'').decode('utf-8')
+        except (OSError, UnicodeDecodeError):
+            source = ''
+        trouve = re.search(r"^  'socle\.libelle_journal\.%s': '((?:[^'\\\n]|\\.)*)',\r?$" % cle, source, re.MULTILINE)
+        if trouve and variable in chaine_js(trouve.group(1)):
+            modele = chaine_js(trouve.group(1))
+    if role == 'technicien':
+        valeur = str(identite.get('technicien_id') or '')
+    else:
+        valeur = ('%s %s' % (identite.get('prenom') or '', identite.get('nom') or '')).strip()
+    profil = ' '.join(modele.replace(variable, valeur).split())
+    return "'" + profil if MOTIF_CELLULE_DANGEREUSE.match(profil) else profil
+
+
+def refus_journal():
+    """403 d'une écriture du journal qui n'est pas un ajout, par un rôle autre que le responsable."""
+    return ErreurHttp(403, traduisible('acces.table_du_responsable',
+                                       'Accès refusé : la table « {table} » ne se modifie que par le responsable.',
+                                       table='journal'))
+
+
+def ligne_de_journal_du_role(cles, cellules, profil, numeros_vus, pris):
+    """Ligne nouvelle du journal d'un rôle restreint → ses cellules, dans l'ordre de « cles », au profil de la session ;
+    403 si son numéro est vide, mal formé, déjà vu dans la requête (numeros_vus, complété ici) ou déjà pris (pris :
+    fonction numéro → vrai s'il est dans le fichier)."""
+    ligne = ligne_en_dictionnaire(cles, cellules)
+    numero = ligne.get('id', '')
+    if not MOTIF_NUMERO_DE_JOURNAL.fullmatch(numero) or numero in numeros_vus or pris(numero):
+        raise refus_journal()
+    numeros_vus.add(numero)
+    ligne['profil'] = profil
+    return [ligne.get(cle, '') for cle in cles] + list(cellules[len(cles):])
+
+
+def lignes_de_journal_du_role(noms, lignes, actuels, profil):
+    """POST /api/csv/journal/ajout d'un rôle restreint : (colonnes du corps, octets des lignes, octets du fichier) →
+    octets des lignes à ajouter, chacune au profil de la session et à un numéro neuf (403 sinon). Le numéro se cherche
+    dans les octets du fichier, en début de ligne (le journal n'est pas relu en entier à chaque ajout)."""
+    cles = [cle_entete(nom) for nom in noms]
+    en_place = b'\n' + (actuels or b'').replace(BOM_UTF8, b'', 1)
+    rangees = [rangee for rangee in csv.reader(io.StringIO(lignes.decode('utf-8'), newline=''), delimiter=';')
+               if any(cellule.strip() for cellule in rangee)]
+    vus = set()
+    ecrites = [ligne_de_journal_du_role(cles, rangee, profil, vus,
+                                        lambda numero: b'\n' + numero.encode('ascii') + b';' in en_place)
+               for rangee in rangees]
+    return ''.join(';'.join(cellule_csv(cellule) for cellule in rangee) + '\r\n' for rangee in ecrites).encode('utf-8')
+
+
+def garder_le_journal_actuel(octets_recus, octets_actuels, profil):
+    """PUT de journal.csv par le technicien (repli de Donnees.ajouter) : en ajout seulement, comme
+    garder_les_demandes_actuelles. Chaque ligne actuelle doit s'y retrouver inchangée (même numéro, mêmes valeurs à la
+    forme près, forme_comparable) ; 403 pour une ligne retirée ou modifiée. Les lignes actuelles sont réécrites telles
+    qu'elles sont dans le fichier (rien d'une ligne existante ne vient du technicien), dans l'ordre des colonnes
+    reçues, puis les nouvelles, au profil de la session et à un numéro neuf (ligne_de_journal_du_role)."""
+    entete, lignes = lire_tableau('journal', octets_recus)
+    cles = [cle_entete(nom) for nom in entete]
+    actuelles = dictionnaires_csv(octets_actuels, 'journal')
+    restantes = {}
+    for ligne in actuelles:
+        restantes.setdefault(ligne.get('id', '').strip(), []).append(ligne)
+
+    def inchangee(ancienne, recue):
+        return all(ancienne.get(cle, '') == recue.get(cle, '')
+                   or forme_comparable(ancienne.get(cle, '')) == forme_comparable(recue.get(cle, ''))
+                   for cle in set(ancienne) | set(recue))
+
+    nouvelles, vus = [], set()
+    for brute in lignes:
+        recue = ligne_en_dictionnaire(cles, brute)
+        candidates = restantes.get(recue.get('id', '').strip(), [])
+        retrouvee = next((ancienne for ancienne in candidates if inchangee(ancienne, recue)), None)
+        if retrouvee is not None:
+            candidates.remove(retrouvee)
+        else:
+            nouvelles.append(ligne_de_journal_du_role(cles, brute[:len(cles)], profil, vus,
+                                                      lambda numero: numero in restantes))
+    if any(restantes.values()):
+        raise refus_journal()
+    gardees = [[ancienne.get(cle, '') for cle in cles] for ancienne in actuelles]
+    return ecrire_tableau_csv(entete, gardees + nouvelles)
+
+
+def controle_d_ecriture(identite, table, config=None):
     """Contrôle d'un PUT /api/csv/<table> propre au rôle (§22.5), appelé par enregistrer_csv après le contrôle de version
-    (un 409 reste un 409) : (octets reçus, octets actuels) → octets à écrire ; None sans contrôle."""
+    (un 409 reste un 409) : (octets reçus, octets actuels) → octets à écrire ; None sans contrôle. config : pour la
+    langue du profil inscrit au journal (T505)."""
     if identite is None:
         return None
     role = role_effectif(identite)
@@ -6604,6 +6716,8 @@ def controle_d_ecriture(identite, table):
 
     def controler(recus, actuels):          # T500 : d'abord le refus d'une colonne du schéma en double (400)
         refuser_colonne_du_schema_en_double(table, lire_tableau(table, recus)[0])
+        if table == 'journal':              # T505 : en ajout seulement, au profil de la session
+            return garder_le_journal_actuel(recus, actuels, profil_au_journal(identite, config))
         if colonnes:
             return remettre_colonnes_cachees(table, recus, actuels, colonnes)
         if role == 'demandeur' and table == 'demandes':
@@ -6612,11 +6726,12 @@ def controle_d_ecriture(identite, table):
     return controler
 
 
-def controle_d_ajout(identite, table):
+def controle_d_ajout(identite, table, config=None):
     """Contrôle d'un POST /api/csv/<table>/ajout propre au rôle, appelé par ajouter_au_csv : (en-tête, lignes, octets
     actuels) → lignes à ajouter. Technicien : colonnes cachées vides dans les lignes ajoutées ; demandeur, demandes :
     lignes nouvelles seulement (verifier_demande_nouvelle) ; None sans contrôle. T500 : pour tout rôle autre que le
-    responsable, 400 d'abord si une colonne en plus porte la clé d'une colonne du schéma."""
+    responsable, 400 d'abord si une colonne en plus porte la clé d'une colonne du schéma. T505 : journal, pour ces
+    mêmes rôles : profil de la session et numéro neuf (lignes_de_journal_du_role ; config : langue du profil)."""
     if identite is None:
         return None
     role = role_effectif(identite)
@@ -6627,6 +6742,8 @@ def controle_d_ajout(identite, table):
     def controler(entete, lignes, actuels):
         noms = next(csv.reader(io.StringIO(entete.decode('utf-8')), delimiter=';'), [])
         refuser_colonne_du_schema_en_double(table, noms)
+        if table == 'journal':
+            return lignes_de_journal_du_role(noms, lignes, actuels, profil_au_journal(identite, config))
         if not colonnes and not (role == 'demandeur' and table == 'demandes'):
             return lignes
         cles = [cle_entete(nom) for nom in noms]
@@ -7370,13 +7487,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                                   entete=ENTETE_ABIME_DEPUIS, derogation=ENTETE_REMPLACER_ABIME))
         with VERROU_ECRITURE:
             version = enregistrer_csv(self.config, table, corps, version_attendue.strip(),
-                                      controle_d_ecriture(self.session, table), remplacer_abime=remplacer_abime,
+                                      controle_d_ecriture(self.session, table, self.config),
+                                      remplacer_abime=remplacer_abime,
                                       abime_depuis=abime_depuis)
         self.envoyer_json(200, {'version': version})
 
     def api_ajout(self, table, corps):
         with VERROU_ECRITURE:
-            version = ajouter_au_csv(self.config, table, corps, controle_d_ajout(self.session, table))
+            version = ajouter_au_csv(self.config, table, corps, controle_d_ajout(self.session, table, self.config))
         self.envoyer_json(200, {'version': version})
 
     def api_document_lire(self, nom, corps):
