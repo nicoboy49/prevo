@@ -67,10 +67,28 @@ Object.assign(Ordres, (() => {
     throw erreur;
   }
 
-  // Action du journal suivie du marqueur de dérogation (« … ; dérogation habilitation : … »), s'il y en a un.
-  function avecDerogation(action, marqueur) {
-    if (!marqueur) return action;
-    return texte(action) ? action + ' ; ' + marqueur : marqueur;
+  // Action du journal suivie du marqueur de dérogation (« … ; dérogation habilitation : … »), s'il y en a un ;
+  // journal.derogation le garde pour ecrireAvecTrace ('' : aucune dérogation ; remis à chaque essai de l'écriture).
+  function noterDerogation(journal, action, marqueur) {
+    journal.derogation = marqueur;
+    journal.action = !marqueur ? action : texte(action) ? action + ' ; ' + marqueur : marqueur;
+  }
+
+  /**
+   * Donnees.modifier('ordres_travail', mutation, journal) pour une écriture qui peut porter une dérogation (T504,
+   * D186 : le journal est la preuve). Si la dérogation (journal.derogation) est accordée mais que la ligne de journal
+   * n'a pas pu être écrite, lève Donnees.ErreurStockage au lieu d'annoncer un succès. L'OT reste écrit (pas de
+   * retour arrière) : sans ligne au journal, le contrôle suivant redemandera la dérogation. otId : celui de
+   * l'OT, sinon ce que rend la mutation (création). Sans dérogation, un journal non écrit ne fait rien échouer.
+   */
+  async function ecrireAvecTrace(mutation, journal, otId) {
+    let journalEcrit = true;
+    journal.siJournalNonEcrit = () => { journalEcrit = false; };
+    const rendu = await Donnees.modifier('ordres_travail', mutation, journal);
+    if (!journalEcrit && journal.derogation) {
+      throw new Donnees.ErreurStockage(I18n.t('ordres.derogation.non_tracee', { otId: otId || rendu }));
+    }
+    return rendu;
   }
 
   // Ligne d'OT dans une copie de table, ou erreur si absente ; `modifiable` refuse un OT verrouillé.
@@ -92,13 +110,13 @@ Object.assign(Ordres, (() => {
   async function creer(valeurs, options) {
     const action = 'création de l\'OT (' + (valeurs.origine || 'manuel') + ')';
     const journal = { action };
-    return Donnees.modifier('ordres_travail', (lignes, outils) => {
+    return ecrireAvecTrace((lignes, outils) => {
       const date = outils.aujourdhui();
       const id = outils.nouvelId(lignes, date);
       const ligne = Object.assign({
         origine: 'manuel', statut: 'Créé', arret_production: '0', remise_service: '0',
       }, valeurs, { id, statut: 'Créé', date_creation: outils.maintenant() });
-      journal.action = avecDerogation(action, controlerAffectation(ligne, options));
+      noterDerogation(journal, action, controlerAffectation(ligne, options));
       lignes.push(ligne);
       return id;
     }, journal);
@@ -113,7 +131,7 @@ Object.assign(Ordres, (() => {
    */
   async function modifierOt(otId, changements, action, options) {
     const journal = { action };
-    return Donnees.modifier('ordres_travail', (lignes) => {
+    return ecrireAvecTrace((lignes) => {
       const ligne = ligneOt(lignes, otId, true);
       const changes = Object.keys(changements).filter((nom) => texte(ligne[nom]) !== texte(changements[nom]));
       if (changes.length && ligne.statut === 'Clôturé techniquement') {
@@ -121,9 +139,9 @@ Object.assign(Ordres, (() => {
       }
       changes.forEach((nom) => { ligne[nom] = changements[nom]; });
       const affectation = changes.some((nom) => CHAMPS_AFFECTATION.includes(nom));
-      journal.action = affectation ? avecDerogation(action, controlerAffectation(ligne, options)) : action;
+      noterDerogation(journal, action, affectation ? controlerAffectation(ligne, options) : '');
       return changes;
-    }, journal);
+    }, journal, otId);
   }
 
   /**
@@ -147,13 +165,13 @@ Object.assign(Ordres, (() => {
     const motif = ajout.motif_attente || ajout.motif_annulation || '';
     const action = 'statut ' + statutAttendu + ' → ' + cible + (motif ? ' : ' + motif : '');
     const journal = { action };
-    return Donnees.modifier('ordres_travail', (lignes, outils) => {
+    return ecrireAvecTrace((lignes, outils) => {
       const ligne = ligneOt(lignes, otId, false);
       if (ligne.statut !== statutAttendu) {
         throw ErreurValidation(I18n.t('ordres.ecrire_statut.ot_passe_autre_poste', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       const verification = verifierPassage(Object.assign({}, ligne, ajout), cible);
-      if (cible === 'Planifié') journal.action = avecDerogation(action, controlerAffectation(ligne, options, verification));
+      if (cible === 'Planifié') noterDerogation(journal, action, controlerAffectation(ligne, options, verification));
       else if (!verification.ok) throw ErreurValidation(verification.erreurs.join(' '));
       const maintenant = outils.maintenant();
       if (cible === 'En attente') ligne.motif_attente = ajout.motif_attente;
@@ -164,7 +182,7 @@ Object.assign(Ordres, (() => {
       if (cible === 'Clôturé administrativement') ligne.date_cloture_admin = maintenant;
       ligne.statut = cible;
       return cible;
-    }, journal);
+    }, journal, otId);
   }
 
   // Avertissement de la dernière clôture technique d'un OT dont la gamme n'a pas pu être mise à
@@ -355,7 +373,7 @@ Object.assign(Ordres, (() => {
     // écritures (ARCHITECTURE.md §10)
     creer, changerStatut, changerPriorite, creerOtLie,
     // RG8 bloquante à l'affectation (D186, D191) : aussi pour Planning.planifier
-    controlerAffectation,
+    controlerAffectation, ecrireAvecTrace,
     // clôture en une étape (§22.11, D132)
     clore, clotureUneEtape,
   };

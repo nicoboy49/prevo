@@ -345,7 +345,14 @@ const Ordres = (() => {
   // serveur avec comptes (T448, D186 « qui »), le compte connecté avant le motif : « … ; compte : nicolas.briand ;
   // motif : <texte> ». Les deux formes se relisent (marqueurs écrits sans compte : hors comptes, ou avant T448).
   const MOTIF_DEROGATION = /(?:^|\s)dérogation habilitation : (\S+) le (\d{4}-\d{2}-\d{2}) sans (.+?)(?: ; compte : (.+?))? ; motif : ([\s\S]+)$/;
-  const MOTIF_MANQUANTE = /^(.+?)(?: \((?:(absente)|(échue)|(pas encore obtenue))\))?$/;
+  // T504 : le marqueur ne vaut dérogation que dans une ligne écrite par une écriture qui affecte (création de l'OT,
+  // champ d'affectation modifié, passage à « Planifié », planification), jamais à la suite d'un texte libre (motif
+  // d'attente, d'annulation, de priorité…). Groupe 1 : ce qui précède le marqueur dans l'action de la ligne.
+  const LIGNE_DEROGATION = new RegExp('^((?:création — création de l\'OT \\([^();]*\\) ; '
+    + '|modification : [^—]*\\b(?:technicien_id|date_prevue|habilitation_requise)\\b[^—]* — (?:[^;:]* ; )?'
+    + '|modification : [^—]* — (?:statut [^;:]* → Planifié|(?:re)?planification : \\S+ le \\d{4}-\\d{2}-\\d{2}(?: \\(Préparé → Planifié\\))?) ; '
+    + '))dérogation habilitation : ');
+  const MOTIF_MANQUANTE =/^(.+?)(?: \((?:(absente)|(échue)|(pas encore obtenue))\))?$/;
 
   // Intitulé comparable et date lue : les fonctions d'Equipe (cherchées à l'appel, equipe-regles.js est
   // chargé après) ; une seule règle pour RG8 et pour l'écran Équipe (QUESTIONS-L2-L6 Q11).
@@ -512,9 +519,14 @@ const Ordres = (() => {
       const cles = new Set(derogation.manquantes.map((m) => cleIntitule(m.intitule)));
       return cles.size === attendues.size && Array.from(cles).every((cle) => attendues.has(cle));
     };
+    // T504 : seules comptent les lignes des écritures qui affectent ; en mode comptes, pas celles d'un autre profil.
+    const comptes = typeof App !== 'undefined' && Boolean(App) && typeof App.comptesExiges === 'function' && App.comptesExiges();
+    const responsable = comptes ? I18n.donnees('socle.libelle_type.responsable') : '';
     const trouvees = Donnees.lignes('journal').filter((entree) => {
       if (texte(entree.table) !== 'ordres_travail' || texte(entree.id_ligne) !== ot) return false;
-      const derogation = lireDerogation(entree.action);
+      const debut = LIGNE_DEROGATION.exec(texte(entree.action));
+      if (!debut || (responsable && texte(entree.profil) && texte(entree.profil) !== responsable)) return false;
+      const derogation = lireDerogation(texte(entree.action).slice(debut[1].length));
       return Boolean(derogation && derogation.technicienId === id && derogation.date === jour && memes(derogation));
     }).sort((a, b) => texte(b.date_heure).localeCompare(texte(a.date_heure)) || texte(b.id).localeCompare(texte(a.id)));
     return trouvees[0] || null;

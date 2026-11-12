@@ -1041,6 +1041,7 @@ I18n.ajouter('pt-PT', {
   'ordres.derogation.exemple_motif': 'Ex.: eletricista habilitado do local presente; consignação feita por ele',
   'ordres.derogation.exigence': { one: 'Esta OT exige-a ({origines}). A atribuição é recusada.', other: 'Esta OT exige-as ({origines}). A atribuição é recusada.' },
   'ordres.derogation.motif': 'Motivo da exceção',
+  'ordres.derogation.non_tracee': '{otId} ficou guardada, mas a exceção não pôde ser registada no registo de alterações: refaça a atribuição.',
   'ordres.derogation.origine_equipement': 'equipamento {repereEquipement}',
   'ordres.derogation.origine_equipement_ot': 'equipamento {repereEquipement}; OT',
   'ordres.derogation.origine_ot': 'OT',

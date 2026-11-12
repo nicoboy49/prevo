@@ -1041,6 +1041,7 @@ I18n.ajouter('it', {
   'ordres.derogation.exemple_motif': 'Es. elettricista abilitato del sito presente; messa in sicurezza fatta da lui',
   'ordres.derogation.exigence': { one: 'Questo ordine di lavoro la richiede ({origines}). L\'assegnazione è rifiutata.', other: 'Questo ordine di lavoro le richiede ({origines}). L\'assegnazione è rifiutata.' },
   'ordres.derogation.motif': 'Motivo della deroga',
+  'ordres.derogation.non_tracee': '{otId} è stato salvato, ma la deroga non ha potuto essere annotata nel registro delle modifiche: ripeti l\'assegnazione.',
   'ordres.derogation.origine_equipement': 'attrezzatura {repereEquipement}',
   'ordres.derogation.origine_equipement_ot': 'attrezzatura {repereEquipement}; OdL',
   'ordres.derogation.origine_ot': 'OdL',

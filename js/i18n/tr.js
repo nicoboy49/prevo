@@ -1041,6 +1041,7 @@ I18n.ajouter('tr', {
   'ordres.derogation.exemple_motif': 'Örn. sahanın yetkili elektrikçisi hazır; enerji izolasyonunu o yaptı',
   'ordres.derogation.exigence': { one: 'Bu iş emri bunu gerektiriyor ({origines}). Atama reddedildi.', other: 'Bu iş emri bunları gerektiriyor ({origines}). Atama reddedildi.' },
   'ordres.derogation.motif': 'İstisna gerekçesi',
+  'ordres.derogation.non_tracee': '{otId} kaydedildi, ancak istisna değişiklik günlüğüne yazılamadı: atamayı yeniden yapın.',
   'ordres.derogation.origine_equipement': 'ekipman {repereEquipement}',
   'ordres.derogation.origine_equipement_ot': 'ekipman {repereEquipement}; iş emri',
   'ordres.derogation.origine_ot': 'iş emri',

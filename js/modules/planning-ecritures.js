@@ -43,8 +43,10 @@ Object.assign(Planning, (() => {
       + technicienId + ' le ' + date + (statutAttendu === 'Préparé' ? ' (Préparé → Planifié)' : '');
     // Relu par Donnees.modifier APRÈS la mutation : le marqueur de dérogation y est ajouté (atomique).
     const journal = { action };
-    const statut = await Donnees.modifier('ordres_travail', (lignes) => {
+    // T504 : Ordres.ecrireAvecTrace refuse d'annoncer une dérogation (journal.derogation) que le journal n'a pas notée.
+    const statut = await Ordres.ecrireAvecTrace((lignes) => {
       journal.action = action;                       // fonction rejouée en cas de conflit : action de départ
+      journal.derogation = '';
       const ligne = lignes.find((candidate) => candidate.id === otId);
       if (!ligne) throw ErreurValidation(I18n.t('planning.planifier.ordre_travail_introuvable', { otId }));
       if (ligne.statut !== statutAttendu) {
@@ -61,13 +63,13 @@ Object.assign(Planning, (() => {
       if (ligne.statut === 'Préparé' || deplace) {
         const verification = ligne.statut === 'Préparé' ? Ordres.verifierPassage(prochaine, 'Planifié') : null;
         const marqueur = Ordres.controlerAffectation(prochaine, options, verification);
-        if (marqueur) journal.action = action + ' ; ' + marqueur;
+        if (marqueur) Object.assign(journal, { action: action + ' ; ' + marqueur, derogation: marqueur });
       }
       if (ligne.statut === 'Préparé') ligne.statut = 'Planifié';
       ligne.technicien_id = technicienId;
       ligne.date_prevue = date;
       return ligne.statut;
-    }, journal);
+    }, journal, otId);
     return { statut, avertissements: [] };
   }
 

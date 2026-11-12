@@ -1039,6 +1039,7 @@ I18n.ajouter('en', {
   'ordres.derogation.exemple_motif': 'E.g. authorised site electrician present; isolation carried out by them',
   'ordres.derogation.exigence': { one: 'This work order requires it ({origines}). The assignment is refused.', other: 'This work order requires them ({origines}). The assignment is refused.' },
   'ordres.derogation.motif': 'Reason for the override',
+  'ordres.derogation.non_tracee': '{otId} is saved, but the override could not be recorded in the change log: redo the assignment.',
   'ordres.derogation.origine_equipement': 'equipment {repereEquipement}',
   'ordres.derogation.origine_equipement_ot': 'equipment {repereEquipement}; work order',
   'ordres.derogation.origine_ot': 'work order',

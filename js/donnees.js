@@ -1420,7 +1420,9 @@ const Donnees = (() => {
   // maintenant(), aujourdhui() }. ErreurValidation levée par la fonction : jamais réessayée.
   // Conflit d'écriture : la table est relue et la fonction réappliquée (3 essais au total).
   // options : { action: texte ajouté au journal, journal: false pour ne pas journaliser, remplacerFichierAbime: vrai
-  // pour remplacer un fichier abîmé (import ZIP seulement ; sinon ErreurFichierAbime, rien n'est écrit) }.
+  // pour remplacer un fichier abîmé (import ZIP seulement ; sinon ErreurFichierAbime, rien n'est écrit),
+  // siJournalNonEcrit: fonction appelée quand la table est écrite mais pas sa ligne de journal (T504 : l'action
+  // n'échoue toujours pas ; l'appelant qui doit une trace, ex. la dérogation RG8, peut ainsi le dire) }.
   async function modifier(nomTable, fonction, options) {
     verifierInitialise();
     const description = descriptionTable(nomTable);
@@ -1468,7 +1470,8 @@ const Donnees = (() => {
         const entrees = resultat.changements.map((changement) => entreeJournal(identifiantsPris, nomTable,
           changement.ligne[description.cle],
           (changement.champs === null ? 'création' : 'modification : ' + changement.champs.join(', ')) + complement));
-        await ecrireJournal(entrees);
+        const journalEcrit = await ecrireJournal(entrees);
+        if (!journalEcrit && typeof reglages.siJournalNonEcrit === 'function') { reglages.siJournalNonEcrit(); }
       }
     }
     return resultat.valeur;

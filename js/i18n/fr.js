@@ -1037,6 +1037,7 @@ I18n.ajouter('fr', {
   'ordres.derogation.exemple_motif': 'Ex. électricien habilité du site présent ; consignation faite par lui',
   'ordres.derogation.exigence': { one: 'Cet OT l\'exige ({origines}). L\'affectation est refusée.', other: 'Cet OT les exige ({origines}). L\'affectation est refusée.' },
   'ordres.derogation.motif': 'Motif de la dérogation',
+  'ordres.derogation.non_tracee': '{otId} est enregistré, mais la dérogation n\'a pas pu être notée au journal : refaites l\'affectation.',
   'ordres.derogation.origine_equipement': 'équipement {repereEquipement}',
   'ordres.derogation.origine_equipement_ot': 'équipement {repereEquipement} ; OT',
   'ordres.derogation.origine_ot': 'OT',

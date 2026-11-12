@@ -94,25 +94,29 @@ def marqueur(technicien, date, liste, motif=MOTIF):
     return "dérogation habilitation : %s le %s sans %s ; motif : %s" % (technicien, date, liste, motif)
 
 
+# T504 : le marqueur ne vaut que dans une ligne écrite par une écriture qui affecte (ici la préparation), jamais seul.
+ECRITE = "modification : technicien_id, date_prevue — préparation ; "
+
 ENTETE_JOURNAL = "id;date_heure;poste;profil;table;id_ligne;action"
 JOURNAL_LIGNES = [
     ["J-20261108104200-AAAA", "2026-11-08 10:42", "Poste test", "Responsable test", "ordres_travail",
-     "OT-2026-0003", "modification : technicien_id, date_prevue — préparation ; "
+     "OT-2026-0003", ECRITE
      + marqueur("TEC-0004", DATE, "BR (échue)")],
     ["J-20261109090000-BBBB", "2026-11-09 09:00", "Poste test", "Responsable test", "ordres_travail",
-     "OT-2026-0003", marqueur("TEC-0002", DATE, "BR (pas encore obtenue)")],
+     "OT-2026-0003", ECRITE + marqueur("TEC-0002", DATE, "BR (pas encore obtenue)")],
     ["J-20261109093000-CCCC", "2026-11-09 09:30", "Poste test", "Responsable test", "ordres_travail",
-     "OT-2026-0003", marqueur("TEC-0004", "2026-11-21", "BR (échue)")],
+     "OT-2026-0003", ECRITE + marqueur("TEC-0004", "2026-11-21", "BR (échue)")],
     ["J-20261109100000-DDDD", "2026-11-09 10:00", "Poste test", "Responsable test", "ordres_travail",
-     "OT-2026-0002", marqueur("TEC-0004", DATE, "BR (échue)")],
+     "OT-2026-0002", ECRITE + marqueur("TEC-0004", DATE, "BR (échue)")],
     ["J-20261109110000-EEEE", "2026-11-09 11:00", "Poste test", "Responsable test", "ordres_travail",
-     "OT-2026-0003", marqueur("TEC-0004", DATE, "BR (échue), H0V (absente)")],
+     "OT-2026-0003", ECRITE + marqueur("TEC-0004", DATE, "BR (échue), H0V (absente)")],
     ["J-20261109113000-FFFF", "2026-11-09 11:30", "Poste test", "Responsable test", "equipements",
-     "OT-2026-0003", marqueur("TEC-0004", DATE, "BR (échue)")],
+     "OT-2026-0003", ECRITE + marqueur("TEC-0004", DATE, "BR (échue)")],
     ["J-20261109114500-GGGG", "2026-11-09 11:45", "Poste test", "Responsable test", "ordres_travail",
-     "OT-2026-0003", marqueur("TEC-0004", DATE, "BR (échue)", motif="")],
+     "OT-2026-0003", ECRITE + marqueur("TEC-0004", DATE, "BR (échue)", motif="")],
     ["J-20261109120000-HHHH", "2026-11-09 12:00", "Poste test", "Responsable test", "ordres_travail",
-     "OT-2026-0003", "planification ; " + marqueur("TEC-0004", DATE, "b r (échue)", motif="second acte")],
+     "OT-2026-0003", "modification : statut — planification : TEC-0004 le " + DATE + " (Préparé → Planifié) ; "
+     + marqueur("TEC-0004", DATE, "b r (échue)", motif="second acte")],
     ["J-20261109130000-IIII", "2026-11-09 13:00", "Poste test", "Responsable test", "ordres_travail",
      "OT-2026-0003", "avertissement habilitation : TEC-0004 sans BR valide au 2026-11-20"],
 ]

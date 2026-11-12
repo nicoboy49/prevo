@@ -836,7 +836,17 @@ RG8 ne prévient plus : elle **bloque** (D186, D191, ci-dessous).
     L'entrée du journal porte donc qui (utilisateur du journal), quand, l'OT (`id_ligne`), le technicien, la date et les
     habilitations. `Ordres.derogationAccordee(otId, technicienId, date, manquantes)` retrouve la dérogation déjà notée pour
     le même OT, technicien, date et ensemble d'habilitations : l'étape suivante (préparer puis « Planifier ») ne la
-    redemande pas ; un autre technicien, une autre date ou une autre habilitation, si.
+    redemande pas ; un autre technicien, une autre date ou une autre habilitation, si. Le marqueur n'y est lu que dans
+    une ligne écrite par une écriture qui affecte (T504) : `création — création de l'OT (…) ; `, `modification : <champs
+    dont technicien_id, date_prevue ou habilitation_requise> — <action sans « ; » ni « : »> ; `, `… — statut … →
+    Planifié ; `, `… — planification : … ; ` ou `… — replanification : … ; `, suivi aussitôt du marqueur ; jamais après
+    un texte libre (motif d'attente, d'annulation, de priorité). En mode serveur avec comptes, une ligne dont le
+    `profil` n'est pas vide et n'est pas celui du responsable ne compte pas.
+  - *Dérogation non tracée* (T504) : ces écritures passent par `Ordres.ecrireAvecTrace(mutation, journal, otId)`. Si la
+    dérogation est accordée mais que la ligne de journal n'a pas pu être écrite (`Donnees.modifier`, option
+    `siJournalNonEcrit` : fonction appelée dans ce cas, l'action n'échoue pas pour autant), l'écriture lève
+    `Donnees.ErreurStockage` « … la dérogation n'a pas pu être notée au journal : refaites l'affectation » au lieu du
+    succès. L'OT reste écrit (pas de retour arrière) ; faute de ligne, le contrôle suivant redemande la dérogation.
   - *Écrans* (`ordres-habilitations.js`) : bandeau du refus en direct au nouvel OT et à la préparation, information
     « dérogation du responsable le … » sur la fiche, fenêtre « Habilitation exigée non valide » (case + motif),
     `Ordres.avecDerogation(ecrire, contexte)` (essaie sans option ; sur un refus qui ne porte que sur RG8 et pour le
