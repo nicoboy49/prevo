@@ -24,7 +24,7 @@
 Object.assign(Garanties, (() => {
 
   // Outils de garanties-regles.js.
-  const { texte, dateIso, estActif, estTacite, preavisMois, reconductionMois } = Garanties.interne;
+  const { texte, dateIso, estActif, estTacite, preavisMois, reconductionMois, equipementSuivi } = Garanties.interne;
   const { libelleStatut } = Garanties;
 
   const ADRESSE_LISTE = '#/garanties';
@@ -145,9 +145,11 @@ Object.assign(Garanties, (() => {
       return [{ valeur: 'a-decider', libelle: I18n.t('garanties.filtres.a_decider'), garder: (l) => l.etat.alerte }]
         .concat(['a_mettre_a_jour', 'preavis_depasse', 'en_cours', 'termine', 'fin_inconnue'].map(filtreDuStatut));
     }
+    // « Bientôt » (filtre et compteur) : la règle de l'accueil, équipements actifs hors rebut (Garanties.aEcheance, T503).
+    const bientot = Object.assign(filtreDuStatut('bientot'), { garder: (l) => l.etat.statut === 'bientot' && equipementSuivi(l.ligne) });
     return [{ valeur: 'sous-garantie', libelle: I18n.t('garanties.filtres.sous_garantie'),
       garder: (l) => l.etat.statut === 'en_cours' || l.etat.statut === 'bientot' }]
-      .concat(['bientot', 'a_venir', 'terminee', 'fin_inconnue'].map(filtreDuStatut));
+      .concat([bientot], ['a_venir', 'terminee', 'fin_inconnue'].map(filtreDuStatut));
   }
 
   function filtresDepuis(onglet, requete) {
@@ -633,14 +635,15 @@ Object.assign(Garanties, (() => {
     const resiliation = Garanties.resiliationNotee(contrat);
     const complement = resiliation && UI.html`<p class="garanties-resiliation">${I18n.t('garanties.fiche_contrat.resiliation_notee',
       { notee: UI.dateFr(resiliation.notee), lettre: UI.dateFr(resiliation.lettre), fin: UI.dateFr(etat.finPeriode) })}</p>`;
-    // Fin enregistrée passée : « Noter la résiliation » est refusé, l'écran guide vers « Reconduire » (T464).
-    const aReconduire = actif && tacite && etat.statut === 'a_mettre_a_jour'
+    // Fin enregistrée passée, quel que soit le statut : « Noter la résiliation » est refusé, l'écran guide vers « Reconduire » (T464, T503).
+    const finPassee = etat.periodeCalculee || etat.statut === 'a_mettre_a_jour';
+    const aReconduire = actif && tacite && finPassee
       && UI.html`<p class="garanties-resiliation">${I18n.t('garanties.noter_resiliation.reconduire_d_abord', { fin: UI.dateFr(etat.fin) })}</p>`;
     App.definirTitre(titre);
     UI.remplir(conteneur, UI.html`<div class="garanties garanties-fiche" data-contrat="${contrat.id}">
       ${enteteFiche('contrats', titre, etat, actif ? UI.html`
         <a class="btn btn-primaire" id="contrat-modifier" href="${Garanties.adresseModification(contrat.id)}">${I18n.t('commun.bouton.modifier')}</a>
-        ${tacite ? UI.html`${etat.statut === 'a_mettre_a_jour' ? '' : UI.html`<button type="button" class="btn btn-secondaire" id="contrat-resiliation">${I18n.t('garanties.fiche_contrat.noter_resiliation')}</button>`}
+        ${tacite ? UI.html`${finPassee ? '' : UI.html`<button type="button" class="btn btn-secondaire" id="contrat-resiliation">${I18n.t('garanties.fiche_contrat.noter_resiliation')}</button>`}
         <button type="button" class="btn btn-secondaire" id="contrat-reconduire">${I18n.t('garanties.fiche_contrat.reconduire')}</button>` : ''}
         <button type="button" class="btn btn-secondaire" id="contrat-retirer">${I18n.t('garanties.fiche_contrat.retirer')}</button>` : '', complement || aReconduire)}
       ${actif ? bandeauContrat(contrat, etat) : UI.html`<div class="alertes"><div class="alerte attention" role="status">${UI.icone('alerte')}<div class="alerte-texte">${I18n.t('garanties.fiche_contrat.retire')}</div></div></div>`}
@@ -682,6 +685,6 @@ Object.assign(Garanties, (() => {
   });
 
   // Pour garanties-encarts.js (carte de la fiche équipement) : mêmes badges, même fournisseur, même document.
-  Object.assign(Garanties.interne, { badge, blocFournisseur, adresseDocument, blocDocument });
+  Object.assign(Garanties.interne, { badge, blocFournisseur, adresseDocument, blocDocument, lignesDe, filtresDe });
   return { adresseFiche };
 })());

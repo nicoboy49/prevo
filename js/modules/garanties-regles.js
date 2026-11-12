@@ -602,6 +602,6 @@ const Garanties = (() => {
     totalMontants, aEcheance, verifierGarantie, verifierContrat, avertissementsContrat,
     // Usage interne au module (pas une API) : complété par les fichiers suivants.
     interne: { texte, dateIso, dateDuJour, ajouterJours, joursEntre, centimes, estActif, estTacite, preavisMois,
-      reconductionMois },
+      reconductionMois, equipementSuivi },
   };
 })();

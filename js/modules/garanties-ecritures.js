@@ -355,7 +355,7 @@ Object.assign(Garanties, (() => {
    * JJ/MM/AAAA ; <commentaire> » ; contrat déjà sans reconduction tacite : la ligne ne change pas, l'entrée du
    * journal est écrite quand même (la trace de la lettre). Refus : date de la lettre absente, illisible ou future,
    * contrat introuvable ou retiré, profil, contrat tacite dont la fin enregistrée est passée (« dates à mettre à
-   * jour » : reconduire d'abord, rien n'est écrit). Renvoie ['reconduction_tacite'] ou [].
+   * jour » ou « à décider » sur une période calculée : reconduire d'abord, rien n'est écrit). Renvoie ['reconduction_tacite'] ou [].
    */
   async function noterResiliation(contratId, valeurs) {
     exigerResponsable();
@@ -369,8 +369,10 @@ Object.assign(Garanties, (() => {
       const ligne = ligneSuivie(CONTRATS, lignes, contratId);
       refuserSiErreurs(erreursDateLettre(date, outils.aujourdhui()));
       id = ligne.id;
-      // Fin enregistrée passée : la lettre ferait « terminer » le contrat à son ancienne fin ; reconduire d'abord (T464).
-      if (estTacite(ligne) && Garanties.etatContrat(ligne, outils.aujourdhui()).statut === 'a_mettre_a_jour') {
+      // Fin enregistrée passée : la lettre ferait « terminer » le contrat à son ancienne fin ; reconduire d'abord (T464),
+      // quel que soit le statut : « à décider » sur une période calculée comme « dates à mettre à jour » (D198, T503).
+      const etat = Garanties.etatContrat(ligne, outils.aujourdhui());
+      if (estTacite(ligne) && (etat.periodeCalculee || etat.statut === 'a_mettre_a_jour')) {
         throw ErreurValidation(I18n.t('garanties.noter_resiliation.reconduire_d_abord', { fin: UI.dateFr(dateIso(ligne.date_fin)) }));
       }
       if (!estTacite(ligne)) return [];
