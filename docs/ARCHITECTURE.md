@@ -3700,7 +3700,13 @@ Précisions de T152 :
   fichier actuel, ligne par ligne d'après `id`, vide pour une ligne nouvelle (`remettre_colonnes_cachees`), puis écrit.
   Raison : la sortie d'une pièce réécrit `articles` pour la colonne `stock` (`Magasin.mettreAJourStocks`, dont l'échec
   serait rattrapé sans bruit et laisserait vieillir la colonne). Les prix restent intouchables par le technicien : un
-  prix forgé est remplacé par celui du fichier. Un ajout (`POST …/ajout`) a ses colonnes cachées vidées. `PUT` et ajout
+  prix forgé est remplacé par celui du fichier. **Colonnes en double** (T500) : pour deux colonnes de même clé
+  (`cle_entete` : `Prix Unitaire` vaut `prix_unitaire`), le serveur lit partout la **première**, comme le navigateur
+  (`dictionnaires_csv`, `remettre_colonnes_cachees`, contrôle des demandes ; `associerColonnes` de `js/donnees.js`) ;
+  et un `PUT` ou un ajout d'un rôle autre que le responsable (technicien, demandeur, appareil), sur n'importe quelle
+  table, dont une colonne en plus porte la clé d'une colonne du schéma est refusé (400 `csv.entete_inattendu`, après le
+  contrôle de version pour un `PUT`). Le responsable et le mode sans comptes ne sont pas bloqués : une base réelle peut
+  déjà porter un tel fichier. Un ajout (`POST …/ajout`) a ses colonnes cachées vidées. `PUT` et ajout
   sont refusés sur `parametres`, `techniciens`, `fournisseurs` (l'ajout aussi, sinon il contournerait le refus du `PUT`).
 - **Demandeur, lecture** : liste fermée `TABLES_DU_DEMANDEUR` (D126 : aucune table de coût ni de techniciens) — les six
   du CDC, plus `compteurs` et `releves` pour la carte « Compteurs » de la fiche d'équipement ouverte par le QR. `wiki_pages`
@@ -3714,7 +3720,8 @@ Précisions de T152 :
   de bord, apostrophe de protection, écriture d'une date ou d'une date-heure, virgule décimale, soit ce que la lecture
   tolérante change), et les seules lignes nouvelles ont un `id` absent du fichier et unique, le statut `Nouvelle` et
   `motif_decision`, `date_decision`, `ot_id` vides ; sinon 403. Les lignes actuelles sont réécrites telles qu'elles sont
-  dans le fichier (rien d'une ligne existante ne vient du demandeur), puis les nouvelles. Ce contrôle suit celui de la
+  dans le fichier (rien d'une ligne existante ne vient du demandeur), puis les nouvelles, écrites depuis les valeurs
+  contrôlées (T500 : la première colonne d'une clé, jamais la ligne brute reçue). Ce contrôle suit celui de la
   version : une version périmée rend toujours 409. `POST /api/csv/demandes/ajout` suit les mêmes règles pour les lignes
   ajoutées, `POST /api/csv/journal/ajout` est permis ; tout autre `PUT` ou ajout : 403.
 - **Documents du demandeur** : lecture des photos de demandes (`photo-AAAAMMJJ-HHMMSS-XXXX.<jpg|jpeg|png|gif|webp>`, nom

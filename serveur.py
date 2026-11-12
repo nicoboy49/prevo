@@ -6417,11 +6417,33 @@ def lire_tableau(table, octets):
 
 
 def dictionnaires_csv(octets, table=''):
-    """Lignes d'un CSV en dictionnaires {clé d'en-tête (cle_entete) : valeur} ; [] pour un fichier absent."""
+    """Lignes d'un CSV en dictionnaires {clé d'en-tête (cle_entete) : valeur} ; [] pour un fichier absent. Deux
+    colonnes de même clé : la PREMIÈRE gagne (T500), comme cles.index ici et associerColonnes de js/donnees.js."""
     entete, lignes = lire_tableau(table, octets)
     cles = [cle_entete(nom) for nom in entete]
-    return [{cle: (ligne[position] if position < len(ligne) else '') for position, cle in enumerate(cles)}
-            for ligne in lignes]
+    return [ligne_en_dictionnaire(cles, ligne) for ligne in lignes]
+
+
+def ligne_en_dictionnaire(cles, cellules):
+    """{clé : cellule} d'une ligne ; pour deux colonnes de même clé, la première gagne (T500)."""
+    ligne = {}
+    for position, cle in enumerate(cles):
+        ligne.setdefault(cle, cellules[position] if position < len(cellules) else '')
+    return ligne
+
+
+def refuser_colonne_du_schema_en_double(table, entete):
+    """Écriture d'un rôle restreint (T500) : 400 si une colonne en plus de l'en-tête porte la clé (cle_entete) d'une
+    colonne du schéma (« Prix Unitaire » après prix_unitaire). Jamais pour le responsable ni sans comptes : une base
+    réelle peut déjà porter un tel fichier (le navigateur réécrit alors la seconde en « nom (2) »)."""
+    schema = {cle_entete(colonne) for colonne in COLONNES_PAR_TABLE.get(table, ())}
+    vues = set()
+    for cle in (cle_entete(nom) for nom in entete):
+        if cle in schema and cle in vues:
+            raise ErreurHttp(400, traduisible('csv.entete_inattendu',
+                                              'En-tête de {table}.csv inattendu : il doit commencer par {colonnes}.',
+                                              table=table, colonnes=';'.join(COLONNES_PAR_TABLE.get(table, ()))))
+        vues.add(cle)
 
 
 def forme_comparable(valeur):
@@ -6529,7 +6551,8 @@ def garder_les_demandes_actuelles(octets_recus, octets_actuels):
     seulement. Chaque ligne actuelle doit s'y retrouver inchangée (même id, mêmes valeurs à la forme près,
     forme_comparable) et les seules lignes nouvelles avoir un id absent du fichier, le statut « Nouvelle » et des
     champs de décision vides ; 403 sinon. Les lignes actuelles sont réécrites telles qu'elles sont dans le fichier
-    (rien d'une ligne existante ne vient du demandeur), dans l'ordre des colonnes reçues, puis les nouvelles."""
+    (rien d'une ligne existante ne vient du demandeur), dans l'ordre des colonnes reçues, puis les nouvelles, écrites
+    depuis les valeurs contrôlées (T500 : la première colonne d'une clé, jamais la ligne brute reçue)."""
     entete, lignes = lire_tableau('demandes', octets_recus)
     cles = [cle_entete(nom) for nom in entete]
     actuelles = dictionnaires_csv(octets_actuels, 'demandes')
@@ -6546,7 +6569,7 @@ def garder_les_demandes_actuelles(octets_recus, octets_actuels):
 
     nouvelles = []
     for brute in lignes:
-        recue = {cle: (brute[position] if position < len(brute) else '') for position, cle in enumerate(cles)}
+        recue = ligne_en_dictionnaire(cles, brute)
         identifiant = recue.get('id', '').strip()
         candidates = restantes.get(identifiant, [])
         retrouvee = next((ancienne for ancienne in candidates if inchangee(ancienne, recue)), None)
@@ -6558,7 +6581,7 @@ def garder_les_demandes_actuelles(octets_recus, octets_actuels):
                                                     numero=identifiant))
         else:
             verifier_demande_nouvelle(recue, prises)
-            nouvelles.append(brute)
+            nouvelles.append([recue.get(cle, '') for cle in cles])      # T500 : valeurs contrôlées, pas la ligne brute
     manquantes = [identifiant or traduisible('demandes.sans_numero', 'sans numéro')
                   for identifiant, reste in restantes.items() if reste]
     if manquantes:
@@ -6575,27 +6598,38 @@ def controle_d_ecriture(identite, table):
     if identite is None:
         return None
     role = role_effectif(identite)
+    if role == 'responsable':
+        return None
     colonnes = COLONNES_CACHEES_PAR_ROLE.get(role, {}).get(table)
-    if colonnes:
-        return lambda recus, actuels: remettre_colonnes_cachees(table, recus, actuels, colonnes)
-    if role == 'demandeur' and table == 'demandes':
-        return garder_les_demandes_actuelles
-    return None
+
+    def controler(recus, actuels):          # T500 : d'abord le refus d'une colonne du schéma en double (400)
+        refuser_colonne_du_schema_en_double(table, lire_tableau(table, recus)[0])
+        if colonnes:
+            return remettre_colonnes_cachees(table, recus, actuels, colonnes)
+        if role == 'demandeur' and table == 'demandes':
+            return garder_les_demandes_actuelles(recus, actuels)
+        return recus
+    return controler
 
 
 def controle_d_ajout(identite, table):
     """Contrôle d'un POST /api/csv/<table>/ajout propre au rôle, appelé par ajouter_au_csv : (en-tête, lignes, octets
     actuels) → lignes à ajouter. Technicien : colonnes cachées vides dans les lignes ajoutées ; demandeur, demandes :
-    lignes nouvelles seulement (verifier_demande_nouvelle) ; None sans contrôle."""
+    lignes nouvelles seulement (verifier_demande_nouvelle) ; None sans contrôle. T500 : pour tout rôle autre que le
+    responsable, 400 d'abord si une colonne en plus porte la clé d'une colonne du schéma."""
     if identite is None:
         return None
     role = role_effectif(identite)
-    colonnes = COLONNES_CACHEES_PAR_ROLE.get(role, {}).get(table)
-    if not colonnes and not (role == 'demandeur' and table == 'demandes'):
+    if role == 'responsable':
         return None
+    colonnes = COLONNES_CACHEES_PAR_ROLE.get(role, {}).get(table)
 
     def controler(entete, lignes, actuels):
-        cles = [cle_entete(nom) for nom in next(csv.reader(io.StringIO(entete.decode('utf-8')), delimiter=';'), [])]
+        noms = next(csv.reader(io.StringIO(entete.decode('utf-8')), delimiter=';'), [])
+        refuser_colonne_du_schema_en_double(table, noms)
+        if not colonnes and not (role == 'demandeur' and table == 'demandes'):
+            return lignes
+        cles = [cle_entete(nom) for nom in noms]
         rangees = [rangee for rangee in csv.reader(io.StringIO(lignes.decode('utf-8'), newline=''), delimiter=';')
                    if any(cellule.strip() for cellule in rangee)]
         if colonnes:
@@ -6609,8 +6643,7 @@ def controle_d_ajout(identite, table):
                            for rangee in rangees).encode('utf-8')
         prises = {ligne.get('id', '').strip() for ligne in dictionnaires_csv(actuels, table)}
         for rangee in rangees:
-            verifier_demande_nouvelle({cle: (rangee[position] if position < len(rangee) else '')
-                                       for position, cle in enumerate(cles)}, prises)
+            verifier_demande_nouvelle(ligne_en_dictionnaire(cles, rangee), prises)
         return lignes
     return controler
 
