@@ -7,6 +7,39 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [2.1.2] - 2026-11-12
+
+**Correctif de sécurité : plusieurs failles du mode serveur avec comptes sont fermées.** Mise à jour recommandée pour
+les installations en mode serveur avec comptes (connexion par identifiant, accès depuis le réseau ou le téléphone) ;
+en mode dossier, en mode serveur sans comptes et dans la démo, rien ne change. Rien d'autre ne change (mêmes écrans,
+même format de données).
+
+**Ce qui pouvait arriver.** Aucun écran de Prévo ne le permettait : il fallait envoyer au serveur des fichiers
+préparés à la main, en étant connecté avec un compte ou depuis un téléphone enrôlé. De cette façon, un compte
+technicien pouvait changer le prix d'un article ou d'un achat, alors que Prévo lui cache les prix. Un compte demandeur,
+ou un téléphone enrôlé, pouvait créer une demande déjà marquée « Acceptée » et reliée à un ordre de travail, sans
+décision du responsable. Un compte technicien pouvait vider ou modifier le journal, et un compte demandeur ou un
+téléphone enrôlé pouvait y ajouter une ligne signée « responsable ». Enfin, un compte technicien pouvait retrouver, par
+essais successifs, les taux horaires et les prix que Prévo lui cache. Concerné : la 2.1.1 ; la 2.0.0 et la 2.1.0
+portent le même code.
+
+### Sécurité (mode serveur avec comptes)
+
+- **Prix et demandes** : un technicien ne peut plus changer un prix, et un demandeur ne peut plus créer une demande
+  déjà acceptée, en envoyant au serveur un fichier dont une colonne est en double.
+- **Journal** : un technicien ne peut plus vider ni modifier le journal ; le serveur écrit lui-même, sur chaque ligne
+  ajoutée, le profil de la personne connectée.
+- **Valeurs cachées** : les taux horaires et les prix cachés au technicien ne se retrouvent plus à partir de la
+  version d'un fichier.
+- **Formules** : le serveur refuse une cellule qui commence par un tiret suivi d'une formule (`-1+…`), comme le
+  navigateur le fait déjà ; un nombre négatif reste accepté.
+- **Rien d'autre ne change** : le responsable écrit ses fichiers et son journal comme avant, et sans comptes tout
+  reste comme avant.
+
+**Rien à faire.** Mettez la 2.1.2 dans le même dossier, comme pour toute mise à jour : vos données restent, aucun
+réglage n'est à changer. Le serveur crée de lui-même un petit fichier `.cle-versions` dans `donnees/acces/` :
+laissez-le en place.
+
 ## [2.1.1] - 2026-11-11
 
 **Correctif de sécurité : le rapport mensuel figé n'est plus servi au technicien (mode avec comptes).** Mise à jour
@@ -359,7 +392,8 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.1.1...HEAD
+[Non publié]: https://github.com/prevo-pro/prevo/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/prevo-pro/prevo/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/nicoboy49/prevo/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.2...v2.0.0
