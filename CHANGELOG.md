@@ -7,6 +7,41 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+Corrections après une relecture critique de la 2.2.0 bêta 1 (12/11/2026).
+
+### Sécurité (mode serveur avec comptes)
+
+- Un technicien ne peut plus changer un prix ni le coût d'arrêt d'une machine, et un demandeur ne peut plus créer une
+  demande déjà acceptée, en envoyant au serveur un fichier dont une colonne est en double.
+- Les justificatifs d'habilitation et les documents de contrats restent réservés au responsable quand ils ne sont plus
+  cités : document remplacé, ligne supprimée, import ZIP. Limite : un document au nom libre n'est réservé que tant
+  qu'une ligne le cite.
+- Un technicien ne peut plus vider ni modifier le journal ; le serveur écrit lui-même le profil de chaque ligne ajoutée.
+- Les valeurs des colonnes cachées (taux horaires, prix, montants) ne se retrouvent plus à partir de la version d'un
+  fichier.
+- Le serveur refuse une cellule qui commence par un tiret suivi d'une formule (`-1+…`), comme le navigateur ; un nombre
+  négatif reste accepté.
+
+### Corrigé
+
+- **Restauration d'une sauvegarde d'avant la 2.2** (dont `avant-format-v4`) : les réserves, garanties et contrats créés
+  depuis sont vidés, au lieu de rester et de se rattacher à un autre contrôle ou équipement. La copie de sécurité
+  `avant-restauration` les garde, et le message de fin nomme les tables vidées.
+- **« Annuler cet import »** n'échoue plus quand l'import avait créé une table qui n'existait pas.
+- **Contrat à reconduction tacite** : « Noter la résiliation » est refusé tant que la date de fin enregistrée est
+  passée ; il faut d'abord « Reconduire ». Le contrat ne passe plus à « terminé » un an trop tôt.
+- **Dérogation d'habilitation** : un texte saisi dans un motif ne vaut plus dérogation ; si la ligne du journal ne peut
+  pas être écrite, le responsable en est prévenu et l'écran montre l'OT réellement écrit.
+- **Import ZIP coupé en route** (onglet fermé, panne) : à la réouverture, un bandeau dit que la base est incomplète et
+  nomme la sauvegarde à restaurer.
+- **Import ZIP d'une autre base** : la confirmation liste les comptes dont la fiche de technicien change de personne.
+- **Import depuis un tableur** : « 1.200 » ou « 1,200 » porte une note à l'aperçu (« lu comme 1,2, et non 1 200 ») ;
+  une fiche retirée est dite retirée ; une image que le serveur refuse est sautée et nommée, sans arrêter l'import.
+- **Passage au format 4 sur le serveur** : une base dont le fichier des contrôles a deux colonnes ajoutées à la main
+  sous le même nom reprend bien ses réserves ; une date de contrôle illisible ne bloque plus les écritures suivantes.
+- **Garanties** : le filtre « se terminent bientôt » compte les mêmes garanties que l'accueil.
+- **« Tester une sauvegarde »** signale une sauvegarde dont un fichier est abîmé.
+
 ## [2.2.0-beta.1] - 2026-11-12
 
 **Bêta de la 2.2, « le dirigeant dort tranquille » : réserves des contrôles, habilitations, garanties et contrats de
