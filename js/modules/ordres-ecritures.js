@@ -80,13 +80,16 @@ Object.assign(Ordres, (() => {
    * n'a pas pu être écrite, lève Donnees.ErreurStockage au lieu d'annoncer un succès. L'OT reste écrit (pas de
    * retour arrière) : sans ligne au journal, le contrôle suivant redemandera la dérogation. otId : celui de
    * l'OT, sinon ce que rend la mutation (création). Sans dérogation, un journal non écrit ne fait rien échouer.
+   * T510 : cette erreur porte otEcrit (l'identifiant de l'OT écrit) et rendu (ce que l'écriture aurait rendu), pour
+   * que l'écran suive l'état écrit (Ordres.avecDerogation).
    */
   async function ecrireAvecTrace(mutation, journal, otId) {
     let journalEcrit = true;
     journal.siJournalNonEcrit = () => { journalEcrit = false; };
     const rendu = await Donnees.modifier('ordres_travail', mutation, journal);
     if (!journalEcrit && journal.derogation) {
-      throw new Donnees.ErreurStockage(I18n.t('ordres.derogation.non_tracee', { otId: otId || rendu }));
+      const erreur = new Donnees.ErreurStockage(I18n.t('ordres.derogation.non_tracee', { otId: otId || rendu }));
+      throw Object.assign(erreur, { otEcrit: otId || rendu, rendu });
     }
     return rendu;
   }

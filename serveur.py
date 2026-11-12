@@ -6572,7 +6572,7 @@ ROLES_PAR_ROUTE = {
 }
 
 # Ce qu'un rôle ne reçoit pas d'une table, retiré des octets renvoyés par GET /api/csv/<table> (la version X-Version
-# reste celle du fichier entier). D126 : ni taux horaire ni prix pour le technicien, ni le montant annuel d'un contrat
+# servie à ce rôle est voilée, T506 : voile_des_versions, jamais l'empreinte du fichier entier). D126 : ni taux horaire ni prix pour le technicien, ni le montant annuel d'un contrat
 # de prestataire (T453, D126 prolongé, L4-L6 Q6), ni le coût d'une heure d'arrêt d'un équipement (T473, même décision ;
 # caché aussi au demandeur et à l'appareil, qui lisent equipements : aucun coût pour eux) ; à chacun de ses PUT, le
 # serveur remet ces colonnes depuis le fichier actuel (remettre_colonnes_cachees) : il ne peut ni les lire ni les

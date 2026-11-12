@@ -69,7 +69,11 @@ Object.assign(Planning, (() => {
       ligne.technicien_id = technicienId;
       ligne.date_prevue = date;
       return ligne.statut;
-    }, journal, otId);
+    }, journal, otId).catch((erreur) => {
+      // T510 : dérogation non tracée, l'OT est planifié quand même : le rendu de l'erreur prend la forme de celui-ci.
+      if (erreur.otEcrit) erreur.rendu = { statut: erreur.rendu, avertissements: [erreur.message] };
+      throw erreur;
+    });
     return { statut, avertissements: [] };
   }
 

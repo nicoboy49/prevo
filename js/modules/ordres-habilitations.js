@@ -147,12 +147,21 @@ Object.assign(Ordres, (() => {
     return montrer;
   }
 
+  // T510 : dernière dérogation non tracée (l'erreur d'Ordres.ecrireAvecTrace, otEcrit et message), posée par
+  // avecDerogation et dite une fois par la fiche de cet OT ; remise à zéro à chaque nouvelle écriture avec dérogation.
+  let nonTracee = null;
+
   /**
    * Fiche de l'OT : l'affectation actuelle manque d'une habilitation exigée et une dérogation du responsable est
    * notée au journal → « Affecté sans habilitation BR valide : dérogation du responsable le 08/11/2026 à 10:42 »
    * (et son motif) ; sinon null. Vu de tous les profils.
    */
   function bandeauDerogation(ot) {
+    if (nonTracee && nonTracee.otEcrit === ot.id) {            // T510 : dit une fois, sur la fiche de l'OT écrit
+      const message = nonTracee.message;
+      nonTracee = null;
+      return UI.bandeau('important', message);
+    }
     const controle = controleHabilitation(ot, ot.technicien_id, ot.date_prevue);
     if (!controle.bloque) return null;
     const entree = derogationAccordee(ot.id, controle.technicienId, controle.date, controle.manquantes);
@@ -233,15 +242,24 @@ Object.assign(Ordres, (() => {
    * l'écriture est refaite avec { passerOutreHabilitation: true, motifDerogation } (la dérogation est notée au journal
    * par l'écriture elle-même). contexte : { equipementId } pour un OT pas encore créé. Rend le résultat de l'écriture.
    * Hors responsable, fenêtre annulée ou autre erreur : l'erreur est relancée, rien n'est écrit (l'appelant la dit).
+   * Dérogation non tracée (T510 ; erreur.otEcrit d'Ordres.ecrireAvecTrace) : l'OT EST écrit. L'erreur est dite
+   * (toast, console), gardée pour la fiche de cet OT (bandeauDerogation), et l'écriture rend erreur.rendu : l'écran
+   * suit l'état écrit comme après un succès (formulaire fermé, fiche ou planning réaffichés), sans doublon possible.
    */
   async function avecDerogation(ecrire, contexte) {
+    nonTracee = null;
     try {
       return await ecrire(undefined);
     } catch (erreur) {
       if (!seulRefusHabilitation(erreur) || !estResponsable()) throw erreur;
       const choix = await demanderDerogation(Object.assign({}, erreur.habilitation, contexte || {}));
       if (!choix) throw erreur;
-      return ecrire({ passerOutreHabilitation: true, motifDerogation: choix.motif });
+      return ecrire({ passerOutreHabilitation: true, motifDerogation: choix.motif }).catch((nonEcrite) => {
+        if (!nonEcrite || !nonEcrite.otEcrit) throw nonEcrite;
+        nonTracee = nonEcrite;
+        App.signalerErreur(nonEcrite, 'dérogation non tracée');
+        return nonEcrite.rendu;
+      });
     }
   }
 

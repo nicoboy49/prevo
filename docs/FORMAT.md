@@ -105,7 +105,8 @@ La source de vérité est l'attribut `depuisVersion` dans [js/schema.js](../js/s
   crée `reserves_controle` et y reprend ce texte, **contrôle par contrôle** : un contrôle qui a des observations et
   **aucune réserve** reçoit une réserve par ligne non vide (`date_controle` = `derniere_date`, `levee` = 1 si les
   observations étaient levées, avec le commentaire fixe « levée avant la 2.2, date inconnue » et une date de levée
-  vide ; gravité, échéance et OT vides). Les identifiants `RES-00001`… continuent après le plus grand déjà présent.
+  vide ; gravité, échéance et OT vides). Une `derniere_date` illisible qui commence par `=`, `+`, `-` ou `@` est
+  reprise avec l'apostrophe de protection (T509 ; ARCHITECTURE §3.2). Les identifiants `RES-00001`… continuent après le plus grand déjà présent.
   `observations` et `observations_levees` ne sont pas modifiées (une 2.1 en lecture seule les montre toujours).
   La règle est la même dans le navigateur et dans le serveur, à l'octet près. Elle est **idempotente par contrôle**
   (pas « table vide ») : rejouée, ou après une interruption, elle ne reprend que les contrôles qui n'ont pas encore

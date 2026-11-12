@@ -847,6 +847,11 @@ RG8 ne prévient plus : elle **bloque** (D186, D191, ci-dessous).
     `siJournalNonEcrit` : fonction appelée dans ce cas, l'action n'échoue pas pour autant), l'écriture lève
     `Donnees.ErreurStockage` « … la dérogation n'a pas pu être notée au journal : refaites l'affectation » au lieu du
     succès. L'OT reste écrit (pas de retour arrière) ; faute de ligne, le contrôle suivant redemande la dérogation.
+    À l'écran (T510) : l'erreur porte `otEcrit` (l'OT écrit) et `rendu` (ce que l'écriture aurait rendu) ;
+    `Ordres.avecDerogation` la dit (toast), rend `rendu` et l'écran suit l'état écrit comme après un succès
+    (formulaire de création fermé, donc pas de doublon ; fiche ou planning réaffichés). Le message reste dans un
+    bandeau : sur la fiche de cet OT (une fois), ou dans celui du planning (`Planning.planifier` le met dans
+    `avertissements`).
   - *Écrans* (`ordres-habilitations.js`) : bandeau du refus en direct au nouvel OT et à la préparation, information
     « dérogation du responsable le … » sur la fiche, fenêtre « Habilitation exigée non valide » (case + motif),
     `Ordres.avecDerogation(ecrire, contexte)` (essaie sans option ; sur un refus qui ne porte que sur RG8 et pour le
@@ -4682,7 +4687,9 @@ responsable sa fiche, ou d'en créer une ; Prévo ne devine jamais. Annuler : la
 ### 22.12 Corrections de l'audit (D134, CS134)
 
 E2 `verifier_contenu_csv(table, octets)` avant `enregistrer_csv` et `ajouter_au_csv` (`COLONNES_PAR_TABLE` recopié
-de `js/schema.js`, test de cohérence) ; M1/M3 (précisé à T158) : le fournisseur est réglé sur le serveur seulement —
+de `js/schema.js`, test de cohérence) : une cellule sans apostrophe qui commence comme une formule est refusée
+(400) ; depuis T505, seul un nombre négatif pur (`-12`, `-12,5`, `-1e-7`) reste accepté sans apostrophe, tout autre
+tiret en tête est contrôlé comme une formule, comme `MOTIF_DEBUT_DANGEREUX` du navigateur (§3.2) ; M1/M3 (précisé à T158) : le fournisseur est réglé sur le serveur seulement —
 clés `ia_fournisseur` (`ollama` | `openai`, défaut `ollama`), `ia_url`, `ia_en_ligne` de la configuration, options
 `--ia-url`, `--ia-fournisseur`, `--ia-en-ligne` (l'informaticien, les tests), clé par `ia_cle` ou la variable
 d'environnement `PREVO_IA_CLE`, jamais en ligne de commande (visible dans la liste des processus) ; `GET /api/ia/reglages`
