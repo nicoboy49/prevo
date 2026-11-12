@@ -212,8 +212,9 @@ class TestTechnicienEtDemandeur(CasServeur):
         for montant in MONTANTS.values():
             self.assertNotIn(montant.encode("ascii"), lue.octets)
         self.assertEqual((entete, lignes), sans_colonne(disque, "montant_annuel"))   # le reste intact, objet compris
-        # X-Version du fichier entier (celle du responsable), pour qu'une écriture reste possible ailleurs.
-        self.assertEqual(lue.entetes["x-version"], self.lire("responsable", "contrats_prestataires").entetes["x-version"])
+        # T506 : X-Version voilée, jamais l'empreinte du fichier entier (celle que reçoit le responsable).
+        self.assertNotEqual(lue.entetes["x-version"],
+                            self.lire("responsable", "contrats_prestataires").entetes["x-version"])
 
     def test_technicien_refuse_a_l_ecriture_des_trois_tables_fichiers_inchanges(self):
         for table in TABLES:

@@ -8,7 +8,7 @@ Ce qui est vérifié :
                    (D125, T153) par une identité simulée dans un serveur du processus ; les 24 tables pour csv/<table>,
                    une photo de demande, un document d'équipement et un autre document pour documents/<nom> ;
     technicien     ni taux_horaire (techniciens) ni prix_unitaire (articles, achats) dans les octets reçus, en-tête
-                   compris, X-Version du fichier entier ; à l'écriture, prix remis depuis le fichier (gardés, prix
+                   compris, X-Version voilée (T506 : jamais l'empreinte du fichier) ; à l'écriture, prix remis depuis le fichier (gardés, prix
                    forgé ignoré, ligne nouvelle sans prix) et colonne stock bien écrite ; ajout : colonne vidée ;
                    equipements reçu avec cout_arret_h vidé, nom gardé dans l'en-tête (T473) ;
     demandeur      liste fermée (techniciens.csv jamais reçu), /api/versions réduit à ses tables, wiki_pages sans pages
@@ -459,7 +459,9 @@ class JoueurDeCases:
         if motif == "csv/<table>" and methode == "PUT":
             octets = (dossier / (segment + ".csv")).read_bytes()
             corps = octets if permise else BOM + premiere_ligne(octets) + b"\r\n"
-            entetes = {"X-Version-Attendue": version_de(octets)}
+            # T506 : la version que ce rôle lit (voilée s'il n'a pas toutes les colonnes) ; table non lue : refus.
+            listees = self.client.requete("GET", "/api/versions", cookie=cookie).json()["tables"]
+            entetes = {"X-Version-Attendue": (listees.get(segment) or {}).get("version") or version_de(octets)}
         elif motif == "csv/<table>/ajout":
             corps = premiere_ligne((dossier / (segment + ".csv")).read_bytes()) + b"\r\n"
         elif motif == "documents/<nom>":
@@ -621,7 +623,7 @@ class TestTechnicien(unittest.TestCase):
                 entete, lignes = lire_tableau(disque)
                 position = entete.index(colonne)
                 recu = self.lire(table)
-                self.assertEqual(recu.entetes["x-version"], version_de(disque))
+                self.assertNotEqual(recu.entetes["x-version"], version_de(disque))      # T506 : version voilée
                 self.assertTrue(recu.octets.startswith(BOM))
                 entete_recu, lignes_recues = lire_tableau(recu.octets)
                 self.assertNotIn(colonne, entete_recu)
@@ -638,7 +640,7 @@ class TestTechnicien(unittest.TestCase):
         position = entete.index("cout_arret_h")
         self.assertTrue(any(ligne[position] for ligne in lignes))               # la démo chiffre des équipements
         recu = self.lire("equipements")
-        self.assertEqual(recu.entetes["x-version"], version_de(disque))
+        self.assertNotEqual(recu.entetes["x-version"], version_de(disque))              # T506 : version voilée
         self.assertEqual(lire_tableau(recu.octets), (entete, [ligne[:position] + [""] + ligne[position + 1:]
                                                               for ligne in lignes]))
 
@@ -664,7 +666,7 @@ class TestTechnicien(unittest.TestCase):
                                       entetes={"X-Version-Attendue": recu.entetes["x-version"]})
         self.assertEqual(reponse.statut, 200, reponse.octets)
         apres = chemin.read_bytes()
-        self.assertEqual(reponse.json()["version"], version_de(apres))
+        self.assertNotEqual(reponse.json()["version"], version_de(apres))        # T506 : version voilée
         entete_apres, lignes_apres = lire_tableau(apres)
         self.assertEqual(entete_apres, entete)
         par_id = {ligne[0]: ligne for ligne in lignes_apres}
@@ -673,7 +675,7 @@ class TestTechnicien(unittest.TestCase):
         self.assertEqual(par_id[cible[0]][p_stock], nouveau_stock)              # colonne stock bien écrite
         self.assertEqual(par_id["ART-9999"][p_prix], "")                        # ligne nouvelle : prix vide
         relu = self.lire("articles")
-        self.assertEqual(relu.entetes["x-version"], version_de(apres))           # la surveillance reste d'accord
+        self.assertEqual(relu.entetes["x-version"], reponse.json()["version"])   # la surveillance reste d'accord
         self.assertNotIn("prix_unitaire", lire_tableau(relu.octets)[0])
         # achats : un prix forgé n'est pas écrit non plus
         chemin_achats = self.serveur.dossier / "achats.csv"
@@ -744,8 +746,9 @@ class TestDemandeur(unittest.TestCase):
         self.assertNotIn(b"TEC-0001", refus.octets)
         versions = self.requete("GET", "/api/versions").json()["tables"]
         self.assertEqual(set(versions), TABLES_DU_DEMANDEUR)
-        for table, valeur in versions.items():
-            self.assertEqual(valeur["version"], version_de((self.serveur.dossier / (table + ".csv")).read_bytes()))
+        for table, valeur in versions.items():           # T506 : equipements (cout_arret_h caché), version voilée
+            (self.assertNotEqual if table == "equipements" else self.assertEqual)(
+                valeur["version"], version_de((self.serveur.dossier / (table + ".csv")).read_bytes()), table)
         technicien = self.client.requete("GET", "/api/versions", cookie=self.cookies["technicien"]).json()["tables"]
         self.assertEqual(set(technicien), TOUTES_LES_TABLES)
 

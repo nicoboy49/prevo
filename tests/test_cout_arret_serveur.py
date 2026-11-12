@@ -10,7 +10,7 @@ ne générerait plus les OT préventifs échus à l'ouverture : Formats.formatDu
 Ce qui est vérifié, en mode serveur avec comptes (vraies sessions sur une copie du jeu f4-v2.2.0, coûts changés) :
     lecture        technicien et demandeur reçoivent equipements avec l'en-tête du fichier (format 4 complet) et
                    cout_arret_h vide sur chaque ligne (0 compris), aucun coût dans les octets, autres cellules
-                   intactes, X-Version du fichier entier ; l'appareil enrôlé aussi (identité simulée,
+                   intactes, X-Version voilée (T506) ; l'appareil enrôlé aussi (identité simulée,
                    filtrer_csv_pour) ; le responsable reçoit le fichier tel quel ;
     PUT technicien comme le navigateur (ce qu'il a lu, une ligne modifiée, coût forgé, ligne nouvelle avec coût,
                    lignes dans un autre ordre) : écrit, chaque coût du fichier gardé ligne par ligne, coût forgé
@@ -226,8 +226,9 @@ class TestLecture(CasServeur):
                 self.assertTrue(lue.octets.startswith(BOM))
                 self.assertSansCout(lue.octets)
                 self.assertEqual(lire_tableau(lue.octets), sans_couts(disque))      # le reste intact
-                self.assertEqual(lue.entetes["x-version"], self.lire("responsable").entetes["x-version"])
-                self.assertEqual(lue.entetes["x-version"], serveur.empreinte(disque))
+                # T506 : version voilée (jamais l'empreinte du fichier, que le responsable reçoit toujours).
+                self.assertEqual(self.lire("responsable").entetes["x-version"], serveur.empreinte(disque))
+                self.assertNotEqual(lue.entetes["x-version"], serveur.empreinte(disque))
 
     def test_en_tete_recue_au_format_4_complet(self):
         """Le navigateur reconnaît le format d'un fichier à son en-tête : toutes les colonnes du schéma y restent."""
@@ -277,13 +278,13 @@ class TestEcrituresDuTechnicien(CasServeur):
         reponse = self.ecrire("technicien", ecrire_tableau(entete, envoyees), lue.entetes["x-version"])
         self.assertEqual(reponse.statut, 200, reponse.octets[:300])
         apres = self.fichier()
-        self.assertEqual(reponse.json()["version"], serveur.empreinte(apres))
+        self.assertNotEqual(reponse.json()["version"], serveur.empreinte(apres))         # T506 : version voilée
         self.assertEqual(lire_tableau(apres)[0], entete)
         self.assertEqual(couts_par_id(apres), dict(avant, **{"EQ-0901": ""}))  # gardés, forgé compris ; nouvelle : vide
         ecrites = {ligne[0]: ligne for ligne in lire_tableau(apres)[1]}
         self.assertEqual(ecrites["EQ-0001"][p_statut], statut_voulu)            # l'autre colonne est bien écrite
         relue = self.lire("technicien")
-        self.assertEqual(relue.entetes["x-version"], serveur.empreinte(apres))   # la surveillance reste d'accord
+        self.assertEqual(relue.entetes["x-version"], reponse.json()["version"])  # la surveillance reste d'accord
         self.assertSansCout(relue.octets)
 
     def test_reecrire_tel_quel_ce_qu_il_a_lu_n_efface_rien(self):

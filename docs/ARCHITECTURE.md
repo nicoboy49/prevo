@@ -3961,7 +3961,17 @@ Précisions de T152 :
   y recopie le prix de l'article ; `contrats_prestataires` sans `montant_annuel` (T453, D126 prolongé, question 6 de
   la conception L4-L6). Les colonnes sont retirées des octets renvoyés (CSV réécrit au format §3.1, en-tête
   compris, nom de colonne reconnu comme à la lecture tolérante) ; `X-Version` est celle du fichier entier, pour que les
-  écritures restent possibles. `equipements.cout_arret_h` (T473, même décision), caché au technicien, au demandeur et à
+  écritures restent possibles, mais **voilée** pour un rôle qui ne reçoit pas toutes les colonnes de la table (T506,
+  `voile_des_versions`) : l'empreinte nue lui laisserait retrouver une valeur cachée par essais (fichier recomposé avec
+  un prix candidat, empreinte comparée). Il reçoit à la place, de même forme (16 caractères hexadécimaux), un
+  HMAC-SHA-256 de `<table>:<empreinte>` avec une clé que le serveur seul connaît (`donnees/acces/.cle-versions`,
+  256 bits en texte hexadécimal, tirés au premier besoin, gardés entre deux démarrages, jamais copiés dans une sauvegarde) : même valeur
+  dans `GET /api/csv/<table>`, `/api/versions`, la réponse d'un `PUT`, d'un ajout et d'un 409, et c'est à elle que le
+  serveur compare `X-Version-Attendue` (l'empreinte nue envoyée par ce rôle : 409). Le contrôle des écritures
+  concurrentes ne change pas, entre deux rôles non plus : toute écriture change l'empreinte, donc la version de chacun.
+  Responsable, serveur sans comptes et tables sans colonne cachée : l'empreinte, comme avant. Si la clé est perdue
+  (fichier supprimé), la première écriture d'un navigateur déjà ouvert sur ces tables est un conflit ordinaire.
+  `equipements.cout_arret_h` (T473, même décision), caché au technicien, au demandeur et à
   l'appareil : colonne du format 4 dans une table du format 1, elle garde son nom dans l'en-tête et ses valeurs sont
   vidées (retirée, le navigateur lirait `equipements` au format 3 et ne générerait plus les OT préventifs échus à
   l'ouverture) ; même remise au `PUT` et même vidage à l'ajout que ci-dessous.
