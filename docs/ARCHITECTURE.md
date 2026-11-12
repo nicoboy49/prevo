@@ -3999,8 +3999,16 @@ Précisions de T152 :
   - *Documents réservés (D196)* : un document cité par `habilitations.justificatif` ou `contrats_prestataires.document`
     (relus à chaque requête, apostrophe de protection retirée, casse ignorée car le dossier ne la distingue pas sous
     Windows ni macOS) n'est servi qu'au responsable : `GET /api/documents/<nom>` répond 403 `acces.document_ferme` au
-    technicien, au demandeur et à l'appareil, même si le document est aussi cité ailleurs. Les autres documents ne
-    changent pas (documents de garantie lisibles du technicien) ; l'envoi (`PUT`) non plus.
+    technicien, au demandeur et à l'appareil, même si le document est aussi cité ailleurs. Depuis T501 (relecture du
+    12/11/2026), un document est réservé aussi par son **nom**, cité ou non (`MOTIF_DOCUMENT_RESERVE`, casse ignorée) :
+    `habilitation-…` (`Equipe.ecrireJustificatif`) et `contrat-CTP-…` (`Garanties`, contrats), après l'horodatage du
+    serveur. Il reste donc réservé quand il est remplacé, quand sa ligne est supprimée, après un import ZIP (qui
+    réécrit chaque document sous un nom neuf et laisse l'ancien) et entre son envoi et l'écriture de la ligne ;
+    `tests/test_documents_reserves_nom.py` relit ces noms dans le JS et échoue si le nommage change sans le motif.
+    Limites : un document réservé au nom libre (données d'avant, document cité à la main) ne l'est que tant qu'il est
+    cité ; un autre document dont le nom commence ainsi (repère d'équipement « contrat-CTP… ») est réservé lui aussi.
+    Les autres documents ne changent pas (documents de garantie lisibles du technicien) ; l'envoi (`PUT`) non plus : le
+    technicien peut envoyer un document sous un tel nom (il ne le relira pas) mais n'en écrase aucun (nom neuf imposé).
   - *Limite connue (RG8)* : le blocage RG8 reste tenu par l'application (§10) ; le serveur n'en a aucune copie. Un
     compte technicien qui appelle l'API directement peut encore écrire `ordres_travail` et s'affecter un OT sans
     l'habilitation requise ; à l'écran, il n'en a aucun moyen (CS178). Même limite que RG3 et RG4.

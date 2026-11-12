@@ -6464,6 +6464,16 @@ TABLES_DU_TECHNICIEN_EN_ECRITURE = tuple(table for table in TABLES if table not 
 # le préfixe d'horodatage du serveur (audit F4) ; le nom demandé par l'envoi n'en a pas : préfixe facultatif.
 MOTIF_PHOTO_DE_DEMANDE = re.compile(PREFIXE_NOM_DOCUMENT + r'photo-[0-9]{8}-[0-9]{6}-[A-Z0-9]{4}\.(jpg|jpeg|png|gif|webp)',
                                     re.ASCII)
+# Documents réservés au responsable par leur NOM (T501, D196 ; relecture R2, R3, R4), en plus de ceux que citent les
+# colonnes de DOCUMENTS_RESERVES_AU_RESPONSABLE : un justificatif ou un document de contrat remplacé, d'une ligne
+# supprimée, réécrit sous un nom neuf par un import ZIP, ou envoyé mais pas encore cité reste réservé. Noms donnés par
+# le navigateur : « habilitation-<technicien>-… » (Equipe.ecrireJustificatif, js/modules/equipe-ecritures.js) et
+# « contrat-CTP-… » (CONTRATS de js/modules/garanties-ecritures.js), après l'horodatage du serveur (aucun, un, ou
+# deux si un import a gardé l'ancien) ; casse ignorée, comme documents_reserves. tests/test_documents_reserves_nom.py
+# relit ces noms dans le JS. Limite : un document réservé au nom libre (données d'avant) ne l'est que tant qu'il est
+# cité. Les documents de garantie (« garantie-GAR-… ») ne sont pas réservés (D196 ne les cite pas).
+MOTIF_DOCUMENT_RESERVE = re.compile(r'([0-9]{8}-[0-9]{6}-)*(habilitation-|contrat-CTP-)[A-Za-z0-9._-]*',
+                                    re.ASCII | re.IGNORECASE)
 PHOTOS_DE_DEMANDES = 'photos de demandes'
 DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
 # Documents du technicien : tous, sauf ceux que documents_reserves réserve au responsable (D196, T478) ; marqueur.
@@ -6610,12 +6620,14 @@ def documents_reserves(config):
 
 def segment_permis(config, regle, segment):
     """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin. Un document
-    réservé au responsable (documents_reserves : D196, T478) n'est permis par aucune règle de lecture d'un autre rôle."""
+    réservé au responsable (documents_reserves : D196, T478 ; ou son nom, MOTIF_DOCUMENT_RESERVE : T501) n'est permis par
+    aucune règle de lecture d'un autre rôle."""
     if segment is None:
         return False
     if isinstance(regle, tuple):
         return segment in regle
-    if regle in (DOCUMENTS_DU_TECHNICIEN, DOCUMENTS_DU_DEMANDEUR) and segment.lower() in documents_reserves(config):
+    if regle in (DOCUMENTS_DU_TECHNICIEN, DOCUMENTS_DU_DEMANDEUR) and (
+            MOTIF_DOCUMENT_RESERVE.fullmatch(segment) or segment.lower() in documents_reserves(config)):
         return False
     if regle == DOCUMENTS_DU_TECHNICIEN:
         return True
