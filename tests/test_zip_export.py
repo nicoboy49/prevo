@@ -32,6 +32,8 @@ Règle numéro un : jamais de données réelles (copies dans des dossiers tempor
 Lancer depuis la racine du projet :
     py -X utf8 -m unittest discover -s tests -p "test_zip_export.py" -v
 """
+import io
+import csv
 import base64
 import hashlib
 import json
@@ -171,10 +173,9 @@ def remplacer_une_fois(chemin, avant, apres):
 
 
 def lire_csv_zip(octets):
-    """Lignes ({colonne: valeur}) d'un CSV de Prévo (BOM, « ; », CRLF), sans guillemets dans ces tests."""
-    lignes = octets.decode("utf-8-sig").split("\r\n")
-    entete = lignes[0].split(";")
-    return [dict(zip(entete, ligne.split(";"))) for ligne in lignes[1:] if ligne]
+    """Lignes ({colonne: valeur}) d'un CSV de Prévo (BOM, « ; », CRLF), champs entre guillemets compris (une condition
+    de garantie de la démo contient « ; » depuis le L4)."""
+    return list(csv.DictReader(io.StringIO(octets.decode("utf-8-sig"), newline=""), delimiter=";"))
 
 
 def en_base64(octets):

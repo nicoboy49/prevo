@@ -120,10 +120,13 @@ class CasRecette(CasNavigateur):
         return condition()
 
     def cellules_equipement(self, page, equipement_id):
-        """Textes des cellules de la ligne d'un équipement dans le tableau de l'écran Indicateurs,
-        par libellé de colonne."""
+        """Textes des cellules de la ligne d'un équipement dans le tableau par équipement de l'écran Indicateurs
+        (celui qui a la colonne « MTBF (h) » : depuis le L5, les Pareto et « Non chiffré » ont aussi des liens vers les
+        équipements), par libellé de colonne."""
         return page.evaluate("""(id) => {
-            const lien = document.querySelector('#contenu table a[href="#/equipement/' + id + '"]');
+            const liens = Array.from(document.querySelectorAll('#contenu table a[href="#/equipement/' + id + '"]'));
+            const lien = liens.find((a) => Array.from(a.closest('table').querySelectorAll('thead th'))
+              .some((th) => th.textContent.trim() === 'MTBF (h)'));
             if (!lien) return null;
             const table = lien.closest('table');
             const entetes = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent.trim());
@@ -168,6 +171,11 @@ class TestRecetteServeur(CasRecette):
         technicien = self.scenarios["technicien_br_echue"]
         page.drag_and_drop(".pl-a-planifier .pl-ot[data-ot='%s']" % ot_id,
                            '.pl-case[data-technicien="%s"][data-date="%s"]' % (technicien, lundi))
+        # Depuis T439, le responsable voit d'abord la fenêtre « Habilitation exigée non valide » (passer outre) : il
+        # l'annule, le refus est alors expliqué dans le bandeau du planning (test_rg8_planning pour la dérogation).
+        page.wait_for_selector("dialog.ot-fenetre-derogation")
+        page.click("dialog.ot-fenetre-derogation .fenetre-actions .btn-fantome")
+        page.wait_for_selector("dialog.ot-fenetre-derogation", state="detached")
         message = page.wait_for_selector("#pl-message .alerte.important").inner_text()
         self.assertIn("Affectation refusée", message)
         self.assertIn("Seul le responsable peut passer outre.", message)
