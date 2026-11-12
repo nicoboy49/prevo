@@ -32,6 +32,10 @@
 //      que le ZIP marque abîmé (lu.abimes, accepté seulement à l'empreinte juste) est écrit avec les octets du ZIP,
 //      tels quels, et sa date « abîmé depuis » (manifeste, sinon maintenant) va dans fichiers-abimes.json ; la
 //      confirmation le dit (#abimes-import-zip) ;
+//   T508 : avant la première table, le marqueur « import_zip_en_cours » (nom de la sauvegarde) est posé dans
+//      parametres.csv, qui est remplacée en dernier, après la ligne de journal (voir poserMarqueur) ;
+//   T508 : mode serveur avec comptes : la confirmation liste les comptes dont la fiche de technicien liée change de
+//      personne ou disparaît avec l'import (#comptes-import-zip ; rien n'est écrit dans acces/, D172) ;
 //   7. une ligne de journal ; 8. fenêtre #import-zip-termine, puis rechargement de l'application.
 //   Erreur pendant 5 à 7 : tables remises depuis la sauvegarde « avant-import-zip » (App.adaptateur.restaurer), fenêtre
 //   #import-zip-echec qui la nomme. acces/ (comptes, sessions, appareils) n'est jamais touché : rien ici n'y écrit.
@@ -260,6 +264,10 @@ const ParametresZip = (() => {
         UI.html`<p data-abime="${abime.table}">${phraseAbime(abime)}</p>`)}</div>` : ''}
       ${problemesMontres(lu)}
       ${lu.moiADemander ? UI.html`<p id="solo-moi-import-zip">${I18n.t('zip.confirmer.solo_moi_a_demander')}</p>` : ''}
+      ${(lu.comptesTouches || []).length ? UI.html`<div class="encadre attention" id="comptes-import-zip">
+        <b>${I18n.t('zip.confirmer.comptes_fiche_change', { n: lu.comptesTouches.length })} :</b>
+        <ul>${lu.comptesTouches.map((lien) => UI.html`<li data-compte="${lien.compte}">${phraseCompte(lien)}</li>`)}</ul>
+        <p>${I18n.t('zip.confirmer.comptes_a_corriger')}</p></div>` : ''}
       ${(lu.reglagesGardes || []).length ? UI.html`<p id="reglages-gardes-import-zip">${I18n.t('zip.confirmer.reglages_absents_gardes',
         { n: lu.reglagesGardes.length, reglages: lu.reglagesGardes.map((garde) => garde.libelle).join(', ') })}</p>` : ''}
       <div class="encadre attention" id="avertissement-import-zip"><b>${avertissement()}</b></div>
@@ -386,6 +394,8 @@ const ParametresZip = (() => {
     ZipDonnees.CHAMPS_DOCUMENTS.forEach(([nomTable, nomChamp]) => {
       resultat[nomTable].lignes.forEach((ligne) => { ligne[nomChamp] = renommer(ligne[nomChamp]); });
     });
+    // T508 : le marqueur « import en cours » qu'un ZIP porterait (base restée interrompue) n'est jamais importé.
+    resultat.parametres.lignes = resultat.parametres.lignes.filter((ligne) => texte(ligne.cle) !== Donnees.CLE_IMPORT_ZIP_EN_COURS);
     const parametres = resultat.parametres.lignes;
     const rapports = parametres.find((ligne) => ligne.cle === 'rapports_mensuels');
     if (rapports) {
@@ -427,6 +437,35 @@ const ParametresZip = (() => {
     const memes = forme ? techniciensDuZip.filter((technicien) => formeDuTechnicien(technicien) === forme) : [];
     garde.valeur = memes.length === 1 ? texte(memes[0].id) : '';
     return memes.length !== 1;
+  }
+
+  /**
+   * T508 (relecture R3 ; D172 : acces/ n'est jamais écrit par l'import, on prévient seulement) : mode serveur avec
+   * comptes ; comptes dont la fiche de technicien liée (technicien_id) désignera, après l'import, une autre personne
+   * (prénom et nom, règle de T323) ou plus personne → [{ compte, id, avant, apres }] (prénom et nom ; '' : pas de
+   * fiche). Lus par la route de l'écran Équipe › Accès ; lecture impossible : [] (l'import n'en dépend pas).
+   */
+  async function comptesDontLaFicheChange(techniciensDuZip) {
+    if (App.mode !== 'serveur' || !App.comptesExiges() || typeof EquipeAcces === 'undefined') return [];
+    let comptes = [];
+    try {
+      comptes = (await EquipeAcces.api.comptes()).comptes;
+    } catch (erreur) {
+      console.warn('Prévo : comptes illisibles avant l\'import ZIP (' + sansPoint(erreur) + ').', erreur);
+    }
+    const nomDe = (fiche) => (fiche ? (texte(fiche.prenom) + ' ' + texte(fiche.nom)).trim() || texte(fiche.id) : '');
+    return (Array.isArray(comptes) ? comptes : []).filter((compte) => texte(compte.technicien_id)).map((compte) => {
+      const id = texte(compte.technicien_id);
+      const avant = Donnees.trouver('techniciens', id);
+      const apres = techniciensDuZip.find((technicien) => texte(technicien.id) === id);
+      return { compte: texte(compte.identifiant), id: id, avant: nomDe(avant), apres: nomDe(apres),
+        meme: Boolean(avant && apres) && formeDuTechnicien(avant) === formeDuTechnicien(apres) };
+    }).filter((lien) => !lien.meme && Boolean(lien.avant || lien.apres));
+  }
+
+  function phraseCompte(lien) {
+    if (!lien.apres) return I18n.t('zip.confirmer.compte_fiche_absente', lien);
+    return I18n.t(lien.avant ? 'zip.confirmer.compte_autre_personne' : 'zip.confirmer.compte_fiche_nouvelle', lien);
   }
 
   function reglagesGardes(lignesDuZip) {
@@ -503,6 +542,20 @@ const ParametresZip = (() => {
       .then(() => ({ ok: false, sauvegarde: null, message: message }));
   }
 
+  // T508 : marqueur « import en cours » (Donnees.CLE_IMPORT_ZIP_EN_COURS = nom de la sauvegarde d'avant l'import),
+  // écrit dans parametres.csv avant la première table remplacée. Il n'y a pas de transaction (D172) : si l'onglet est
+  // fermé ou le poste coupé pendant les écritures, il reste, et l'ouverture suivante le dit (App, bandeau « import
+  // interrompu »). parametres est remplacée EN DERNIER, par les lignes du ZIP, sans lui : la dernière écriture d'un
+  // import réussi le retire ; un retour en arrière réussi aussi (la sauvegarde d'avant l'import ne le porte pas).
+  function poserMarqueur(sauvegarde) {
+    const cle = Donnees.CLE_IMPORT_ZIP_EN_COURS;
+    return Donnees.modifier('parametres', (lignes) => {
+      const ligne = lignes.find((candidate) => candidate.cle === cle);
+      if (ligne) ligne.valeur = sauvegarde;
+      else lignes.push({ cle: cle, valeur: sauvegarde });
+    }, { journal: false, remplacerFichierAbime: true });
+  }
+
   // Étapes 3 à 7 (voir l'en-tête) → { ok, sauvegarde, message }. Aucune exception pour un échec prévu : il est dit.
   async function executer(lu, nomFichier) {
     let sauvegarde = null;
@@ -518,11 +571,17 @@ const ParametresZip = (() => {
     } catch (erreur) {
       return arretAvantLesTables(I18n.t('zip.executer.import_arrete_avant_toucher', { sansPoint: sansPoint(erreur), sauvegarde }));
     }
-    const nomsTables = Schema.nomsTables();
+    const nomsTables = Schema.nomsTables().filter((nomTable) => nomTable !== 'parametres');     // parametres : en dernier (T508)
+    try {
+      await poserMarqueur(sauvegarde);
+    } catch (erreur) {
+      return arretAvantLesTables(I18n.t('zip.executer.import_arrete_avant_toucher', { sansPoint: sansPoint(erreur), sauvegarde }));
+    }
     try {
       const tables = tablesImportees(lu.tables, documents.parNom, lu.reglagesGardes);
       const abimes = new Map(lu.abimes.map((abime) => [abime.table, abime]));
       for (const nomTable of nomsTables) await remplacerTable(nomTable, tables[nomTable], abimes.get(nomTable));
+      nomsTables.push('parametres');
       const action = 'import ZIP : ' + nomFichier + ', ' + pluriel(nomsTables.length, 'table') + ', '
         + pluriel(lu.documents.length - documents.sautes.length, 'document')
         + (documents.sautes.length ? ' ; non repris (contenu qui n\'est pas l\'image annoncée) : ' + documents.sautes.join(', ') : '') + (abimes.size ? ' ; importés tels quels, abîmés : '
@@ -533,6 +592,7 @@ const ParametresZip = (() => {
       if (!abimes.has('journal') && !(await Donnees.journaliser('parametres', '', action))) {
         throw new Donnees.ErreurStockage(I18n.t('zip.executer.ligne_journal_pas_pu'));
       }
+      await remplacerTable('parametres', tables.parametres, abimes.get('parametres'));     // dernière écriture : marqueur retiré
     } catch (erreur) {
       return restaurerApresEchec(sauvegarde, erreur);
     }
@@ -570,6 +630,7 @@ const ParametresZip = (() => {
     const horsZip = sansDocuments(lu) ? await documentsHorsZip(lu) : null;
     lu.reglagesGardes = reglagesGardes(lu.tables.parametres.lignes);     // T319 : dits à la confirmation, puis écrits
     lu.moiADemander = moiSoloApresImport(lu.reglagesGardes, lu.tables.techniciens.lignes);   // T323
+    lu.comptesTouches = await comptesDontLaFicheChange(lu.tables.techniciens.lignes);       // T508
     if (!(await confirmer(lu, nomFichier, horsZip))) {
       UI.toast(I18n.t('zip.importer.import_zip_annule_rien'), 'info');
       return { ok: false, etape: 'annule' };

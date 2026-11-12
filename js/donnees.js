@@ -956,6 +956,11 @@ const Donnees = (() => {
     return entreeDe(nomTable).version;
   }
 
+  // T508 : paramètre posé par l'import ZIP avant la première table remplacée (valeur : nom de la sauvegarde
+  // « avant-import-zip ») et retiré par sa dernière écriture ; encore là à l'ouverture : import interrompu, base
+  // moitié ancienne, moitié nouvelle (bandeau de App). Clé inconnue des versions d'avant : sans effet pour elles.
+  const CLE_IMPORT_ZIP_EN_COURS = 'import_zip_en_cours';
+
   // Valeur d'un paramètre de parametres.csv ; `defaut` si la clé est absente ou la valeur vide.
   function parametre(cle, defaut) {
     const ligne = trouver('parametres', cle);
@@ -1650,11 +1655,14 @@ const Donnees = (() => {
 
   // { nomTable: Uint8Array } des 23 tables sérialisées depuis le cache (export ZIP, copie de la
   // démo). Le journal, écrit par ajout, peut être en retard : faire `await rafraichir()` avant.
+  // T508 : le marqueur d'un import ZIP interrompu (CLE_IMPORT_ZIP_EN_COURS) ne part jamais dans un export.
   function instantane() {
     const fichiers = {};
     for (const nomTable of Schema.nomsTables()) {
       const entree = entreeDe(nomTable);
-      fichiers[nomTable] = serialiser(nomTable, entree.lignes, entree.colonnesInconnues);
+      const lignesTable = nomTable === 'parametres'
+        ? entree.lignes.filter((ligne) => ligne.cle !== CLE_IMPORT_ZIP_EN_COURS) : entree.lignes;
+      fichiers[nomTable] = serialiser(nomTable, lignesTable, entree.colonnesInconnues);
     }
     return fichiers;
   }
@@ -2043,6 +2051,7 @@ const Donnees = (() => {
     trouver: trouver,
     version: version,
     parametre: parametre,
+    CLE_IMPORT_ZIP_EN_COURS: CLE_IMPORT_ZIP_EN_COURS,
     rechargerTable: rechargerTable,
     problemes: problemes,
     stockArticle: stockArticle,

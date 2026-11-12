@@ -4682,7 +4682,28 @@ responsable sa fiche, ou d'en créer une ; Prévo ne devine jamais. Annuler : la
   `crypto.subtle` (importer depuis le PC serveur ou en https) ; une sauvegarde de plus de 15 s (gros dossier
   `documents/`) dépasse le délai des requêtes : l'import s'arrête sans rien écrire ; une écriture d'un autre poste
   pendant l'import donne un conflit, donc le retour en arrière ; la ligne de journal compte les documents du ZIP, repris
-  ou écrits.
+  ou écrits ; les signatures d'image acceptées sont écrites en deux endroits depuis T507, à tenir ensemble :
+  `verifier_signature_image` de `serveur.py` et `ZipDonnees.imageRefusee` (une image que le serveur refuserait n'est
+  pas envoyée par l'import).
+- **Import coupé pendant les écritures (T508)** : il n'y a pas de transaction (D172 : aucune route serveur) ; si
+  l'onglet est fermé, le navigateur plante ou le poste s'éteint pendant (d), ou si le retour en arrière échoue aussi,
+  la base reste moitié ancienne, moitié nouvelle. Ce qui existe est le **signal** : avant la première table,
+  `ParametresZip` pose dans `parametres.csv` le paramètre `import_zip_en_cours` = nom de la sauvegarde
+  `avant-import-zip` (`Donnees.CLE_IMPORT_ZIP_EN_COURS` ; la sauvegarde, faite avant, ne le porte pas) ; `parametres`
+  est la **dernière** table remplacée, après la ligne de journal, par les lignes du ZIP sans ce paramètre : la dernière
+  écriture d'un import réussi le retire, et une restauration complète de la sauvegarde aussi. À l'ouverture (les deux
+  modes, tous les postes), s'il est là : bandeau permanent `#bandeau-import-interrompu` (`App`), au responsable le nom
+  de la sauvegarde à restaurer et le lien vers Paramètres, aux autres « prévenez le responsable » ; rien n'est écrit ni
+  bloqué. Le paramètre ne part pas dans un export (`Donnees.instantane`) et n'est jamais importé d'un ZIP ; une version
+  d'avant l'ignore (clé inconnue de `parametres`). Restes : un poste qui ouvre la base pendant qu'un import est en
+  cours ailleurs (quelques secondes) voit le bandeau, retiré quand il relit `parametres` sans le paramètre ; tant qu'elle n'est pas
+  remplacée, la base garde ses réglages d'avant (dont `version_schema`) à côté de tables déjà importées ; un
+  `parametres.csv` abîmé, exporté ou importé tel quel (T210, T213), garde ce qu'il contient. Rien n'est réparé
+  automatiquement : la décision de restaurer reste au responsable.
+- **Comptes liés à une fiche que l'import change (T508, D172 : prévenir seulement)** : en mode serveur avec comptes,
+  la confirmation liste (`#comptes-import-zip`) les comptes dont le `technicien_id` désignera après l'import une fiche
+  d'une autre personne (prénom et nom, règle de T323) ou une fiche absente du ZIP, et renvoie vers Équipe › Accès ;
+  lus par `GET /api/acces/comptes`, jamais écrits ; lecture impossible : rien n'est dit, l'import continue.
 
 ### 22.12 Corrections de l'audit (D134, CS134)
 

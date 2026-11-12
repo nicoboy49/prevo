@@ -338,8 +338,10 @@ class TestImportZipServeur(ParcoursImportZip, CasRecetteSocle):
     def verifier_entetes(self, ecritures):
         """Chaque table remplacée par l'import (PUT) porte l'en-tête de la dérogation ; l'ajout au journal non."""
         remplacees = [e for e in ecritures if e[0] == "PUT"]
-        self.assertEqual(sorted(e[1] for e in remplacees), sorted(c[:-4] for c in fichiers_du_jeu(JEU_ZIP_SAIN)
-                                                                   if c.endswith(".csv")))
+        # T508 : parametres est écrite deux fois (marqueur « import en cours » d'abord, puis remplacée en dernier).
+        self.assertEqual(sorted(e[1] for e in remplacees), sorted(["parametres"] + [
+            c[:-4] for c in fichiers_du_jeu(JEU_ZIP_SAIN) if c.endswith(".csv")]))
+        self.assertEqual([remplacees[0][1], remplacees[-1][1]], ["parametres", "parametres"])
         self.assertEqual([e for e in remplacees if e[2] != "1"], [])
         self.assertEqual([e for e in ecritures if e[0] == "POST" and e[2] is not None], [])
 

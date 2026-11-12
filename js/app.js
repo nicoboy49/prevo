@@ -731,6 +731,27 @@ const App = (() => {
     zone.hidden = false;
   }
 
+  // T508 : import ZIP interrompu pendant ses écritures (onglet fermé, panne) : le marqueur posé par ParametresZip est
+  // resté dans parametres.csv, la base est moitié ancienne, moitié nouvelle. Bandeau permanent, posé à l'ouverture de
+  // la coque (rien n'est écrit, rien n'est bloqué) : au responsable, la sauvegarde à restaurer et le lien ; aux autres,
+  // « prévenez le responsable ». poser = false (parametres a changé) : seulement le retirer si le marqueur est parti
+  // (restauration faite) ; jamais le poser en cours d'usage (un import en cours sur un autre poste n'est pas interrompu).
+  function afficherImportInterrompu(poser) {
+    const zone = UI.$('#alertes-app');
+    const present = UI.$('#bandeau-import-interrompu');
+    const sauvegarde = mode === 'demo' ? '' : String(Donnees.parametre(Donnees.CLE_IMPORT_ZIP_EN_COURS, '')).trim();
+    if (!sauvegarde) {
+      if (present) present.remove();
+    } else if (!present && poser) {
+      const bandeau = UI.bandeau('important', estResponsable()
+        ? UI.html`${I18n.html('socle.import_interrompu.responsable', { sauvegarde })}`
+        : UI.html`${I18n.html('socle.import_interrompu.autres')}`);
+      bandeau.id = 'bandeau-import-interrompu';
+      zone.prepend(bandeau);
+    }
+    zone.hidden = zone.children.length === 0;
+  }
+
   // RG5 (ARCHITECTURE.md §14.3) : à l'ouverture, un technicien ou un responsable (jamais un demandeur)
   // génère les OT des gammes échues. Renvoie les identifiants des OT créés ; une erreur est signalée et
   // l'application reste utilisable (le bouton « Générer les OT échus » et la prochaine ouverture
@@ -1240,6 +1261,7 @@ const App = (() => {
     montrer('app');
     UI.$('#bandeau-demo').hidden = mode !== 'demo';
     afficherAlertesCoque();
+    afficherImportInterrompu(true);
     afficherLectureSeule();
     appliquerRepli(lireMemoire(CLE_MENU_REPLIE) === '1');
     mettreAJourEntreprise();
@@ -1586,6 +1608,7 @@ const App = (() => {
       mettreAJourEntreprise();
       // mode_solo a pu changer (ce poste ou un autre) : le menu suit.
       if (coqueVisible() && profil) construireMenus();
+      if (coqueVisible()) afficherImportInterrompu(false);       // T508 : marqueur parti (restauration) → bandeau retiré
     }
     if (detail.origine !== 'distant' || !ecranCourant || !coqueVisible()) return;
     const tablesEcran = ecranCourant.tables || [];
