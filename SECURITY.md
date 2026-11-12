@@ -20,9 +20,11 @@ of `prevo.config.json`. You will get an answer before any detail is made public.
 
 | Version | Receives security fixes |
 |---|---|
-| 2.0.x (current) | Yes |
+| 2.1.x (current stable, currently 2.1.1) | Yes |
+| 2.2.0 betas (currently 2.2.0-beta.1) | No: fixes come with the next beta or with 2.2.0; for daily use, stay on 2.1.x |
+| 2.0.x | No: update to 2.1.x (same data format, nothing to convert) |
 | 1.2.x (previous stable, currently 1.2.1) | Yes |
-| 2.0.0 betas | No: update to 2.0.0 |
+| 2.0.0 betas | No: update to 2.1.x |
 | Earlier versions | No: please update |
 
 ## Français
@@ -46,7 +48,9 @@ public.
 
 | Version | Correctifs de sécurité |
 |---|---|
-| 2.0.x (actuelle) | Oui |
+| 2.1.x (stable actuelle, actuellement 2.1.1) | Oui |
+| Bêtas de la 2.2.0 (actuellement 2.2.0-beta.1) | Non : les correctifs arrivent avec la bêta suivante ou avec la 2.2.0 ; pour l'usage courant, restez en 2.1.x |
+| 2.0.x | Non : passez à la 2.1.x (même format de données, rien à convertir) |
 | 1.2.x (stable précédente, actuellement 1.2.1) | Oui |
-| Bêtas de la 2.0.0 | Non : passez à la 2.0.0 |
+| Bêtas de la 2.0.0 | Non : passez à la 2.1.x |
 | Versions antérieures | Non : mettez à jour |

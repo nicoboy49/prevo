@@ -286,6 +286,7 @@ const Formats = (function () {
   const PREFIXE_RESERVE = 'RES-';                 // = Schema.table('reserves_controle').identifiant.prefixe
   const CHIFFRES_RESERVE = 5;                     // = …identifiant.chiffres (au moins 5 chiffres)
   const MOTIF_ID_RESERVE = /^RES-([0-9]+)$/;      // chiffres ASCII seulement (serveur : re.ASCII)
+  const MOTIF_DEBUT_DANGEREUX = /^[=+\-@\t\r]/;   // copie de js/donnees.js (serveur : MOTIF_DEBUT_DANGEREUX_JS)
   const MOTIF_FIN_DE_LIGNE = /\r\n|\r|\n/;        // ni U+2028, ni U+0085, ni \v, ni \f (serveur : re.split, pas splitlines)
   const MOTIF_ZEROS_DE_TETE = /^0+/;
 
@@ -329,7 +330,8 @@ const Formats = (function () {
   //     s'écrit exactement RES-<chiffres> (bords blancs retirés ; aucun : depuis RES-00001) ;
   //     controle_id : l'identifiant du contrôle, bords blancs retirés ;
   //     date_controle : derniere_date lue comme Prévo la lit (AAAA-MM-JJ si la date est reconnue, sinon le texte
-  //     sans ses bords blancs, sinon vide) : les observations sont celles de la dernière réalisation ;
+  //     sans ses bords blancs, précédé de l'apostrophe de protection s'il commence par =, +, - ou @, sinon vide) :
+  //     les observations sont celles de la dernière réalisation ;
   //     texte : la ligne ;
   //     levee : '1' si observations_levees se lit « vrai » comme Prévo le lit (1, oui, x, vrai, true, yes), sinon '0' ;
   //     commentaire_levee : COMMENTAIRE_LEVEE_REPRISE pour une réserve levée, sinon vide ;
@@ -350,7 +352,10 @@ const Formats = (function () {
       const observations = enTexte(controle.observations);
       if (observations.trim() === '') { continue; }
       const levee = normaliserBooleen(controle.observations_levees).valeur === '1';
-      const date = normaliserDate(controle.derniere_date).valeur;
+      let date = normaliserDate(controle.derniere_date).valeur;
+      // Date illisible qui commence comme une formule : apostrophe de protection (FORMAT §3.2), sans quoi le serveur
+      // refuserait ensuite toute écriture de la table. Un champ date s'écrit tel quel : l'apostrophe est mise ici.
+      if (MOTIF_DEBUT_DANGEREUX.test(date)) { date = "'" + date; }
       for (const morceau of observations.split(MOTIF_FIN_DE_LIGNE)) {
         const texte = morceau.trim();
         if (texte === '') { continue; }

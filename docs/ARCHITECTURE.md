@@ -4560,8 +4560,9 @@ Précisions de T175 (sauvegardes du serveur, `tests/test_sauvegardes_lot7.py`) :
   absente ou incomplète : 404 ; corps invalide : 400) relit chaque CSV présent, dans l'ordre du schéma, par une lecture
   tolérante (`lire_csv_tolerant` : BOM retiré, UTF-8 sinon Windows-1252, « ; » ou « , », lignes vides ignorées ; noms de
   colonnes comparés sans casse, accents, espaces ni « _ ») et rend `{"nom", "ok", "tables": [{"table", "lignes",
-  "erreur"}]}` sans rien écrire. Erreur d'une table : fichier illisible ou vide, colonne du schéma (`COLONNES_PAR_TABLE`)
-  absente de l'en-tête, sauf celles ajoutées par un format plus récent (`COLONNES_DES_FORMATS_SUIVANTS`, recopie des
+  "erreur"}]}` sans rien écrire. Erreur d'une table : fichier illisible ou vide, fichier abîmé (`raisons_fichier_abime` :
+  guillemet jamais fermé, texte collé à un guillemet, valeurs au-delà de l'en-tête ; même critère que la garde des
+  écritures et que la marque « abime » du manifeste, T509), colonne du schéma (`COLONNES_PAR_TABLE`) absente de l'en-tête, sauf celles ajoutées par un format plus récent (`COLONNES_DES_FORMATS_SUIVANTS`, recopie des
   `depuisVersion` de `js/schema.js`, cohérence testée) ; `ok` : au moins une table et aucune erreur.
   `App.adaptateur.testerSauvegarde(nom)` (serveur seulement, §6) ; dans Paramètres, mode serveur seulement, bouton
   « Tester » (`button[data-tester]`) avant « Restaurer… » sur chaque ligne, fenêtre `#resultat-test-sauvegarde`
@@ -4638,12 +4639,14 @@ responsable sa fiche, ou d'en créer une ; Prévo ne devine jamais. Annuler : la
   serveur) est gardé ; deux noms demandés égaux dans le même import → `-2`, `-3`… ; en mode dossier, un document du même
   nom identique à l'octet est repris, différent → `-2`… ; un document existant n'est jamais supprimé ni remplacé ;
   échec → arrêt avant les tables (les documents déjà copiés restent, inutilisés) ; (c) références réécrites vers les
-  noms rendus (`equipements.document`, `demandes.photo`, `controles_reglementaires.rapport`, `rapports_mensuels`) ; une
-  référence à un document absent du ZIP reste telle quelle ; (d) les 24 tables remplacées, dans l'ordre du schéma :
+  noms rendus (les six colonnes de type `document` du schéma, `ZipDonnees.CHAMPS_DOCUMENTS` : `equipements.document`,
+  `demandes.photo`, `habilitations.justificatif`, `controles_reglementaires.rapport`, `garanties.document`,
+  `contrats_prestataires.document` ; et le paramètre `rapports_mensuels`) ; une référence à un document absent du ZIP
+  reste telle quelle ; (d) les 27 tables du format 4 remplacées, dans l'ordre du schéma :
   `Donnees.csv.serialiser` (protection des cellules, en-tête du format courant, colonnes inconnues du ZIP gardées) puis
   `App.adaptateur.enregistrer` avec la version fraîche (`Donnees.rechargerTable` avant et après : contrôle de version ;
   écritures refusées en lecture seule) ; `version_schema` = format courant ; (e) une ligne de journal (table `parametres`)
-  `import ZIP : <fichier>, 24 tables, <m> documents ; sauvegarde <nom> faite juste avant` ; (f) fenêtre `#import-zip-termine`, puis
+  `import ZIP : <fichier>, 27 tables, <m> documents ; sauvegarde <nom> faite juste avant` ; (f) fenêtre `#import-zip-termine`, puis
   `location.reload()` (mode dossier : « Reprendre le dossier »).
 - **Échec pendant (c) à (e)** : `App.adaptateur.restaurer(<avant-import-zip>)` remet toutes les tables (avec la copie
   de sécurité `avant-restauration` habituelle, qui garde l'état interrompu) ; une table absente de la sauvegarde (elle

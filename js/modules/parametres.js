@@ -225,7 +225,9 @@ const Parametres = (() => {
     await Donnees.chargerTout();
     annoncerRechargement();
     UI.toast(I18n.t('parametres.restaurer.restauration_faite_copie_securite', { copieSecurite: resultat.copieSecurite }), 'succes');
-    await reafficherAvecMessage('succes', UI.html`${I18n.html('parametres.restaurer.restauration_faite_etat_avant', { n: resultat.restaurees.length, join: resultat.restaurees.join(', '), copieSecurite: resultat.copieSecurite })}`);
+    // Tables vidées parce qu'absentes de la sauvegarde (elles n'existaient pas alors) : nommées à la suite.
+    const videes = resultat.videes || [];
+    await reafficherAvecMessage('succes', UI.html`${I18n.html('parametres.restaurer.restauration_faite_etat_avant', { n: resultat.restaurees.length, join: resultat.restaurees.join(', '), copieSecurite: resultat.copieSecurite })}${videes.length ? UI.html` <span id="tables-videes-restauration">${I18n.t('parametres.restaurer.tables_videes', { n: videes.length, join: videes.join(', ') })}</span>` : ''}`);
   }
 
   // ===========================================================================================

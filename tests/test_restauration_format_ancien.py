@@ -16,6 +16,8 @@ nom, absente de la sauvegarde mais présente dans la base (annulation d'un impor
         témoins            sauvegarde du format courant : restauration complète à l'octet, rien de vidé ; une seule
                            table : elle seule change.
     dossier (navigateur, OPFS ; à lancer à travers le verrou) : les mêmes règles par js/stockage-dossier.js.
+    écran Paramètres (navigateur, mode serveur ; T509) : le message de fin de la restauration nomme les tables vidées
+                           (#tables-videes-restauration) ; rien de plus quand aucune table n'est vidée.
 
 Lancer depuis la racine du projet (à travers le verrou du navigateur) :
     py -X utf8 -m unittest discover -s tests -p "test_restauration_format_ancien.py" -v
@@ -28,7 +30,8 @@ import unittest
 from pathlib import Path
 
 import test_stockage_dossier as aides_dossier
-from commun import RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, installer_dossier_simule
+from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
+                    preregler_profil)
 from jeux_formats import copier_jeu
 
 BOM = b"\xef\xbb\xbf"
@@ -261,6 +264,52 @@ class TestModeDossier(CasNavigateur):
         resultat = self.reussir("restaurer", nom, ["equipements"])
         self.assertEqual((resultat["restaurees"], resultat["videes"]), (["equipements"], []))
         self.assertEqual(self.lire_opfs("garanties.csv"), garanties)
+
+
+class TestMessageDeFin(CasNavigateur):
+    """Paramètres › Sauvegardes, mode serveur : le message de fin nomme les tables vidées (T509)."""
+
+    def restaurer(self, nom):
+        self.page.click('button[data-restaurer="%s"]' % nom)
+        self.page.wait_for_selector("#fenetre-restauration")
+        self.page.click("dialog .fenetre-actions .btn-danger")
+        self.page.wait_for_function(
+            "nom => { const e = document.getElementById('nom-copie-securite'); return e && e.textContent !== nom; }",
+            arg=self.derniere_copie)
+        self.derniere_copie = self.page.inner_text("#nom-copie-securite")
+
+    def test_le_message_nomme_les_tables_videes(self):
+        temporaire = Path(tempfile.mkdtemp(prefix="prevo-t509-"))
+        self.addCleanup(shutil.rmtree, str(temporaire), True)
+        self.derniere_copie = ""
+        with ServeurPrevo(source=copier_jeu("f3-v2.1.0", temporaire / "f3")) as serveur:
+            avant_format = sorted(d.name for d in (serveur.dossier / "sauvegardes").iterdir()
+                                  if d.name.endswith("_avant-format-v4"))
+            self.assertEqual(len(avant_format), 1)
+            for table in ("garanties", "contrats_prestataires"):       # travail fait en 2.2
+                shutil.copyfile(str(JEU_COURANT / (table + ".csv")), str(serveur.dossier / (table + ".csv")))
+            preregler_profil(self.contexte, "responsable")
+            page = self.page
+            page.goto(serveur.url + "/#/parametres")
+            attendre_pret(page)
+
+            # Témoin : sauvegarde du format courant, aucune table vidée, le message ne dit rien de plus.
+            page.click("#btn-sauvegarder")
+            page.wait_for_selector("#nom-sauvegarde-creee")
+            self.restaurer(page.inner_text("#nom-sauvegarde-creee"))
+            self.assertIn("garanties", page.inner_text("#message-action"))
+            self.assertEqual(page.locator("#tables-videes-restauration").count(), 0)
+
+            # Sauvegarde d'avant le format 4 : les trois tables nées depuis sont vidées, et le message les nomme.
+            self.restaurer(avant_format[0])
+            message = page.inner_text("#tables-videes-restauration")
+            self.assertTrue(message.startswith("3 tables qui n'existaient pas alors ont été vidées "), message)
+            self.assertIn("(%s)" % ", ".join(NOUVELLES), message)
+            self.assertIn("copie de sécurité", message)
+            self.assertIn("24 tables restaurées", page.inner_text("#message-action"))
+            for table in NOUVELLES:
+                octets = (serveur.dossier / (table + ".csv")).read_bytes()
+                self.assertEqual(lignes_de_donnees(octets), [], table)
 
 
 if __name__ == "__main__":

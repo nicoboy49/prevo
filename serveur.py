@@ -4528,7 +4528,9 @@ def reserves_reprises(lignes_controles, lignes_reserves):
         \\r ou \\n, bords blancs de chaque ligne retirés (trim de JavaScript), puces gardées.
       - id : RES- et le numéro sur 5 chiffres au moins, à la suite du plus grand identifiant reçu qui s'écrit
         exactement RES-<chiffres> (bords blancs retirés ; aucun : RES-00001) ; numéros comparés et augmentés en texte ;
-        controle_id : l'identifiant du contrôle ; date_controle : derniere_date lue comme Prévo la lit ; texte : la
+        controle_id : l'identifiant du contrôle ; date_controle : derniere_date lue comme Prévo la lit (une date
+        illisible qui commence par =, +, - ou @ reçoit l'apostrophe de protection : sans elle, verifier_contenu_csv
+        refuserait ensuite toute écriture de la table) ; texte : la
         ligne, écrite comme un champ texte (ecrire_valeur_texte : « - garde-corps » → « '- garde-corps ») ; levee : '1'
         si observations_levees se lit « vrai », sinon '0' ; commentaire_levee : COMMENTAIRE_LEVEE_REPRISE pour une
         réserve levée, sinon '' ; gravite, echeance_levee, date_levee, ot_id : '' (aucune date inventée).
@@ -4553,6 +4555,8 @@ def reserves_reprises(lignes_controles, lignes_reserves):
             continue
         levee = booleen_lu_js(cellule_de_champ(controle, 'observations_levees')) == '1'
         date = date_lue_js(cellule_de_champ(controle, 'derniere_date'))
+        if MOTIF_DEBUT_DANGEREUX_JS.match(date):
+            date = "'" + date       # date illisible qui commence comme une formule : apostrophe de protection (§3.2)
         for morceau in MOTIF_FIN_DE_LIGNE_JS.split(observations):
             texte = sans_blancs_js_aux_bords(morceau)
             if texte == '':
@@ -5175,12 +5179,14 @@ def cle_entete(nom):
 
 def tester_table_de_sauvegarde(table, chemin):
     """{"table", "lignes", "erreur"} d'un CSV de sauvegarde : lignes de données comptées (None si illisible) ; erreur
-    (None si tout va bien) quand le fichier est illisible ou vide, ou qu'une colonne du schéma manque à l'en-tête,
-    hors celles d'un format plus récent que la sauvegarde (COLONNES_DES_FORMATS_SUIVANTS)."""
+    (None si tout va bien) quand le fichier est illisible, vide ou abîmé (raisons_fichier_abime : même critère que la
+    garde des écritures et que la marque « abime » du manifeste), ou qu'une colonne du schéma manque à l'en-tête, hors
+    celles d'un format plus récent que la sauvegarde (COLONNES_DES_FORMATS_SUIVANTS)."""
     resultat = {'table': table, 'lignes': None, 'erreur': None}
     try:
         with open(chemin, 'rb') as fichier:
-            entete, lignes = lire_csv_tolerant(fichier.read())
+            octets = fichier.read()
+        entete, lignes = lire_csv_tolerant(octets)
     except OSError as erreur:
         resultat['erreur'] = traduisible('sauvegardes.test_illisible', 'Fichier illisible ({erreur}).',
                                          erreur=erreur.strerror or erreur.__class__.__name__)
@@ -5193,6 +5199,12 @@ def tester_table_de_sauvegarde(table, chemin):
         resultat['erreur'] = traduisible('sauvegardes.test_vide', 'Fichier vide : la ligne d\'en-tête manque.')
         return resultat
     resultat['lignes'] = len(lignes)
+    raisons = raisons_fichier_abime(octets)
+    if raisons:
+        resultat['erreur'] = traduisible('sauvegardes.test_abime',
+                                         'Fichier abîmé ({raisons}) : une partie de son contenu ne se relit pas.',
+                                         raisons=raisons)
+        return resultat
     presentes = {cle_entete(nom) for nom in entete}
     manquantes = [colonne for colonne in COLONNES_PAR_TABLE[table] if cle_entete(colonne) not in presentes]
     if not set(manquantes) <= set(COLONNES_DES_FORMATS_SUIVANTS.get(table, ())):

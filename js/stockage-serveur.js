@@ -432,7 +432,7 @@ const StockageServeur = (() => {
         body: JSON.stringify(demande),
       });
       const donnees = await lireJson(reponse);
-      return { restaurees: donnees.restaurees, copieSecurite: donnees.copie_securite };
+      return { restaurees: donnees.restaurees, videes: donnees.videes || [], copieSecurite: donnees.copie_securite };
     }
 
     // « Tester une sauvegarde » (lot 7, D133) : le serveur relit chaque CSV de la sauvegarde et compte ses lignes,
